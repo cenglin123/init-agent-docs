@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>init-agent-docs 演示文稿 - 极致精修版</title>
+    <style>
+        :root {
+            --navy: #1E2761;
+            --ice-blue: #CADCFC;
+            --white: #FFFFFF;
+            --dark-gray: #2C3E50;
+            --slate: #64748B;
+            --accent: #E11D48;
+            --sidebar-width: 380px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #05081a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            color: var(--dark-gray);
+        }
+
+        .presentation-wrapper {
+            display: flex;
+            width: 1600px;
+            height: 900px;
+            background: var(--white);
+            box-shadow: 0 30px 80px rgba(0,0,0,0.8);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--navy);
+            color: var(--white);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 40px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar-header h1 { font-size: 32px; font-weight: 900; color: var(--ice-blue); }
+
+        .nav-list { flex-grow: 1; overflow-y: auto; padding: 20px 0; }
+        .nav-item {
+            padding: 10px 30px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 18px;
+            border-left: 6px solid transparent;
+            opacity: 0.5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .nav-item.active {
+            background: rgba(255,255,255,0.1);
+            border-left-color: var(--accent);
+            opacity: 1;
+            font-weight: bold;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            position: relative;
+            background: var(--white);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            transform: translateX(50px);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide.active { opacity: 1; transform: translateX(0); pointer-events: auto; }
+
+        .slide.title-slide {
+            background: var(--navy);
+            color: var(--white);
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .title-slide h1 { font-size: 110px; margin-bottom: 20px; }
+        .title-slide p { font-size: 44px; color: var(--ice-blue); }
+
+        .slide-header { background: var(--navy); color: var(--white); padding: 25px 60px; flex-shrink: 0; }
+        .slide-header h2 { font-size: 44px; }
+
+        .slide-content {
+            padding: 40px 60px;
+            flex-grow: 1;
+            font-size: 32px;
+            line-height: 1.5;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lead-text {
+            color: var(--navy);
+            font-size: 38px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            border-left: 10px solid var(--accent);
+            padding: 10px 25px;
+            background: rgba(202, 220, 252, 0.2);
+            border-radius: 0 10px 10px 0;
+        }
+
+        ul { margin-left: 60px; }
+        li { margin-bottom: 15px; }
+        li strong { color: var(--navy); font-size: 32px; }
+
+        .highlight { color: var(--accent); font-weight: bold; }
+
+        .info-box {
+            background: rgba(202, 220, 252, 0.2);
+            border: 1px solid var(--ice-blue);
+            padding: 25px;
+            border-radius: 12px;
+        }
+
+        .info-box h3 { color: var(--navy); font-size: 32px; margin-bottom: 15px; border-bottom: 2px solid var(--ice-blue); padding-bottom: 5px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .grid-ap { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 20px; }
+
+        .ap-card {
+            background: rgba(225, 29, 72, 0.05);
+            border: 1px solid rgba(225, 29, 72, 0.2);
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .ap-card h4 { color: var(--accent); font-size: 28px; margin-bottom: 10px; }
+        .ap-card p { font-size: 24px; line-height: 1.4; }
+
+        .layer-box {
+            background: var(--ice-blue);
+            color: var(--navy);
+            padding: 15px 25px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 10px solid var(--navy);
+        }
+        .layer-desc { font-weight: normal; font-size: 24px; }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 30px;
+            border-radius: 12px;
+            font-size: 24px;
+            line-height: 1.3;
+            font-family: 'Consolas', monospace;
+            border-left: 10px solid var(--navy);
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 30px; }
+        th { background: var(--navy); color: white; padding: 15px; text-align: left; }
+        td { padding: 15px; border-bottom: 2px solid var(--ice-blue); }
+        tr:nth-child(even) { background-color: rgba(202, 220, 252, 0.1); }
+
+        .progress-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 8px;
+            background: var(--accent);
+            z-index: 100;
+            transition: width 0.3s ease;
+        }
+
+        .counter { position: absolute; bottom: 25px; right: 40px; font-size: 20px; color: var(--slate); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="presentation-wrapper">
+        <div class="sidebar">
+            <div class="sidebar-header"><h1>init-agent-docs</h1></div>
+            <div class="nav-list" id="navList"></div>
+        </div>
+
+        <div class="main-content">
+            <!-- Slide 1 -->
+            <div class="slide title-slide active" data-title="开始">
+                <h1>init-agent-docs</h1>
+                <p>为项目构建“Agent 优先”的文档体系</p>
+            </div>
+
+            <!-- Slide 2 -->
+            <div class="slide" data-title="三大设计哲学">
+                <div class="slide-header"><h2>三大核心设计哲学</h2></div>
+                <div class="slide-content">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; height: 100%;">
+                        <div class="info-box" style="display: flex; flex-direction: column;">
+                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">1. 给地图，不给百科</h3>
+                            <p style="font-size: 28px; line-height: 1.5;">AGENTS.md 在上下文中<span class="highlight">始终驻留</span>，每一行都在消耗注意力预算。<br><br>控制在 <strong>100 行</strong>以内，只放指针不放细节。</p>
+                        </div>
+                        <div class="info-box" style="display: flex; flex-direction: column;">
+                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">2. 渐进式披露</h3>
+                            <div style="font-size: 32px; text-align: center; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+                                <div>先给<span class="highlight">地图</span><br><span style="font-size:24px;color:var(--slate)">(AGENTS.md)</span></div>
+                                <div style="color: var(--navy); font-size: 50px; margin: 15px 0;">↓</div>
+                                <div>按需探索<span class="highlight">细节</span><br><span style="font-size:24px;color:var(--slate)">(docs/*.md)</span></div>
+                            </div>
+                        </div>
+                        <div class="info-box" style="display: flex; flex-direction: column;">
+                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">3. 独立验证视角</h3>
+                            <p style="font-size: 28px; line-height: 1.5;">执行者刚写完代码立刻自检，天然带有<strong>确认偏误</strong>。<br><br>计划中必须给“复查”留位，优先使用<span class="highlight">新视角</span>验收。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 3 -->
+            <div class="slide" data-title="分层结构图解">
+                <div class="slide-header"><h2>信息分层结构</h2></div>
+                <div class="slide-content">
+                    <div class="layer-box core"><span>AGENTS.md</span><span class="layer-desc">行为规则 (驻留, ~100行)</span></div>
+                    <div class="layer-box"><span>STRUCTURE.md</span><span class="layer-desc">文档总索引 (导航表)</span></div>
+                    <div class="layer-box"><span>docs/*.md</span><span class="layer-desc">深度文档 (API、部署、陷阱)</span></div>
+                    <div class="layer-box"><span>docs/plans/</span><span class="layer-desc">执行计划 (跨会话协议)</span></div>
+                </div>
+            </div>
+
+            <!-- Slide 4 -->
+            <div class="slide" data-title="文档维护原则">
+                <div class="slide-header"><h2>文档维护：记什么与不记什么</h2></div>
+                <div class="slide-content">
+                    <div class="grid-2" style="height: 100%;">
+                        <div class="info-box" style="display: flex; flex-direction: column;">
+                            <h3 style="font-size: 32px;">✅ 必须记录 (代码里读不出的)</h3>
+                            <ul style="margin-left: 30px; font-size: 28px; line-height: 1.5;">
+                                <li><strong>设计原因</strong> (Why 选用某技术)</li>
+                                <li><strong>协作约束</strong> (团队约定与规范)</li>
+                                <li><strong>环境陷阱</strong> (坑位经验与解法)</li>
+                                <li><strong>基础设施</strong> (部署与环境约定)</li>
+                            </ul>
+                        </div>
+                        <div class="info-box" style="border-color: var(--accent); background: rgba(225, 29, 72, 0.05); display: flex; flex-direction: column;">
+                            <h3 style="color: var(--accent); font-size: 32px;">❌ 绝对不记 (代码/Git 已有的)</h3>
+                            <ul style="margin-left: 30px; font-size: 28px; line-height: 1.5;">
+                                <li><strong>目录结构</strong> (ls 一下就知道了)</li>
+                                <li><strong>模块职责</strong> (读代码就知道了)</li>
+                                <li><strong>函数签名</strong> (IDE 里都能看到)</li>
+                                <li><strong>Git 历史</strong> (git log 即可查阅)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 5 -->
+            <div class="slide" data-title="计划：交接协议">
+                <div class="slide-header"><h2>计划：跨窗口协议</h2></div>
+                <div class="slide-content">
+                    <div class="lead-text">计划是 Agent “失忆”后的救命稻草。</div>
+                    <ul style="font-size: 38px; margin-top: 20px;">
+                        <li><strong>现状</strong>：哪些阶段已完成？</li>
+                        <li><strong>目标</strong>：当前该做哪个阶段？</li>
+                        <li><strong>上下文</strong>：前人留下了什么问题？</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Slide 6 -->
+            <div class="slide" data-title="计划：颗粒度">
+                <div class="slide-header"><h2>计划：状态与颗粒度</h2></div>
+                <div class="slide-content">
+                    <div class="info-box">
+                        <h3>黄金法则</h3>
+                        <p style="margin-bottom: 20px;">一个阶段涉及 <span class="highlight">5-10 个文件</span> 的修改最合适。</p>
+                        <p><strong>状态流转：</strong><br>queue → claimed → in_progress → review → ✅ completed</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 7 -->
+            <div class="slide" data-title="目标文件结构">
+                <div class="slide-header"><h2>目标文件结构</h2></div>
+                <div class="slide-content">
+                    <pre>
+├── AGENTS.md (主文件)
+├── CLAUDE.md / GEMINI.md (硬链接)
+├── STRUCTURE.md (总索引)
+├── CHANGELOG.md (变更历史)
+└── docs/
+    ├── CURRENT.md (状态)
+    └── plans/ (执行计划)
+                    </pre>
+                </div>
+            </div>
+
+            <!-- Slide 8 -->
+            <div class="slide" data-title="执行：模式选择">
+                <div class="slide-header"><h2>工作模式选择</h2></div>
+                <div class="slide-content">
+                    <table>
+                        <tr><th>模式</th><th>适用场景</th><th>最低文档</th></tr>
+                        <tr><td><strong>直接执行</strong></td><td>小修改/低风险</td><td>AGENTS + CURRENT</td></tr>
+                        <tr><td><strong>分阶段</strong></td><td>中等复杂度</td><td>上述 + plans</td></tr>
+                        <tr><td><strong>并行协作</strong></td><td>高风险/多 Agent</td><td>上述 + 分配表</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Slide 9 -->
+            <div class="slide" data-title="致命反模式摘要">
+                <div class="slide-header"><h2>必须避免的反模式 (1-6)</h2></div>
+                <div class="slide-content">
+                    <div class="grid-ap">
+                        <div class="ap-card"><h4>1. 巨型 AGENTS</h4><p>挤占窗口。解法：内容下沉到 <code>docs/</code>。</p></div>
+                        <div class="ap-card"><h4>2. 重复代码信息</h4><p>导致腐烂。解法：绝对不记 "What"。</p></div>
+                        <div class="ap-card"><h4>3. 缺少完工检查</h4><p>导致漂移。解法：机械化执行清单。</p></div>
+                        <div class="ap-card"><h4>4. 计划仅在对话</h4><p>压缩即丢。解法：必须落盘到计划文件。</p></div>
+                        <div class="ap-card"><h4>5. 执行即验证</h4><p>存在偏误。解法：增加独立复查视角。</p></div>
+                        <div class="ap-card"><h4>6. 写日志读全文</h4><p>浪费 Token。解法：使用 <code>scripts/changelog.py</code> 查看标题树和局部内容。</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 10 -->
+            <div class="slide title-slide" data-title="结语">
+                <h1 style="font-size: 80px;">仓库是唯一的记忆</h1>
+                <p style="margin-top: 40px; font-size: 42px;">文档是 Agent 跨越会话的唯一纽带。</p>
+            </div>
+
+            <div class="progress-bar" id="progressBar"></div>
+            <div class="counter" id="slideCounter"></div>
+        </div>
+    </div>
+
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        const navList = document.getElementById('navList');
+        const progressBar = document.getElementById('progressBar');
+        const slideCounter = document.getElementById('slideCounter');
+        let currentSlide = 0;
+
+        slides.forEach((slide, index) => {
+            const title = slide.getAttribute('data-title');
+            const navItem = document.createElement('div');
+            navItem.className = 'nav-item';
+            navItem.innerText = `${index + 1}. ${title}`;
+            navItem.addEventListener('click', () => goToSlide(index));
+            navList.appendChild(navItem);
+        });
+
+        const navItems = document.querySelectorAll('.nav-item');
+
+        function updateUI() {
+            slides.forEach((slide, index) => {
+                slide.classList.toggle('active', index === currentSlide);
+                navItems[index].classList.toggle('active', index === currentSlide);
+            });
+            progressBar.style.width = `${((currentSlide + 1) / slides.length) * 100}%`;
+            slideCounter.innerText = `${currentSlide + 1} / ${slides.length}`;
+            navItems[currentSlide].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function goToSlide(index) { currentSlide = index; updateUI(); }
+        function nextSlide() { if (currentSlide < slides.length - 1) { currentSlide++; updateUI(); } }
+        function prevSlide() { if (currentSlide > 0) { currentSlide--; updateUI(); } }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') nextSlide();
+            if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>
