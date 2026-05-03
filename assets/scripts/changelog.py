@@ -14,6 +14,21 @@ DATE_HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[：:](.*))?\s*$")
 SECTION_HEADING_RE = re.compile(r"^###\s+(.+?)\s*$")
 
 
+
+
+def configure_stdio() -> None:
+    """Force UTF-8 stdio where possible to avoid Windows cp1252 crashes."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
 def read_lines(path: Path = CHANGELOG) -> list[str]:
     if not path.is_file():
         raise SystemExit(f"CHANGELOG not found: {path}")
@@ -71,8 +86,21 @@ def language_for(lines: list[str]) -> str:
 
 
 def print_block(lines: list[str], start: int, end: int) -> None:
-    print("\n".join(lines[start:end]).strip())
+    emit("\n".join(lines[start:end]).strip())
 
+
+
+
+def emit(text: str = "") -> None:
+    data = f"{text}\n".encode("utf-8", errors="replace")
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is not None:
+        try:
+            buffer.write(data)
+            return
+        except Exception:
+            pass
+    sys.stdout.write(data.decode("utf-8", errors="replace"))
 
 def command_titles(args: argparse.Namespace) -> None:
     lines = read_lines(args.changelog)
@@ -82,11 +110,11 @@ def command_titles(args: argparse.Namespace) -> None:
         if args.limit and count >= args.limit:
             break
         suffix = f"：{title}" if title else ""
-        print(f"{day}{suffix}")
+        emit(f"{day}{suffix}")
         for section_start, _section_end, section_title in iter_sections(lines[start:end]):
             if section_start == 0:
                 continue
-            print(f"  - {section_title}")
+            emit(f"  - {section_title}")
         count += 1
 
 
@@ -101,9 +129,9 @@ def command_recent(args: argparse.Namespace) -> None:
         if day_value < cutoff:
             continue
         suffix = f"：{title}" if title else ""
-        print(f"{day}{suffix}")
+        emit(f"{day}{suffix}")
         for _section_start, _section_end, section_title in iter_sections(lines[start:end]):
-            print(f"  - {section_title}")
+            emit(f"  - {section_title}")
 
 
 def command_show(args: argparse.Namespace) -> None:
@@ -122,16 +150,16 @@ def command_show(args: argparse.Namespace) -> None:
                     matching_sections.append((section_start, section_end, section_title))
 
             if matching_sections:
-                print(block[0])
+                emit(block[0])
                 for section_start, section_end, _section_title in matching_sections:
-                    print()
+                    emit()
                     print_block(block, section_start, section_end)
                     printed += 1
                     if printed >= args.limit:
                         return
-                print()
+                emit()
             elif pattern in header_text:
-                print(block[0])
+                emit(block[0])
                 printed += 1
                 if printed >= args.limit:
                     break
@@ -240,6 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    configure_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     args.func(args)

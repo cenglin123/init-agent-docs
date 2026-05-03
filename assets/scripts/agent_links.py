@@ -64,7 +64,16 @@ def all_present() -> bool:
 
 def is_hardlink_group() -> bool:
     keys = [link_key(p) for p in LINK_PATHS]
-    return all(k is not None for k in keys) and len(set(keys)) == 1
+    if not (all(k is not None for k in keys) and len(set(keys)) == 1):
+        return False
+
+    # On some Windows/filesystem combinations, inode values can be unstable or
+    # unhelpful for distinguishing independent files. Require link-count signal
+    # as well so copy-mode files are not misdetected as hardlinks.
+    try:
+        return all(p.stat().st_nlink > 1 for p in LINK_PATHS)
+    except OSError:
+        return False
 
 
 def is_content_equal() -> bool:
