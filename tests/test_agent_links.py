@@ -49,11 +49,15 @@ class AgentLinksTestCase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def run_script(self, *args: str) -> subprocess.CompletedProcess[str]:
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
         return subprocess.run(
             [sys.executable, str(self.scripts_dir / "agent_links.py"), *args],
             cwd=self.tmp,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
         )
 
     def test_hardlink_repair_then_check(self) -> None:

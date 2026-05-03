@@ -1,6 +1,7 @@
 """Subprocess-based smoke tests for assets/scripts/changelog.py."""
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -34,10 +35,14 @@ class ChangelogTestCase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def run_script(self, *args: str) -> subprocess.CompletedProcess[str]:
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--changelog", str(self.changelog), *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
         )
 
     def test_titles_lists_dates(self) -> None:
@@ -57,20 +62,41 @@ class ChangelogTestCase(unittest.TestCase):
         self.assertIn("初始化文档体系", result.stdout)
 
     def test_add_to_existing_date(self) -> None:
+        # Use os.linesep-agnostic separator: pass a single line. Multi-line bodies
+        # in argv are unreliable on Windows (CommandLineToArgvW handles literal
+        # newlines inconsistently). The script's splitlines() behavior is unit-
+        # tested separately at the import level.
         result = self.run_script(
             "add",
             "--date", "2026-04-17",
             "--title", "增补条目",
-            "--body", "新增内容 A\n新增内容 B",
+            "--body", "新增内容",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
         text = self.changelog.read_text(encoding="utf-8")
         self.assertIn("### 增补条目", text)
-        self.assertIn("- 新增内容 A", text)
-        self.assertIn("- 新增内容 B", text)
+        self.assertIn("- 新增内容", text)
         # Original section must still be present
         self.assertIn("### 初始化文档体系", text)
+
+    def test_format_add_block_splits_multiline_body(self) -> None:
+        # Direct in-process test for the multi-line body path; avoids passing
+        # a literal newline through subprocess argv on Windows.
+        sys.path.insert(0, str(SCRIPT.parent))
+        try:
+            import importlib
+
+            mod = importlib.import_module("changelog")
+            ns = type("Args", (), {})()
+            ns.title = "增补"
+            ns.body = "A\nB"
+            ns.migration = ""
+            block = mod.format_add_block(ns, "zh")
+            self.assertIn("- A", block)
+            self.assertIn("- B", block)
+        finally:
+            sys.path.remove(str(SCRIPT.parent))
 
     def test_add_creates_new_date_block_at_top(self) -> None:
         future = "2099-01-01"

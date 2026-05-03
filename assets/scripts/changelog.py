@@ -246,4 +246,11 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
+    # Force UTF-8 on stdout/stderr so non-ASCII (Chinese) titles render correctly
+    # on Windows consoles whose default code page is cp936/cp1252.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     main(sys.argv[1:])
