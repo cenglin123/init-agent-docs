@@ -25,8 +25,7 @@ init-agent-docs/
 ├── README.md                             # 你现在读的这份文件
 └── assets/
     ├── templates/
-    │   ├── zh/                           # 中文模板集（9 个 .tpl）
-    │   └── en/                           # 英文模板集（9 个 .tpl）
+    │   └── zh/                           # 中文模板集（9 个 .tpl）
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
     │   └── agent_links.py                # 硬链接检查与修复
@@ -51,17 +50,26 @@ init-agent-docs/
 
 ## 已知限制
 
-1. **硬链接与文件系统**：ReFS、exFAT、WSL 跨盘、某些 CI 容器不支持硬链接。默认用 `scripts/agent_links.py check/repair` 做检查与修复；如果目标项目确实需要 copy-fallback，应扩展该脚本并在 AGENTS.md 写清"只改 AGENTS.md，另两个文件由脚本同步"。
+1. **硬链接与文件系统**：ReFS、exFAT、WSL 跨盘、某些 CI 容器不支持硬链接。脚本同时提供 hardlink 和 copy 两种模式：默认 `python scripts/agent_links.py repair` 用硬链接；不支持时改用 `--mode=copy`，并在 AGENTS.md 里声明"本项目使用 copy 模式"。`check` 默认 `--mode=auto`，可显式传 `--mode={hardlink,copy}` 锁定。
 2. **编辑器保存可能断链**：部分编辑器（VS Code 某些模式、部分 IDE 的原子写入）用"写临时文件 → 删原文件 → 重命名"，这会创建新 inode。依赖 pre-commit hook 自动重建以兜底。
-3. **模板仅两种语言**：zh / en。其他语言需要手工复制 zh 目录并翻译。
+3. **模板仅一种语言**：当前只附带 zh/。其他语言需要手工复制 zh 目录并翻译；`scripts/changelog.py` 内置了对英文 CHANGELOG 标题的识别，所以即使模板只有中文，用户后续手写英文条目仍能正确归类。
 4. **pre-commit 片段没跑过所有平台**：Windows 原生 Git Bash 下 `xargs` 对空输入的处理偶有差异；如遇问题，用 `if [ -n "$STAGED" ]; then echo "$STAGED" | ...; fi` 兜住。
 
 ## 维护指引
 
 - 修改模板后，手工在一个测试项目上跑一遍 skill 看是否还通顺。
-- 如果新增一个模板文件，记得同时更新 zh/ 和 en/，并在 SKILL.md 的"目标文件结构"一节补说明。
+- 如果新增一个模板文件，记得在 zh/ 下添加，并在 SKILL.md 的"目标文件结构"一节补说明。
 - 维护 CHANGELOG 相关规则时，优先改 `assets/scripts/changelog.py` 的能力和 AGENTS 模板中的调用说明，不要把手工插入流程重新塞回模板。
 - 维护硬链接规则时，优先改 `assets/scripts/agent_links.py` 和 hook 调用，不要要求 Agent 记平台差异命令。
 - 维护方法论时，只保留跨项目可迁移、能解决真实问题的原则（如 Occam / Bitter Lesson），不要复制不必要的治理形式或组织隐喻。
 - 哲学条款尽量保留，增改需要在 SKILL.md 顶部说清"为什么"——本 skill 的价值一半以上在于设计哲学的阐释，纯模板替换价值有限。
 - `assets/pitch/presentation.html` 是宣讲 deck，和执行流程无关，但核心方法论变化时应同步更新。
+
+## 为什么本仓库自己没有 AGENTS.md / docs/
+
+本仓库是**模板提供方**，不是被模板初始化的项目。让 skill 包自身按它产出的结构组织反而会造成两类混淆：
+
+- 维护者可能把 skill 自己的 AGENTS.md 误当成模板的一部分被分发
+- skill 自己的 docs/ 与 `assets/templates/` 中的同名文件来源不同，容易在编辑时改错位置
+
+因此本仓库只有 README.md（面向维护者）+ SKILL.md（面向执行 skill 的 agent）+ assets/（产出物源头）三层结构。"鞋匠的孩子没鞋"在这里是有意为之。

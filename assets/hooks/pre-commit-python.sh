@@ -17,11 +17,14 @@ if [ -n "$STAGED" ]; then
     fi
 fi
 
-# Hardlink consistency
+# Hardlink / copy-mode consistency. Fail loudly rather than auto-repair:
+# auto-repair would silently overwrite intentional edits to CLAUDE.md / GEMINI.md.
 if [ -f scripts/agent_links.py ]; then
-    if ! python scripts/agent_links.py check >/dev/null; then
-        python scripts/agent_links.py repair
-        git add AGENTS.md CLAUDE.md GEMINI.md 2>/dev/null || true
+    if ! python scripts/agent_links.py check; then
+        echo ""
+        echo "AGENTS.md / CLAUDE.md / GEMINI.md inconsistent."
+        echo "Edit only AGENTS.md, then run: python scripts/agent_links.py repair"
+        exit 1
     fi
 fi
 

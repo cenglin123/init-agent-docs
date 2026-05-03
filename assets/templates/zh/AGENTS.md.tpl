@@ -5,9 +5,15 @@
 
 ## 硬链接声明
 
-`AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 是同一文件的硬链接，读取时选择其一即可。
-编辑前后都检查硬链接组是否仍然一致：`python scripts/agent_links.py check --verbose`。
-仅当硬链接断开时才重建：`python scripts/agent_links.py repair`；若 `CLAUDE.md` / `GEMINI.md` 内容与 `AGENTS.md` 不同，先人工确认，再用 `python scripts/agent_links.py repair --force`。
+`AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 内容必须保持一致；读取时选择其一即可。**只编辑 AGENTS.md**，另两个由脚本同步。
+
+- 检查：`python scripts/agent_links.py check --verbose`
+- 修复：`python scripts/agent_links.py repair`
+- 强制覆盖（仅在人工确认 `CLAUDE.md` / `GEMINI.md` 改动可被 AGENTS.md 覆盖时）：`python scripts/agent_links.py repair --force`
+
+<!-- 同步模式：默认 hardlink；如目标文件系统不支持硬链接（ReFS/exFAT/WSL 跨盘/部分 CI），
+     在所有 check/repair 命令后追加 `--mode=copy`，并把下面这一行改写为 "本项目使用 copy 模式"。 -->
+本项目使用 hardlink 模式。
 
 ## 信息导航
 
