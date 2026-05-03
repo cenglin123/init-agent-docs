@@ -1,6 +1,6 @@
 ---
 name: init-agent-docs
-description: Initialize an agent-first documentation system for a project. Use when setting up a new repository's doc structure for AI agent collaboration, or when migrating an existing project to agent-friendly documentation. This skill creates the scaffolding files (AGENTS.md, architecture index, docs/ hierarchy, changelog, plans directory) and populates them with starter content tailored to the target project.
+description: Scaffold an agent-first doc system (hardlinked AGENTS.md/CLAUDE.md/GEMINI.md, STRUCTURE.md, docs/ hierarchy with progressive disclosure, plan-as-handoff, scripted CHANGELOG). Use when initializing or migrating a repo for AI agent collaboration.
 ---
 
 # Init Agent Docs
@@ -10,6 +10,8 @@ description: Initialize an agent-first documentation system for a project. Use w
 本 skill 仅用于初始化，不会驻留在 Agent 上下文中，因此不必节省篇幅。下面会详细解释每个设计决策的"为什么"，确保执行本 skill 的 Agent 充分理解意图，而不是机械地复制模板。
 
 **本 skill 的模板和脚本存放在 [assets/](assets/) 下**；执行步骤里会告诉你什么时候 `Read` 哪个文件、`Write` 到目标项目的哪个路径。维护说明见 [README.md](README.md)。
+
+**路径约定**：本 SKILL.md 中出现的 `assets/...` 路径一律相对**本 skill 根目录**（即本文件所在目录）；目标项目内的路径一律以"项目根"为基准（如 `scripts/changelog.py`、`docs/CURRENT.md`、`.githooks/pre-commit`）。当你在指令中看到这两类路径并存时，请按这个约定区分。
 
 ---
 
@@ -33,7 +35,7 @@ AGENTS.md（及其硬链接 CLAUDE.md、GEMINI.md）是 Agent 上下文中**始�
 
 **为什么用硬链接？** 不同 Agent 框架加载不同文件名：Claude Code 加载 CLAUDE.md，Codex 加载 AGENTS.md，Gemini CLI 加载 GEMINI.md。硬链接让三个文件始终是同一个文件的不同入口，编辑任何一个都会同步到其他两个，避免内容漂移。
 
-**建议控制在 100 行以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。
+**建议控制在 150 行以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。
 
 ### 2. 渐进式披露（Progressive Disclosure）
 
@@ -42,7 +44,7 @@ Agent 从一个小而稳定的入口出发，按需深入查阅。这和给新�
 信息分层结构：
 
 ```
-AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~100 行）
+AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~150 行）
 STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
 docs/*.md          → 各专题深度文档（Agent 按需读取特定文件）
 docs/plans/        → 执行计划（Agent 接到复杂任务时读取）
@@ -87,11 +89,13 @@ CHANGELOG.md       → 变更记录（Agent 需要了解近期改动时读取）
 
 同一个 Agent 在同一个上下文窗口里做完实现，再立刻说"我已经验证过了"，天然带有确认偏误。它刚写完代码，最容易忽略自己埋下的问题。
 
-因此文档体系里应显式给"验证"留位置。最理想的情况是：
-- 执行者负责实现和自检
-- 另一个新上下文 Agent，或至少 compact 后的 reviewer 视角，负责复查和验收
+因此文档体系里应显式给"验证"留位置：
 
-你不一定每次都真的起两个进程，但计划模板和完工清单应当预留 `待验证` / `待复查` 这类状态，让人类知道这里存在一个明确的审批点，而不是默认"执行完就算完成"。
+- **高风险 / 跨模块改动**：必须由独立视角复查（新上下文窗口、subagent 或人类 reviewer），不接受执行者自检。
+- **中等风险**：建议换视角，至少在 compact 后以 reviewer 视角自查一次。
+- **低风险（小修改、纯文案、纯样式）**：执行者自检即可，但仍要走完工检查清单。
+
+无论哪个层级，计划模板和完工清单都应保留 `review` 这一状态，让人类知道这里存在一个明确的审批点，而不是默认"执行完就算完成"。
 
 ### 6. 文档是跨会话的唯一记忆
 
@@ -118,6 +122,17 @@ CHANGELOG 会随项目推进不断增长，可能达到几百甚至上千行。�
 
 **两者的边界同样重要**：Occam 不反对必要复杂性，Bitter Lesson 也不反对结构性先验。硬链接脚本、CHANGELOG 脚本、计划文件这些结构之所以成立，是因为它们承载了可验证、重复发生、会消耗上下文的机械动作；相反，为每种未来任务预设规则表，就应先被这两条原则拦住。
 
+具体的判别样例：
+
+| 应保留的结构性先验 | 应避免的硬编码先验 |
+|---|---|
+| 硬链接 + `agent_links.py`：承载"三文件同步"这个可验证、重复、会消耗上下文的动作 | 任务类型枚举表（"如果是 bug 修复就读 X，如果是新功能就读 Y"） |
+| `changelog.py titles/show/add`：把"读全文"这个高频耗 token 动作下沉到工具 | CHANGELOG 条目的关键词分类规则（"必须以 fix:/feat: 开头并归到 X 类"） |
+| 计划文件 + 状态机（queue/in_progress/review/completed）：承载跨上下文交接 | 给每种业务领域预先写好的"专属计划模板" |
+| 完工检查清单：把易遗忘的硬约束机械化 | 用关键词匹配判断"任务是否需要复查" |
+
+判别原则：先验如果能随项目演进自然扩展（脚本可加 flag、计划状态机可加新状态），且替代的是**确定会发生的、可机械化的**动作，就保留；先验如果是把"未来可能遇到的情况"提前枚举出来，就让它由 Agent 在具体上下文中判断，不要预编码。
+
 ### 9. 软约束靠文档，硬约束靠工具
 
 AGENTS.md 里的规则本质上是"告诉 Agent 应该怎么做"，Agent 可能遗忘或违反。Pre-commit hook、lint、CI 是"强制 Agent 必须这样做"，Agent 绕不过去。
@@ -138,37 +153,13 @@ AGENTS.md 里的规则本质上是"告诉 Agent 应该怎么做"，Agent 可能�
 
 **AGENTS.md 同步的强制维护**：
 
-AGENTS.md、CLAUDE.md、GEMINI.md 必须保持内容一致（因为不同 Agent 框架加载不同入口文件）。常见的错误是：
+AGENTS.md、CLAUDE.md、GEMINI.md 必须保持内容一致（因为不同 Agent 框架加载不同入口文件）。常见错误：
 
 1. Agent 修改了 AGENTS.md，但忘记运行 `scripts/agent_links.py` 同步
 2. Agent 直接修改了 CLAUDE.md 或 GEMINI.md（这是错误的）
-3. 硬链接因编辑器行为而断链
+3. 硬链接因编辑器原子写入行为而断链
 
-**解决方案：Git pre-commit hook 强制检查**
-
-在 `.githooks/pre-commit` 中添加检查逻辑：
-
-```bash
-#!/bin/bash
-# 检查 AGENTS.md、CLAUDE.md、GEMINI.md 是否一致
-AGENTS_MD5=$(md5sum AGENTS.md | cut -d' ' -f1)
-CLAUDE_MD5=$(md5sum CLAUDE.md | cut -d' ' -f1)
-GEMINI_MD5=$(md5sum GEMINI.md | cut -d' ' -f1)
-
-if [ "$AGENTS_MD5" != "$CLAUDE_MD5" ] || [ "$AGENTS_MD5" != "$GEMINI_MD5" ]; then
-    echo "⚠️  AGENTS.md、CLAUDE.md、GEMINI.md 不一致"
-    echo "请运行：python scripts/agent_links.py repair"
-    exit 1
-fi
-```
-
-配置 Git 使用仓库内的 hooks 目录：
-
-```bash
-git config core.hooksPath .githooks
-```
-
-这样每次 commit 时都会自动检查，如果不一致会拒绝提交并提示正确的修复流程。这是真正的**硬约束**，Agent 无法绕过。
+**唯一正解：Git pre-commit hook 调用 `scripts/agent_links.py check`，断链/不一致时拒绝提交。** 具体落地见"执行步骤"第 6 步。脚本一处实现，hook 一行调用，不要在 hook 里再写一份独立的比对逻辑（避免双份维护成本和"工具缺失静默放行"的洞）。
 
 ---
 
@@ -210,8 +201,7 @@ git config core.hooksPath .githooks
 init-agent-docs/
 └── assets/
     ├── templates/
-    │   ├── zh/                       # 中文模板集
-    │   └── en/                       # 英文模板集
+    │   └── zh/                       # 中文模板集
     │       （AGENTS, STRUCTURE, CURRENT, overview, api, deployment,
     │        pitfalls, plan, CHANGELOG — 共 9 个 .tpl 文件）
     ├── scripts/
@@ -246,7 +236,7 @@ init-agent-docs/
 7. **项目有没有自动化测试？** 测试命令是什么？这决定了测试要求部分怎么写。
 8. **这个项目的默认协作倾向是什么？**（通常是单 Agent 顺序推进，还是经常多 Agent / 多窗口并行？这是默认倾向，不是对每个任务的一刀切规定）
 9. **这个项目更常见的是哪类任务？**（小修改、分阶段任务，还是需要 reviewer / verifier 的高风险改动？）
-10. **文档语言？**（中文 / 英文 / 其他——决定使用 `assets/templates/zh/` 还是 `assets/templates/en/`）
+10. **文档语言？** 当前模板仅提供中文（`assets/templates/zh/`）。如目标项目以英文为主，需要先把 zh 模板翻译成英文再使用，或在初始化后人工改写——本 skill 不再附带英文模板。
 
 在落文档前，先根据项目的默认倾向写出协作偏好；**具体到每个任务开始前，再显式选择一种工作模式**：
 
@@ -260,9 +250,7 @@ init-agent-docs/
 
 ### 第 1 步：创建 AGENTS.md 及硬链接组
 
-1. 选择模板语言：
-   - 中文项目：读 `assets/templates/zh/AGENTS.md.tpl`
-   - 英文项目：读 `assets/templates/en/AGENTS.md.tpl`
+1. 读 `assets/templates/zh/AGENTS.md.tpl`（当前 skill 仅附带中文模板）。
 2. 基于模板生成目标项目的 `AGENTS.md`。模板里：
    - `[方括号]` 是"替换为具体值"的占位
    - `<!-- HTML 注释 -->` 是给你的填写指导，生成最终文件时应替换为实际内容或整段删除
@@ -302,13 +290,20 @@ init-agent-docs/
    python scripts/agent_links.py repair --force
    ```
 
-**关于"硬链接不可用"的 fallback**：某些文件系统（WSL 跨盘、ReFS、exFAT、部分 CI 容器）不支持硬链接。此时不要偷偷改成三份手工维护；应在 AGENTS.md 中明确降级策略，例如"只编辑 AGENTS.md，另两个文件由脚本复制同步"，并扩展 `scripts/agent_links.py` 来承载这种策略。
+**关于"硬链接不可用"的 fallback**：某些文件系统（WSL 跨盘、ReFS、exFAT、部分 CI 容器）不支持硬链接。此时改用脚本的 copy 模式，仍由脚本承载"AGENTS.md 是源、其他两个是同步副本"的语义：
+
+```bash
+python scripts/agent_links.py repair --mode=copy
+python scripts/agent_links.py check  --mode=copy   # 或 --mode=auto
+```
+
+`check --mode=auto`（默认）会自动接受硬链接或 copy 任一种状态；显式传 `--mode=copy` 用于在不支持硬链接的环境中锁定模式，避免某次 repair 误把项目升级回硬链接又立刻断开。在 AGENTS.md 顶部写清当前项目用哪种模式，避免歧义。
 
 **关于编辑器断链**：部分编辑器用"写临时文件 → 删原文件 → 重命名"保存，会创建新 inode 从而断开硬链接。建议在第 6 步配置 pre-commit，让每次提交时自动重建。
 
 ### 第 2 步：创建 STRUCTURE.md 和 docs/ 目录
 
-按同样的模板机制生成以下文件（从 `assets/templates/{zh,en}/` 对应 .tpl 读，填充后写入目标项目）：
+按同样的模板机制生成以下文件（从 `assets/templates/zh/` 对应 .tpl 读，填充后写入目标项目）：
 
 | 目标路径 | 模板 |
 |---------|------|
@@ -354,7 +349,7 @@ touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
 
 ### 第 4 步：初始化首个计划文件（可选）
 
-如果用户的下一个任务已经明确、且是分阶段或协作模式，就基于 `assets/templates/{zh,en}/plan.md.tpl` 在 `docs/plans/active/` 下创建第一份计划，顺便校验这个模板在具体任务上好不好用。
+如果用户的下一个任务已经明确、且是分阶段或协作模式，就基于 `assets/templates/zh/plan.md.tpl` 在 `docs/plans/active/` 下创建第一份计划，顺便校验这个模板在具体任务上好不好用。
 
 如果当前没有待启动的任务，跳过本步骤——计划应该按需创建，而不是放空壳进去。
 
@@ -385,55 +380,25 @@ python scripts/changelog.py add \
 
 2. **配置 AGENTS.md 同步检查（必须）**：
 
-   这是防止 Agent 修改 AGENTS.md 后忘记同步的关键保护。创建 `.githooks/pre-commit` 文件：
+   这是防止 Agent 修改 AGENTS.md 后忘记同步的关键保护。Hook 的实际比对逻辑在 `scripts/agent_links.py` 里（处理硬链接 inode 比对、缺失文件、内容差异），hook 只做一行调用：
 
    ```bash
+   mkdir -p .githooks
    cat > .githooks/pre-commit << 'EOF'
-   #!/bin/bash
-   # 检查 AGENTS.md、CLAUDE.md、GEMINI.md 是否一致
-
-   # 计算 MD5（兼容 Linux 和 Windows Git Bash）
-   if command -v md5sum &> /dev/null; then
-       AGENTS_MD5=$(md5sum AGENTS.md | cut -d' ' -f1)
-       CLAUDE_MD5=$(md5sum CLAUDE.md | cut -d' ' -f1)
-       GEMINI_MD5=$(md5sum GEMINI.md | cut -d' ' -f1)
-   elif command -v md5 &> /dev/null; then
-       AGENTS_MD5=$(md5 -q AGENTS.md)
-       CLAUDE_MD5=$(md5 -q CLAUDE.md)
-       GEMINI_MD5=$(md5 -q GEMINI.md)
-   else
-       echo "⚠️  警告：无法计算 MD5（未找到 md5sum 或 md5 命令）"
-       exit 0
-   fi
-
-   # 比较三个文件的 MD5
-   if [ "$AGENTS_MD5" != "$CLAUDE_MD5" ] || [ "$AGENTS_MD5" != "$GEMINI_MD5" ]; then
-       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-       echo "⚠️  Git commit 被拒绝"
-       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+   #!/usr/bin/env bash
+   set -e
+   python scripts/agent_links.py check --verbose || {
        echo ""
-       echo "AGENTS.md、CLAUDE.md、GEMINI.md 三个文件的内容不一致。"
-       echo ""
-       echo "这可能是因为："
-       echo "  1. 你修改了 AGENTS.md 但忘记运行同步脚本"
-       echo "  2. 你直接修改了 CLAUDE.md 或 GEMINI.md（这是错误的）"
-       echo ""
-       echo "正确的流程："
-       echo "  1. 编辑 AGENTS.md（不要编辑 CLAUDE.md 或 GEMINI.md）"
-       echo "  2. 运行：python scripts/agent_links.py repair"
-       echo "  3. 再次提交"
-       echo ""
-       echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+       echo "AGENTS.md / CLAUDE.md / GEMINI.md 不一致或硬链接已断。"
+       echo "正确流程：仅编辑 AGENTS.md，然后运行 python scripts/agent_links.py repair。"
        exit 1
-   fi
-
-   exit 0
+   }
    EOF
    chmod +x .githooks/pre-commit
    git config core.hooksPath .githooks
    ```
 
-   这会在每次 commit 前自动检查三文件是否一致，如果不一致会拒绝提交并提示正确的修复流程。
+   `agent_links.py check` 在以下情况返回非 0：三文件之一缺失、不属于同一个 inode、或内容已分叉。Python 解释器缺失时也会自然失败——比 bash 内联用 `md5sum` 然后在工具缺失时 `exit 0` 安全。
 
 3. 按项目技术栈选择其他 pre-commit 检查（可选）：
 
@@ -448,14 +413,14 @@ python scripts/changelog.py add \
 4. 本地触发一次确认能通过：
 
    ```bash
-   # 测试 AGENTS.md 同步检查
-   echo "# test" >> CLAUDE.md && git add CLAUDE.md && git commit -m "test: hook"
-   # 应该被拒绝，然后修复：
+   # 期望：直接提交一次空改动应通过
+   git commit --allow-empty -m "test: hook pass" && git reset HEAD~1
+
+   # 期望：人为破坏 CLAUDE.md 后提交应被拒绝
+   echo "diverged" >> CLAUDE.md && git add CLAUDE.md
+   git commit -m "test: hook reject" && echo "BUG: hook should have rejected" || echo "ok: hook rejected as expected"
    git checkout -- CLAUDE.md
-   
-   # 正常提交测试
-   echo "" >> AGENTS.md && git add AGENTS.md && python scripts/agent_links.py repair && git commit -m "test: hook pass"
-   git reset HEAD~1   # 不留垃圾提交
+   python scripts/agent_links.py repair
    ```
 
 ### 第 7 步：静态自检
@@ -468,11 +433,11 @@ python scripts/changelog.py add \
 6. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出标题树
 7. `AGENTS.md` 行数不超过约 150 行（超出说明有内容该下沉到 docs/）
 
-### 第 8 步：reviewer-perspective 自检（推荐）
+### 第 8 步：reviewer-perspective 自检（必做）
 
-这一步是对设计哲学第 5 条的兑现——**不要让"执行者自检"冒充"已验证"。** 文档初始化本身就是中等风险的工作：一旦写得不清楚、AGENTS.md 里的规则模糊、导航指针断链，后面几十次对话都会带着病上路。
+这一步是对设计哲学第 5 条的兑现——**不要让"执行者自检"冒充"已验证"。** 文档初始化属于中等风险工作：一旦 AGENTS.md 规则模糊或导航指针断链，后面几十次对话都会带着病上路；按哲学第 5 条的分级，这种规模的改动**必须换一个视角**，不接受同一上下文里的执行者自检。
 
-建议做法：
+做法：
 
 1. **新开一个 Agent 窗口或启动 subagent**：
    - 新窗口：打开新的 Claude Code 窗口或新会话
@@ -484,7 +449,7 @@ python scripts/changelog.py add \
    - 如果接到一个复杂任务，我应该先去哪里？
 3. 如果回答含糊或错误，说明 AGENTS.md 没写清楚——回去改，直到新上下文能通过这个测试为止
 
-这个测试的成本很低（十几分钟），但收益极高：它验证的恰恰是 AGENTS.md 作为"入口地图"最核心的功能。
+这个测试的成本很低（十几分钟），但收益极高：它验证的恰恰是 AGENTS.md 作为"入口地图"最核心的功能。**未通过本步前不要向用户报告"初始化已完成"。**
 
 初始化完成后，把第 0 步回答 + 自检结果追加到 `docs/plans/completed/initialization.md` 的"完成记录"里。
 
@@ -675,7 +640,7 @@ git worktree remove ../project-owner-a
 
 ### 计划文件结构
 
-计划模板在 `assets/templates/{zh,en}/plan.md.tpl`。关键字段：
+计划模板在 `assets/templates/zh/plan.md.tpl`。关键字段：
 
 - **任务分配表**：谁领什么、状态到哪（`queue` / `claimed` / `in_progress` / `review` / `✅ completed`）
 - **阶段划分**：每阶段的目标、涉及文件、验证标准、owner、reviewer、完成记录、交接摘要
@@ -747,7 +712,7 @@ git worktree remove ../project-owner-a
 | 中型单体应用 | 全部 | 根据需要省略 api.md 或 pitfalls.md |
 | 大型多模块项目 | 全部 + 按模块拆分 docs/ | 无 |
 
-对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 100 行）。但一旦项目开始增长，就应该及时拆分。
+对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 150 行）。但一旦项目开始增长，就应该及时拆分。
 
 ---
 
@@ -773,18 +738,12 @@ git worktree remove ../project-owner-a
 
 10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add` 做标题树查看、局部读取和追加，不读全文。
 
-11. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有任何机械化验证。Agent 可能遗忘或违反规则，尤其在长上下文中。解法：能用 hook/lint/CI 强制的规则，编码为工具（第 6 步）。具体到 AGENTS.md 同步问题：
+11. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是 AGENTS.md 同步——见哲学第 9 条与第 6 步）。
 
-   - **症状**：Agent 修改 AGENTS.md 后忘记同步到 CLAUDE.md/GEMINI.md，导致三文件内容不一致
-   - **后果**：下次对话时，不同 Agent 框架加载的入口文件内容不同，产生行为差异
-   - **软约束**：在 AGENTS.md 开头写"修改后请运行同步脚本"——Agent 会忘记或忽略
-   - **硬约束**：在 `.githooks/pre-commit` 中检查三文件 MD5，不一致则拒绝提交（第 6 步第 2 点）
-   - **效果**：Agent 无法绕过，commit 时自动被拦截并提示正确的修复流程
+12. **关键原则只存在于对话中**：某次对话中确认了"硬约束优先"，但没有写入 AGENTS.md。新对话开始时 Agent 完全不知道这个原则的存在。解法：重要原则必须写入文档（AGENTS.md 的准则段），这样每次新对话都会自动加载。
 
-12. **关键原则只存在于对话中**：在某个对话中讨论并确认了"硬约束优先"原则，但没有写入 AGENTS.md 或其他文档。新对话开始时，Agent 完全不知道这个原则的存在。解法：重要的原则和决策必须写入文档（AGENTS.md 的准则段），这样每次新对话都会自动加载。
+13. **初始化完就不自检**：AGENTS.md 写完自己读一遍觉得没问题就结束。但执行者在同一上下文里天然有确认偏误。解法：第 8 步的 reviewer-perspective 自检——让一个新上下文只看 AGENTS.md 回答几个关键问题。
 
-12. **初始化完就不自检**：AGENTS.md 写完自己读一遍觉得没问题就结束。但执行者在同一上下文里天然有确认偏误。解法：第 8 步的 reviewer-perspective 自检——让一个新上下文只看 AGENTS.md 回答几个关键问题。
+14. **为了完整感复制治理形式**：看到多层规则、完整组织隐喻或复杂流程，就照搬到新仓库。解法：只保留能解决真实问题的原则和结构；具体形式必须由目标项目的实际约束长出来。
 
-13. **为了完整感复制治理形式**：看到多层规则、完整组织隐喻或复杂流程，就照搬到新仓库。解法：只保留能解决真实问题的原则和结构；具体形式必须由目标项目的实际约束长出来。
-
-14. **迁移时直接删旧文档**：历史引用瞬间失效。解法：第 3 步先标"已迁移"，保留一段时间再彻底删除。
+15. **迁移时直接删旧文档**：历史引用瞬间失效。解法：第 3 步先标"已迁移"，保留一段时间再彻底删除。
