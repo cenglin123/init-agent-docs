@@ -246,6 +246,8 @@ init-agent-docs/
 
 如果用户没有明确说明，默认从轻量模式开始；一旦任务跨模块、跨会话或需要并行，就升级到更重的模式。**不要在初始化阶段把某个模式永久写死给整个项目**。
 
+**判断项目规模，决定初始化深度。** 根据以上信息，把项目归为小型脚本/工具、中型单体应用或大型多模块项目，并参考下方"按项目规模裁剪"表格决定初始化时要创建哪些文件。小型项目不必创建全套 docs/ 层级和 plans 目录，避免空转。
+
 **把 intent 结果落盘。** 第 0 步收集的信息不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案写入 `docs/plans/completed/initialization.md`，将来审计或重构文档体系时就有据可查。
 
 ### 第 1 步：创建 AGENTS.md 及硬链接组
@@ -315,7 +317,9 @@ python scripts/agent_links.py check  --mode=copy   # 或 --mode=auto
 | `docs/pitfalls.md`（可选） | `pitfalls.md.tpl` |
 | `CHANGELOG.md` | `CHANGELOG.md.tpl` |
 
-然后建立计划目录：
+**按项目规模裁剪**：小型脚本/工具项目可以省略 `STRUCTURE.md`、`docs/overview.md`、`docs/deployment.md`、`docs/pitfalls.md` 和 `docs/plans/` 目录，只保留 `AGENTS.md` + `CHANGELOG.md` + `docs/CURRENT.md`。中型及以上项目保留全部。参考下方"按项目规模裁剪"表格做判断。
+
+然后建立计划目录（小型项目可跳过）：
 
 ```bash
 mkdir -p docs/plans/active docs/plans/completed
@@ -738,9 +742,11 @@ git worktree remove ../project-owner-a
 
 10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add` 做标题树查看、局部读取和追加，不读全文。
 
-11. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是 AGENTS.md 同步——见哲学第 9 条与第 6 步）。
+11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
 
-12. **关键原则只存在于对话中**：某次对话中确认了"硬约束优先"，但没有写入 AGENTS.md。新对话开始时 Agent 完全不知道这个原则的存在。解法：重要原则必须写入文档（AGENTS.md 的准则段），这样每次新对话都会自动加载。
+12. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是 AGENTS.md 同步——见哲学第 9 条与第 6 步）。
+
+13. **关键原则只存在于对话中**：某次对话中确认了"硬约束优先"，但没有写入 AGENTS.md。新对话开始时 Agent 完全不知道这个原则的存在。解法：重要原则必须写入文档（AGENTS.md 的准则段），这样每次新对话都会自动加载。
 
 13. **初始化完就不自检**：AGENTS.md 写完自己读一遍觉得没问题就结束。但执行者在同一上下文里天然有确认偏误。解法：第 8 步的 reviewer-perspective 自检——让一个新上下文只看 AGENTS.md 回答几个关键问题。
 
