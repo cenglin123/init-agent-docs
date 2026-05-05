@@ -246,9 +246,26 @@ init-agent-docs/
 
 如果用户没有明确说明，默认从轻量模式开始；一旦任务跨模块、跨会话或需要并行，就升级到更重的模式。**不要在初始化阶段把某个模式永久写死给整个项目**。
 
-**判断项目规模，决定初始化深度。** 根据以上信息，把项目归为小型脚本/工具、中型单体应用或大型多模块项目，并参考下方"按项目规模裁剪"表格决定初始化时要创建哪些文件。小型项目不必创建全套 docs/ 层级和 plans 目录，避免空转。
+---
 
-**把 intent 结果落盘。** 第 0 步收集的信息不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案写入 `docs/plans/completed/initialization.md`，将来审计或重构文档体系时就有据可查。
+**规模与模式决策（必须得到用户确认）**
+
+根据以上 10 个维度的信息，向用户展示以下选项的差异，由用户拍板选择初始化规模：
+
+| 选项 | 规模定义 | 创建哪些文件 | plans/ 目录 | 典型场景 |
+|------|---------|------------|------------|---------|
+| **小型** | 脚本/工具，核心文件 < 5 个 | AGENTS.md + CHANGELOG.md + docs/CURRENT.md | **不建** | 单次会话能完成的工具脚本 |
+| **中型** | 单体应用，5–30 个文件 | 全套：STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | 需要长期维护的独立应用 |
+| **大型** | 多模块/微服务，> 30 个文件 | 中型全套 + 模块级拆分提示 | active + completed + 模块子计划 | 多团队协作的复杂系统 |
+
+**执行原则：**
+- 默认从轻量开始，但**必须向用户说明推荐理由并征得同意**，例如："根据项目规模和任务类型，建议选择中型初始化，创建全套 docs/ 和 plans/ 目录。是否确认？"
+- **不要在未得到用户同意前擅自决定**。如果用户说"先简单来"，就按小型执行；如果用户说"全套"，就按中型或大型执行。
+- 用户的拍板结果必须记录下来，作为后续步骤的输入依据。
+
+**把 intent 结果落盘。** 第 0 步收集的信息（包括用户确认的规模选择）不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案 + 用户确认的规模写入 `docs/plans/completed/initialization.md`，将来审计或重构文档体系时就有据可查。
+
+---
 
 ### 第 1 步：创建 AGENTS.md 及硬链接组
 
@@ -305,7 +322,18 @@ python scripts/agent_links.py check  --mode=copy   # 或 --mode=auto
 
 ### 第 2 步：创建 STRUCTURE.md 和 docs/ 目录
 
-按同样的模板机制生成以下文件（从 `assets/templates/zh/` 对应 .tpl 读，填充后写入目标项目）：
+**根据第 0 步用户确认的规模，按以下分支执行：**
+
+#### 小型项目
+只生成以下文件：
+- `CHANGELOG.md`（从 `CHANGELOG.md.tpl`）
+- `docs/CURRENT.md`（从 `CURRENT.md.tpl`）
+
+**不生成** `STRUCTURE.md`、`docs/overview.md`、`docs/deployment.md`、`docs/pitfalls.md`。
+**不建** `docs/plans/` 目录。
+
+#### 中型项目
+按模板生成以下全套文件：
 
 | 目标路径 | 模板 |
 |---------|------|
@@ -317,14 +345,20 @@ python scripts/agent_links.py check  --mode=copy   # 或 --mode=auto
 | `docs/pitfalls.md`（可选） | `pitfalls.md.tpl` |
 | `CHANGELOG.md` | `CHANGELOG.md.tpl` |
 
-**按项目规模裁剪**：小型脚本/工具项目可以省略 `STRUCTURE.md`、`docs/overview.md`、`docs/deployment.md`、`docs/pitfalls.md` 和 `docs/plans/` 目录，只保留 `AGENTS.md` + `CHANGELOG.md` + `docs/CURRENT.md`。中型及以上项目保留全部。参考下方"按项目规模裁剪"表格做判断。
-
-然后建立计划目录（小型项目可跳过）：
+然后建立计划目录：
 
 ```bash
 mkdir -p docs/plans/active docs/plans/completed
 touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
 ```
+
+#### 大型项目
+生成中型项目的全套文件，并额外在 AGENTS.md 或 `docs/overview.md` 中加入提示：
+> 后续按模块拆分时，每个模块可建独立的 `docs/<module>/` 子目录和独立的 `docs/plans/active/<module>-*.md` 计划文件。
+
+然后同样建立 `docs/plans/active` 和 `docs/plans/completed`。
+
+---
 
 **不要留空文件**——至少写一个标题 + 一句话说明文件的定位，否则 Agent 不知道该往里写什么。模板本身已经满足这个要求，只要别把模板里的指导注释全删光就行。
 
