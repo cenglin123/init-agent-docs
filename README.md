@@ -1,6 +1,6 @@
 # init-agent-docs — skill maintainer notes
 
-此 README 面向 **维护本 skill 的人**（而不是执行 skill 的 agent）。执行指令请看 [SKILL.md](SKILL.md)。
+此 README 面向**维护本 skill 的人或 agent**（不是执行 skill 的 agent）。执行指令请看 [SKILL.md](SKILL.md)。
 
 ## 这个 skill 做什么
 
@@ -64,12 +64,3 @@ init-agent-docs/
 - 维护方法论时，只保留跨项目可迁移、能解决真实问题的原则（如 Occam / Bitter Lesson），不要复制不必要的治理形式或组织隐喻。
 - 哲学条款尽量保留，增改需要在 SKILL.md 顶部说清"为什么"——本 skill 的价值一半以上在于设计哲学的阐释，纯模板替换价值有限。
 - `assets/pitch/presentation.html` 是宣讲 deck，和执行流程无关，但核心方法论变化时应同步更新。
-
-## 为什么本仓库自己没有 AGENTS.md / docs/
-
-本仓库是**模板提供方**，不是被模板初始化的项目。让 skill 包自身按它产出的结构组织反而会造成两类混淆：
-
-- 维护者可能把 skill 自己的 AGENTS.md 误当成模板的一部分被分发
-- skill 自己的 docs/ 与 `assets/templates/` 中的同名文件来源不同，容易在编辑时改错位置
-
-因此本仓库只有 README.md（面向维护者）+ SKILL.md（面向执行 skill 的 agent）+ assets/（产出物源头）三层结构。"鞋匠的孩子没鞋"在这里是有意为之。
