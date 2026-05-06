@@ -31,6 +31,21 @@ def first_date_index(lines: list[str]) -> int:
     raise SystemExit("CHANGELOG has no date heading like '## YYYY-MM-DD'")
 
 
+def bootstrap_insert_index(lines: list[str]) -> int:
+    """Pick where to insert the very first date block in a CHANGELOG that has none.
+
+    Convention: place it right after the leading ``# CHANGELOG`` H1 (and the
+    blank line that typically follows). If no H1 exists, fall back to the top.
+    """
+    for index, line in enumerate(lines):
+        if line.startswith("# "):
+            tail = index + 1
+            while tail < len(lines) and lines[tail].strip() == "":
+                tail += 1
+            return tail
+    return 0
+
+
 def iter_date_blocks(lines: list[str]) -> list[tuple[int, int, str, str]]:
     blocks: list[tuple[int, int, str, str]] = []
     starts = [index for index, line in enumerate(lines) if DATE_HEADING_RE.match(line)]
@@ -194,7 +209,8 @@ def command_add(args: argparse.Namespace) -> None:
         write_lines(lines, args.changelog)
         return
 
-    insert_at = first_date_index(lines)
+    has_any_date = any(DATE_HEADING_RE.match(line) for line in lines)
+    insert_at = first_date_index(lines) if has_any_date else bootstrap_insert_index(lines)
     heading_title = f"：{args.date_title.strip()}" if args.date_title else ""
     date_block = [f"## {target_date}{heading_title}", ""] + new_block + ["---", ""]
     lines[insert_at:insert_at] = date_block

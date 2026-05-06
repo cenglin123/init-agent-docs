@@ -263,7 +263,12 @@ init-agent-docs/
 - **不要在未得到用户同意前擅自决定**。如果用户说"先简单来"，就按小型执行；如果用户说"全套"，就按中型或大型执行。
 - 用户的拍板结果必须记录下来，作为后续步骤的输入依据。
 
-**把 intent 结果落盘。** 第 0 步收集的信息（包括用户确认的规模选择）不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案 + 用户确认的规模写入 `docs/plans/completed/initialization.md`，将来审计或重构文档体系时就有据可查。
+**把 intent 结果落盘。** 第 0 步收集的信息（包括用户确认的规模选择）不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案 + 用户确认的规模写入：
+
+- 中型 / 大型项目：`docs/plans/completed/initialization.md`（用 `plan.md.tpl` 作骨架）
+- 小型项目：`docs/initialization.md`（小型项目不建 plans 目录，直接放在 docs/ 下，用一份精简骨架即可——目标 / 规模 / 10 个维度的答案 / 完成时间）
+
+将来审计或重构文档体系时就有据可查。
 
 ---
 
@@ -332,6 +337,19 @@ python scripts/agent_links.py check  --mode=copy   # 或 --mode=auto
 **不生成** `STRUCTURE.md`、`docs/overview.md`、`docs/deployment.md`、`docs/pitfalls.md`。
 **不建** `docs/plans/` 目录。
 
+**对应裁剪 AGENTS.md（必做）**：第 1 步生成的 AGENTS.md 默认信息导航包含全套指针。小型项目要回到 AGENTS.md 删除以下行，避免死链：
+
+- `文档总索引：[STRUCTURE.md]...`
+- `系统主线与设计决策：[docs/overview.md]...`
+- `API 约定：[docs/api.md]...`
+- `部署与同步：[docs/deployment.md]...`
+- `环境陷阱：[docs/pitfalls.md]...`
+- `复杂任务计划：[docs/plans/]...`
+
+只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。
+
+裁剪后运行 `python scripts/agent_links.py repair` 把改动同步到 CLAUDE.md / GEMINI.md。
+
 #### 中型项目
 按模板生成以下全套文件：
 
@@ -393,9 +411,14 @@ touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
 
 ### 第 5 步：记录初始化本身
 
-把第 0 步收集到的 intent 答案写入 `docs/plans/completed/initialization.md`（用 `plan.md.tpl` 作骨架，状态直接标 `✅ completed`）。这一步有两个作用：
+把第 0 步收集到的 intent 答案写入"出生档案"文件：
+
+- 中型 / 大型项目：`docs/plans/completed/initialization.md`，用 `plan.md.tpl` 作骨架，状态直接标 `✅ completed`
+- 小型项目：`docs/initialization.md`，精简骨架即可（目标 / 规模 / 10 个维度的答案 / 完成时间），不必复用 plan 模板
+
+这一步有两个作用：
 - 将来重新审视文档体系时，可以对照出生档案看哪些假设已变
-- 给未来的 Agent 一个具体范例：计划文件长什么样、怎么填
+- 中型 / 大型项目顺便给未来的 Agent 一个具体范例：计划文件长什么样、怎么填
 
 同时用脚本写入 CHANGELOG，不要手工打开全文：
 
@@ -416,9 +439,11 @@ python scripts/changelog.py add \
    python scripts/agent_links.py check
    ```
 
-2. **配置 AGENTS.md 同步检查（必须）**：
+2. **配置 pre-commit hook（必须）**——核心目的是让 `scripts/agent_links.py check` 在每次提交前跑，防止 Agent 修改 AGENTS.md 后忘记同步。Hook 的实际比对逻辑在脚本里（处理硬链接 inode 比对、缺失文件、内容差异），hook 只做一行调用。
 
-   这是防止 Agent 修改 AGENTS.md 后忘记同步的关键保护。Hook 的实际比对逻辑在 `scripts/agent_links.py` 里（处理硬链接 inode 比对、缺失文件、内容差异），hook 只做一行调用：
+   **二选一，不要叠加**——assets 下的技术栈 hook 内部已经包含 agent_links check，再叠加 inline 的最小 hook 会让检查跑两次、输出混乱。
+
+   **路径 A：项目没有特殊 lint 需求 → 直接用 inline 最小 hook**
 
    ```bash
    mkdir -p .githooks
@@ -436,9 +461,9 @@ python scripts/changelog.py add \
    git config core.hooksPath .githooks
    ```
 
-   `agent_links.py check` 在以下情况返回非 0：三文件之一缺失、不属于同一个 inode、或内容已分叉。Python 解释器缺失时也会自然失败——比 bash 内联用 `md5sum` 然后在工具缺失时 `exit 0` 安全。
+   **路径 B：项目需要 lint / format 检查 → 直接复制对应技术栈 hook**
 
-3. 按项目技术栈选择其他 pre-commit 检查（可选）：
+   `assets/hooks/pre-commit-*.sh` 已经在内部调用了 `scripts/agent_links.py check`，所以不要再叠加路径 A 的 inline 版本。
 
    - Python 项目 → `assets/hooks/pre-commit-python.sh`
    - Node/TS 项目 → `assets/hooks/pre-commit-node.sh`
@@ -446,30 +471,61 @@ python scripts/changelog.py add \
    - 混合 / 特殊栈 → `assets/hooks/pre-commit-generic.sh`（自行补 lint 命令）
    - 已在用 pre-commit 框架 → `assets/hooks/pre-commit-config.yaml` 贴到项目根的 `.pre-commit-config.yaml`
 
-   将选中的脚本内容**追加**到 `.githooks/pre-commit` 文件末尾（不要覆盖第 2 步创建的同步检查）。
+   ```bash
+   mkdir -p .githooks
+   cp assets/hooks/pre-commit-python.sh .githooks/pre-commit   # 按栈替换文件名
+   chmod +x .githooks/pre-commit
+   git config core.hooksPath .githooks
+   ```
 
-4. 本地触发一次确认能通过：
+   PowerShell 等价：
+
+   ```powershell
+   New-Item -ItemType Directory -Force .githooks
+   Copy-Item assets\hooks\pre-commit-python.sh .githooks\pre-commit
+   git config core.hooksPath .githooks
+   ```
+
+   `agent_links.py check` 在以下情况返回非 0：三文件之一缺失、不属于同一个 inode、或内容已分叉。Python 解释器缺失时也会自然失败——比 bash 内联用 `md5sum` 然后在工具缺失时 `exit 0` 安全。
+
+   **Windows 注意**：hook 是 bash 脚本，需要 git bash 解释（绝大多数 Windows 安装 Git for Windows 时已自带）。如果项目要求纯 PowerShell 路径，改用 `pre-commit-config.yaml` + `pre-commit` 框架（跨平台）。
+
+3. 本地触发一次确认能通过（可选——CI 矩阵已覆盖这些用例，跳过也行）：
 
    ```bash
    # 期望：直接提交一次空改动应通过
-   git commit --allow-empty -m "test: hook pass" && git reset HEAD~1
+   git commit --allow-empty -m "test: hook pass" && git reset --soft HEAD~1
 
    # 期望：人为破坏 CLAUDE.md 后提交应被拒绝
    echo "diverged" >> CLAUDE.md && git add CLAUDE.md
    git commit -m "test: hook reject" && echo "BUG: hook should have rejected" || echo "ok: hook rejected as expected"
-   git checkout -- CLAUDE.md
+   git restore --staged CLAUDE.md && git checkout -- CLAUDE.md
    python scripts/agent_links.py repair
    ```
 
+   `git reset --soft HEAD~1` 仅撤回 commit 不动工作区；如果该 commit 是仓库的第一次 commit，跳过这条命令（无 HEAD~1 可回退）。
+
 ### 第 7 步：静态自检
 
-1. 所有文件已创建且路径正确
-2. `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 硬链接一致（`python scripts/agent_links.py check` 返回 0）
-3. `AGENTS.md` 中的所有链接指向真实存在的文件
-4. `STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应
-5. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
-6. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出标题树
-7. `AGENTS.md` 行数不超过约 150 行（超出说明有内容该下沉到 docs/）
+**通用项（所有规模都要过）：**
+
+1. 所有应创建的文件已创建且路径正确（按第 0 步用户确认的规模判断"应创建"的范围，不要按全套查）
+2. `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 硬链接一致：`python scripts/agent_links.py check` 返回 0
+3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
+4. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
+5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
+6. `AGENTS.md` 行数不超过约 150 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+
+**中型 / 大型项目额外项：**
+
+7. `STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
+8. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
+9. 出生档案 `docs/plans/completed/initialization.md` 已写入
+
+**小型项目额外项：**
+
+7. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
+8. 没有创建 `docs/plans/`、`STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
 
 ### 第 8 步：reviewer-perspective 自检（必做）
 
@@ -489,7 +545,7 @@ python scripts/changelog.py add \
 
 这个测试的成本很低（十几分钟），但收益极高：它验证的恰恰是 AGENTS.md 作为"入口地图"最核心的功能。**未通过本步前不要向用户报告"初始化已完成"。**
 
-初始化完成后，把第 0 步回答 + 自检结果追加到 `docs/plans/completed/initialization.md` 的"完成记录"里。
+初始化完成后，把第 0 步回答 + 自检结果追加到出生档案的"完成记录"里：中型 / 大型项目写入 `docs/plans/completed/initialization.md`，小型项目写入 `docs/initialization.md`。
 
 ---
 
@@ -782,8 +838,8 @@ git worktree remove ../project-owner-a
 
 13. **关键原则只存在于对话中**：某次对话中确认了"硬约束优先"，但没有写入 AGENTS.md。新对话开始时 Agent 完全不知道这个原则的存在。解法：重要原则必须写入文档（AGENTS.md 的准则段），这样每次新对话都会自动加载。
 
-13. **初始化完就不自检**：AGENTS.md 写完自己读一遍觉得没问题就结束。但执行者在同一上下文里天然有确认偏误。解法：第 8 步的 reviewer-perspective 自检——如果能启动 subagent，就启动一个 subagent 让它只读 AGENTS.md 审计初始化情况；如果不能，至少让一个新上下文只看 AGENTS.md 回答几个关键问题。
+14. **初始化完就不自检**：AGENTS.md 写完自己读一遍觉得没问题就结束。但执行者在同一上下文里天然有确认偏误。解法：第 8 步的 reviewer-perspective 自检——如果能启动 subagent，就启动一个 subagent 让它只读 AGENTS.md 审计初始化情况；如果不能，至少让一个新上下文只看 AGENTS.md 回答几个关键问题。
 
-14. **为了完整感复制治理形式**：看到多层规则、完整组织隐喻或复杂流程，就照搬到新仓库。解法：只保留能解决真实问题的原则和结构；具体形式必须由目标项目的实际约束长出来。
+15. **为了完整感复制治理形式**：看到多层规则、完整组织隐喻或复杂流程，就照搬到新仓库。解法：只保留能解决真实问题的原则和结构；具体形式必须由目标项目的实际约束长出来。
 
-15. **迁移时直接删旧文档**：历史引用瞬间失效。解法：第 3 步先标"已迁移"，保留一段时间再彻底删除。
+16. **迁移时直接删旧文档**：历史引用瞬间失效。解法：第 3 步先标"已迁移"，保留一段时间再彻底删除。

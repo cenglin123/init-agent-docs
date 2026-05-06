@@ -124,6 +124,40 @@ class ChangelogTestCase(unittest.TestCase):
         result = self.run_script("show")
         self.assertNotEqual(result.returncode, 0)
 
+    def test_add_to_empty_shell(self) -> None:
+        # Bootstrap case: a freshly scaffolded CHANGELOG has only the H1 and a
+        # comment block. The first add must succeed (placing the new date block
+        # right after the H1) instead of failing with "no date heading".
+        empty_shell = "# CHANGELOG\n\n<!-- description placeholder -->\n"
+        self.changelog.write_text(empty_shell, encoding="utf-8")
+        result = self.run_script(
+            "add",
+            "--date", "2026-04-17",
+            "--title", "初始化文档体系",
+            "--body", "建立 agent-first 文档结构",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = self.changelog.read_text(encoding="utf-8")
+        self.assertIn("## 2026-04-17", text)
+        self.assertIn("### 初始化文档体系", text)
+        # The new block must come AFTER the H1, not before it
+        h1_idx = text.index("# CHANGELOG")
+        date_idx = text.index("## 2026-04-17")
+        self.assertLess(h1_idx, date_idx)
+
+    def test_add_to_completely_empty_file(self) -> None:
+        # Defensive case: even a totally empty file should not crash.
+        self.changelog.write_text("", encoding="utf-8")
+        result = self.run_script(
+            "add",
+            "--date", "2026-04-17",
+            "--title", "初始化",
+            "--body", "x",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = self.changelog.read_text(encoding="utf-8")
+        self.assertIn("## 2026-04-17", text)
+
 
 if __name__ == "__main__":
     unittest.main()
