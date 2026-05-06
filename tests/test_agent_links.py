@@ -64,7 +64,7 @@ class AgentLinksTestCase(unittest.TestCase):
         if not hardlinks_supported(self.tmp):
             self.skipTest("filesystem does not support hardlinks")
 
-        result = self.run_script("repair")
+        result = self.run_script("repair", "--mode=hardlink")
         self.assertEqual(result.returncode, 0, result.stderr)
 
         result = self.run_script("check", "--verbose")
@@ -86,6 +86,22 @@ class AgentLinksTestCase(unittest.TestCase):
 
         result = self.run_script("check", "--mode=copy", "--verbose")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_repair_defaults_to_copy(self) -> None:
+        result = self.run_script("repair")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        agents_inode = (self.tmp / "AGENTS.md").stat().st_ino
+        claude_inode = (self.tmp / "CLAUDE.md").stat().st_ino
+        self.assertNotEqual(agents_inode, claude_inode, "default repair should use copy")
+        result = self.run_script("check")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_rejects_diverged_content_in_copy_mode(self) -> None:
+        self.run_script("repair", "--mode=copy")
+        (self.tmp / "CLAUDE.md").write_text("diverged\n", encoding="utf-8")
+        result = self.run_script("check", "--mode=copy")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected mode=copy", result.stderr)
 
     def test_check_rejects_missing_files(self) -> None:
         result = self.run_script("check")

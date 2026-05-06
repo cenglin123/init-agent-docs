@@ -145,13 +145,13 @@ def command_show(args: argparse.Namespace) -> None:
                     print()
                     print_block(block, section_start, section_end)
                     printed += 1
-                    if printed >= args.limit:
+                    if args.limit and printed >= args.limit:
                         return
                 print()
             elif pattern in header_text:
                 print(block[0])
                 printed += 1
-                if printed >= args.limit:
+                if args.limit and printed >= args.limit:
                     break
         return
 

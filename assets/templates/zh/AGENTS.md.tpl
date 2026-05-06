@@ -1,19 +1,26 @@
 # AI 协作规范
 
+<!-- AGENTS.md 是主副本。编辑后运行：python scripts/agent_links.py repair -->
 > 本文件会被 AI 框架自动加载并始终驻留在上下文中，因此必须保持精简。
 > 只放行为规则和信息指针，不放可从代码或其他文档获取的事实描述。
 
-## 硬链接声明
+## 项目概述
+
+<!-- 1–2 句话说明这个项目做什么。新 Agent 加载本文件后，应能立刻理解项目边界和核心价值。 -->
+<!-- 示例：一个基于 React + Node.js 的全栈电商后台，核心功能包括商品管理、订单处理和支付对接。 -->
+
+## 同步声明
 
 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 内容必须保持一致；读取时选择其一即可。**只编辑 AGENTS.md**，另两个由脚本同步。
 
-- 检查：`python scripts/agent_links.py check --verbose`
+- 检查：`python scripts/agent_links.py check`
 - 修复：`python scripts/agent_links.py repair`
 - 强制覆盖（仅在人工确认 `CLAUDE.md` / `GEMINI.md` 改动可被 AGENTS.md 覆盖时）：`python scripts/agent_links.py repair --force`
 
-<!-- 同步模式：默认 hardlink；如目标文件系统不支持硬链接（ReFS/exFAT/WSL 跨盘/部分 CI），
-     在所有 check/repair 命令后追加 `--mode=copy`，并把下面这一行改写为 "本项目使用 copy 模式"。 -->
-本项目使用 hardlink 模式。
+<!-- 同步模式：默认 copy（最可靠，不受编辑器原子写入影响）。
+     如文件系统支持且你理解 hardlink 的局限性，可改用 `--mode=hardlink`。
+     在所有 check/repair 命令后追加 `--mode=copy` 或 `--mode=hardlink` 锁定模式。 -->
+本项目使用 copy 模式。
 
 ## 信息导航
 
@@ -100,5 +107,5 @@
 - [ ] **复查视角**：如果这是高风险或跨模块任务，是否至少经过一次新的 reviewer 视角复查（新上下文窗口优先）？没有做到时，在计划或回复中明确说明。
 - [ ] **架构文档（docs/）**：是否涉及架构变更（新模块、新接口、流程变化、新配置、端口/环境变化）？如是，更新 `docs/` 下对应文件。维护时遵循本文件中的"文档维护原则"。
 - [ ] **CHANGELOG.md**：是否值得记录？如是，用 `python scripts/changelog.py add ...` 插入到当天日期节；需要查看历史时只用 `titles/show` 局部读取。
-- [ ] **硬链接**：本文件若被编辑，运行 `python scripts/agent_links.py check --verbose`；只有断开时才用 `python scripts/agent_links.py repair` 重建。
+- [ ] **同步一致性**：本文件若被编辑，运行 `python scripts/agent_links.py check`；只有不一致时才用 `python scripts/agent_links.py repair` 修复。
 - [ ] **跳过条件**：纯格式修改、注释修改、同一会话内已记录的变更，可跳过文档更新步骤（但验证步骤不可跳过）。

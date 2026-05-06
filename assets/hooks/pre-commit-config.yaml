@@ -1,7 +1,7 @@
 # Sample .pre-commit-config.yaml for projects using the pre-commit framework
 # (https://pre-commit.com/). Copy to repo root and run `pre-commit install`.
 #
-# This config pairs well with scripts/agent_links.py so the hardlink invariant
+# This config pairs well with scripts/agent_links.py so the sync invariant
 # is enforced on every commit, across platforms.
 
 repos:
@@ -38,11 +38,11 @@ repos:
   #     - id: go-fmt
   #     - id: go-vet
 
-  # --- Hardlink consistency (always enable) ---
+  # --- Sync consistency (always enable) ---
   - repo: local
     hooks:
-      - id: hardlink-check
-        name: AGENTS.md hardlink consistency
+      - id: sync-check
+        name: AGENTS.md sync consistency
         entry: python scripts/agent_links.py check
         language: system
         pass_filenames: false

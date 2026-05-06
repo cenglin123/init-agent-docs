@@ -2,11 +2,11 @@
 
 Two modes are supported:
 
-- ``hardlink`` (default): the three files share the same inode. Detection is
-  cheap and ``edit one, see in all three`` is automatic.
-- ``copy``: the three files are independent copies whose contents must match.
-  Use this on filesystems that cannot create hardlinks (ReFS, exFAT, some
-  WSL cross-drive setups, certain CI containers).
+- ``copy`` (default): the three files are independent copies whose contents
+  must match. Most reliable — unaffected by editor atomic-write behavior.
+- ``hardlink``: the three files share the same inode. Detection is cheap and
+  ``edit one, see in all three`` is automatic, but breaks on some filesystems
+  (ReFS, exFAT, WSL cross-drive) and when editors use atomic-save.
 
 ``check`` exits non-zero on any inconsistency or missing file. ``repair``
 takes ``AGENTS.md`` as the source of truth and rebuilds the other two; if
@@ -16,6 +16,7 @@ to nominate a different source after manual review.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import sys
@@ -50,6 +51,10 @@ def file_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def file_md5(path: Path) -> str:
+    return hashlib.md5(path.read_bytes()).hexdigest()
+
+
 def describe() -> list[str]:
     rows = []
     for path in LINK_PATHS:
@@ -74,8 +79,8 @@ def is_hardlink_group() -> bool:
 def is_content_equal() -> bool:
     if not all_present():
         return False
-    texts = {file_text(p) for p in LINK_PATHS}
-    return len(texts) == 1
+    hashes = {file_md5(p) for p in LINK_PATHS}
+    return len(hashes) == 1
 
 
 def detect_mode() -> str:
@@ -116,11 +121,11 @@ def repair_target(source: Path, target: Path, mode: str, force: bool) -> None:
         except FileNotFoundError:
             pass
     elif mode == "copy":
-        if target.exists() and file_text(target) == file_text(source):
+        if target.exists() and file_md5(target) == file_md5(source):
             return
 
     if target.exists() and not force:
-        if file_text(target) != file_text(source):
+        if file_md5(target) != file_md5(source):
             raise SystemExit(
                 f"{target.name} content differs from {source.name}; "
                 f"rerun with --force only after review"
@@ -166,12 +171,23 @@ def command_repair(args: argparse.Namespace) -> None:
 
     mode = args.mode
     if mode == "auto":
-        # Auto-pick: keep current mode if intact, else default to hardlink.
+        # Auto-pick: keep current mode if intact, else default to copy.
         current = detect_mode()
-        mode = "copy" if current == "copy" else "hardlink"
+        mode = "hardlink" if current == "hardlink" else "copy"
 
     for target in targets:
         repair_target(source, target, mode, args.force)
+
+    # Post-repair verification: ensure all targets exist and (for hardlink mode)
+    # share the source inode. Copy mode correctness is covered by detect_mode().
+    source_key = link_key(source)
+    for target in targets:
+        if not target.exists():
+            print("\n".join(describe()), file=sys.stderr)
+            raise SystemExit(f"repair failed: {target.name} missing")
+        if mode == "hardlink" and link_key(target) != source_key:
+            print("\n".join(describe()), file=sys.stderr)
+            raise SystemExit(f"repair failed: {target.name} is not hardlinked to source")
 
     actual = detect_mode()
     if actual == "broken":
@@ -207,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=("auto", "hardlink", "copy"),
         default="auto",
-        help="hardlink (default for fresh repos) or copy (for filesystems without hardlink support).",
+        help="copy (default, most reliable) or hardlink (for filesystems that support it).",
     )
     repair.add_argument(
         "--from",
