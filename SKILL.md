@@ -35,7 +35,7 @@ AGENTS.md（及其硬链接 CLAUDE.md、GEMINI.md）是 Agent 上下文中**始�
 
 **为什么用硬链接？** 不同 Agent 框架加载不同文件名：Claude Code 加载 CLAUDE.md，Codex 加载 AGENTS.md，Gemini CLI 加载 GEMINI.md。硬链接让三个文件始终是同一个文件的不同入口，编辑任何一个都会同步到其他两个，避免内容漂移。
 
-**建议控制在 150 行以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。
+**建议控制在 200 行以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。完工检查清单和 CHANGELOG 规则留在 AGENTS.md 里是有意为之——它们是最高频被违反的硬约束，下沉到按需读取的 docs/ 反而会被遗漏。
 
 ### 2. 渐进式披露（Progressive Disclosure）
 
@@ -44,7 +44,7 @@ Agent 从一个小而稳定的入口出发，按需深入查阅。这和给新�
 信息分层结构：
 
 ```
-AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~150 行）
+AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~200 行）
 STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
 docs/*.md          → 各专题深度文档（Agent 按需读取特定文件）
 docs/plans/        → 执行计划（Agent 接到复杂任务时读取）
@@ -488,7 +488,27 @@ python scripts/changelog.py add \
 
    `agent_links.py check` 在以下情况返回非 0：三文件之一缺失、不属于同一个 inode、或内容已分叉。Python 解释器缺失时也会自然失败——比 bash 内联用 `md5sum` 然后在工具缺失时 `exit 0` 安全。
 
-   **Windows 注意**：hook 是 bash 脚本，需要 git bash 解释（绝大多数 Windows 安装 Git for Windows 时已自带）。如果项目要求纯 PowerShell 路径，改用 `pre-commit-config.yaml` + `pre-commit` 框架（跨平台）。
+   **Windows 注意**：hook 是 bash 脚本，需要 git bash 解释（绝大多数 Windows 安装 Git for Windows 时已自带）。如果项目要求纯 PowerShell 路径，改用下面的 `pre-commit` 框架方案（跨平台）。
+
+   **路径 C：使用 `pre-commit` 框架（推荐给跨平台 / 多语言混合项目）**
+
+   `pre-commit` 是一个跨平台的 hook 管理工具，能在 Windows / Linux / macOS 上一致地执行 Python 写的 hook，且自动处理 git hook 安装、版本固定、虚拟环境隔离。安装即用：
+
+   ```bash
+   pip install pre-commit
+   cp assets/hooks/pre-commit-config.yaml .pre-commit-config.yaml
+   pre-commit install
+   ```
+
+   PowerShell 等价：
+
+   ```powershell
+   pip install pre-commit
+   Copy-Item assets\hooks\pre-commit-config.yaml .pre-commit-config.yaml
+   pre-commit install
+   ```
+
+   `assets/hooks/pre-commit-config.yaml` 已经包含 `agent_links.py check` 这一条 local hook（始终启用），其他语言 lint 段落以注释形式给出，按项目实际栈解开注释即可。这条路径与路径 A / B 互斥——选了它就不要再用 `git config core.hooksPath .githooks`，`pre-commit install` 会接管 `.git/hooks/pre-commit`。
 
 3. 本地触发一次确认能通过（可选——CI 矩阵已覆盖这些用例，跳过也行）：
 
@@ -514,7 +534,7 @@ python scripts/changelog.py add \
 3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
 4. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
 5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
-6. `AGENTS.md` 行数不超过约 150 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+6. `AGENTS.md` 行数不超过约 200 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
 
 **中型 / 大型项目额外项：**
 
@@ -529,7 +549,9 @@ python scripts/changelog.py add \
 
 ### 第 8 步：reviewer-perspective 自检（必做）
 
-这一步是对设计哲学第 5 条的兑现——**不要让"执行者自检"冒充"已验证"。** 文档初始化属于中等风险工作：一旦 AGENTS.md 规则模糊或导航指针断链，后面几十次对话都会带着病上路；按哲学第 5 条的分级，这种规模的改动**必须换一个视角**，不接受同一上下文里的执行者自检。
+这一步是对设计哲学第 5 条的兑现——**不要让"执行者自检"冒充"已验证"。**
+
+**为什么把它定为必做级（而不是按哲学第 5 条的"中等风险 → 建议级"）**：单次任务的 reviewer 可以"看情况"，因为它的影响半径是这一次任务；但 AGENTS.md 是后面几十次对话的入口文档，一旦规则模糊或导航指针断链，**所有后续会话都会带着病上路**——影响半径远超一次中等风险改动。所以这里把分级提升到"必做"，等同于哲学第 5 条里"高风险 / 跨模块改动"的处理。
 
 做法：
 
@@ -806,7 +828,7 @@ git worktree remove ../project-owner-a
 | 中型单体应用 | 全部 | 根据需要省略 api.md 或 pitfalls.md |
 | 大型多模块项目 | 全部 + 按模块拆分 docs/ | 无 |
 
-对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 150 行）。但一旦项目开始增长，就应该及时拆分。
+对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 200 行）。但一旦项目开始增长，就应该及时拆分。
 
 ---
 

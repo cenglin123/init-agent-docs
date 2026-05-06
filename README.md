@@ -11,8 +11,8 @@
 - `CHANGELOG.md`：倒序变更记录
 - `scripts/changelog.py`：CHANGELOG 标题树、局部读取和追加
 - `scripts/agent_links.py`：`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 硬链接检查与修复
-- `docs/{overview,api,deployment,pitfalls,CURRENT}.md`：专题文档
-- `docs/plans/{active,completed}/`：执行计划目录
+- `docs/{overview,api,deployment,pitfalls,CURRENT}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md`）
+- `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.githooks/`：可选 lint 质量门控，调用 `scripts/agent_links.py` 做硬链接兜底
 
 背后的设计哲学见 SKILL.md"设计哲学"一节。

@@ -7,6 +7,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
+# Convention: this script lives at <project_root>/scripts/changelog.py, so
+# parents[1] is the project root where CHANGELOG.md sits. Override per-call
+# with --changelog if you need a different location (also used in tests).
 ROOT = Path(__file__).resolve().parents[1]
 CHANGELOG = ROOT / "CHANGELOG.md"
 

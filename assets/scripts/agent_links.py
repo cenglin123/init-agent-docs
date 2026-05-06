@@ -22,6 +22,10 @@ import sys
 from pathlib import Path
 
 
+# Convention: this script lives at <project_root>/scripts/agent_links.py, so
+# parents[1] is the project root where AGENTS.md / CLAUDE.md / GEMINI.md sit.
+# If you relocate the script, update this line accordingly — there is no
+# auto-discovery of the project root.
 ROOT = Path(__file__).resolve().parents[1]
 LINK_NAMES = ("AGENTS.md", "CLAUDE.md", "GEMINI.md")
 LINK_PATHS = [ROOT / name for name in LINK_NAMES]
