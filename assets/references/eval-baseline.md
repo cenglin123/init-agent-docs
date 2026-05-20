@@ -23,6 +23,12 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 | `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | 中型：全套 docs/ + STRUCTURE.md + plans/ |
 | `eval-large` | 大型 | 多模块微服务（> 30 个文件），多语言混合，已有 DESIGN.md | 大型：中型全套 + 模块级拆分提示 + 迁移旧文档 |
 
+**新增事实源冲突夹具**：
+
+1. `eval-medium`：README 写旧命令（例如 `npm test`），但 `package.json`、lockfile 和 CI 写真实命令（例如 `pnpm test --filter web`）。预期产物遵守**可执行事实源优先**，`AGENTS.md` 记录真实命令，不复制 README 旧命令。
+2. `eval-large`：包含 workspace / monorepo 配置、root 命令和 package-level 命令。预期产物能说明单包验证方式、workspace 边界和必要命令顺序，而不是只写泛化的"运行测试"。
+3. `eval-medium` 或 `eval-large`：加入已有 `CLAUDE.md`、`.cursor/rules/project.mdc`、`.github/copilot-instructions.md` 或 repo-local `opencode.json`。预期产物完成**已有 instruction 文件整合**，保留其中已验证的硬约束、Agent 行为限制和禁止事项，不盲目覆盖。
+
 **准备步骤**：
 1. 在临时目录下创建 3 个最小可运行的项目骨架（不必能真正运行，但目录结构和关键文件要真实）
 2. 给每个项目写一段 100 字左右的"项目画像"（技术栈、硬约束、协作模式），作为第 0 步的模拟输入
@@ -43,6 +49,9 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 - [ ] `AGENTS.md` 中所有链接指向真实存在的文件（小型项目特别注意死链）
 - [ ] `AGENTS.md` 行数 ≤ 200（小型项目 ≤ 150 更佳）
 - [ ] 未残留未删除的模板指导注释（`<!-- ... -->` 或 `[方括号]` 占位符）
+- [ ] 可执行事实源优先：当 README 写旧命令而 CI / manifest / hook 写真实命令时，`AGENTS.md` 采用真实命令
+- [ ] 已有 instruction 文件整合：旧 `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot / OpenCode 指令中的硬约束已被读取、去重并保留
+- [ ] 用户提问克制：仓库事实源已经能回答的命令、入口、测试方式、工具链顺序，不应再询问用户
 
 ### 中型 / 大型额外项
 
@@ -116,6 +125,8 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 | **渐进披露合理性** | 15% | 信息分层是否符合"AGENTS.md 指针 → docs/ 深度 → 脚本工具"的结构？有没有该下沉却没下沉的内容？ |
 | **维护可持续性** | 15% | 文档体系是否预留了"只增不删会腐烂"的应对机制？CHANGELOG 脚本、计划文件状态机是否到位？ |
 
+**额外扣分项**：如果 README、旧文档或模板默认文案与 CI / hook / manifest scripts 冲突，而产物没有采用可执行来源，"信息密度"和"硬约束可执行性"都应扣分；如果已有 instruction 文件被未读覆盖，"导航清晰度"和"维护可持续性"都应扣分。
+
 ### 评分等级
 
 | 分数 | 含义 |
@@ -148,6 +159,8 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 | 硬约束无工具支撑 | 执行步骤第 6 步 | 强化 pre-commit hook 的必做要求，增加 CI 矩阵 |
 | 渐进披露不合理 | SKILL.md 设计哲学第 2 条 | 调整 AGENTS.md 行数上限建议，或增加 STRUCTURE.md 的强制要求 |
 | 维护机制缺失 | 执行步骤第 5 步 | 强化"出生档案"和 CHANGELOG 脚本的必做要求 |
+| 事实源裁决错误 | SKILL.md 第 0 / 第 3 步 | 强化可执行事实源优先规则，补充 README 写旧命令的夹具 |
+| 旧指令文件丢失 | SKILL.md 第 1 步 | 扩展已有 instruction 文件整合范围，要求读取 Cursor / Copilot / OpenCode 指令 |
 
 ---
 

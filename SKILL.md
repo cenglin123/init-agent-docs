@@ -233,9 +233,20 @@ init-agent-docs/
 
 ### 第 0 步：先澄清意图，再选择工作模式
 
-不要把这一阶段当成"机械回答 7 个问题"。更好的做法是采用 **intent-first / deep-interview** 思路：通过读代码、读 README、查看现有文档、必要时向用户追问，逐步澄清项目画像；**当你已经掌握足够信息，能够可靠地填写模板时，才进入第 1 步**。
+不要把这一阶段当成"机械回答 7 个问题"。更好的做法是采用 **intent-first / deep-interview** 思路：先读仓库里最高价值的事实源，必要时再向用户追问，逐步澄清项目画像；**当你已经掌握足够信息，能够可靠地填写模板时，才进入第 1 步**。
 
-至少澄清以下维度：
+**先调查高价值来源（按优先级）**：
+
+1. `README*`、根目录 manifest、workspace 配置、lockfile（如 `package.json` / `pnpm-workspace.yaml` / `pyproject.toml` / `go.mod` / `Cargo.toml` / `requirements*.txt`）
+2. 构建、测试、lint、format、typecheck、codegen 配置，以及 task runner / pre-commit 配置
+3. CI 工作流（如 `.github/workflows/*`），因为它通常暴露真实验证命令和命令顺序
+4. 现有 instruction 文件：`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`
+5. repo-local OpenCode 配置：`opencode.json` / `opencode.jsonc` / `.opencode/opencode.json`
+6. 如果架构仍不清楚，再读少量能说明系统如何串起来的入口文件、路由文件、workspace package 边界文件；不要随机读叶子文件
+
+**裁决规则**：可执行事实源优先于 prose 文档。命令、工具链、测试入口、lint/format/typecheck/codegen 顺序，以 CI / hook / task runner / manifest scripts / lockfile / config 为准；README、旧文档和模板默认文案只能作为线索。仓库已经能回答的问题不要问用户；只在仓库无法回答关键决策时提问，但初始化规模、是否启用 hook、是否覆盖旧 agent 指令文件仍必须由用户确认。
+
+在上述调查基础上，至少澄清以下维度：
 
 1. **项目做什么？**（一句话概括，这决定了 overview.md 的开头）
 2. **技术栈是什么？**（语言、框架、前后端分离？这影响代码风格约定和 pre-commit 片段选择）
@@ -309,7 +320,7 @@ init-agent-docs/
    Copy-Item assets\scripts\agent_links.py scripts\
    ```
 
-5. **如目标项目已有 `CLAUDE.md` 或 `GEMINI.md`**（常见于已在使用 Claude Code 或 Gemini CLI 的项目），**先读取它们的内容**，提取其中 AGENTS.md 尚未覆盖的硬约束、项目概述或平台信息，整合到新生成的 AGENTS.md 中，然后再执行 repair。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。
+5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中，然后再执行 repair。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
 
 6. 写入目标项目的 `AGENTS.md` 后，运行同步脚本，将 `AGENTS.md` 的内容复制到 `CLAUDE.md` 和 `GEMINI.md`，并验证三文件一致：
 
@@ -393,7 +404,7 @@ touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
 
 ---
 
-**不要留空文件**——至少写一个标题 + 一句话说明文件的定位，否则 Agent 不知道该往里写什么。模板本身已经满足这个要求，只要别把模板里的指导注释全删光就行。
+**不要留空文件**——至少写一个标题 + 一句话说明文件的定位，否则 Agent 不知道该往里写什么。模板指导注释只供生成前理解，不是最终内容；最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符。
 
 ### 第 3 步（条件性）：迁移已有文档
 
@@ -414,7 +425,9 @@ touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
    | 项目简介、面向谁、谁维护 | 留在 `README.md`（面向人类读者） |
    | 行为规则、协作约定 | `AGENTS.md` 的硬约束 / 默认偏好 |
 
-3. **去重**：如果一条信息在多份旧文档里都出现，只保留一份；如果和新模板里已经写好的内容冲突（比如模板的"文档维护原则"），以新结构为准。
+3. **去重与裁决**：如果一条信息在多份旧文档里都出现，只保留一份。区分两类冲突：
+   - **信息归口冲突**：同一类信息应该放在哪里，以新文档结构为准（例如设计决策归 `docs/overview.md`，CHANGELOG 只记摘要）。
+   - **事实内容冲突**：命令、入口、工具链顺序、测试方式、生成物路径等，以可执行来源为准，优先级为 CI / hook / task runner / manifest scripts / lockfile / config > README / prose docs > 模板默认文案。
 4. **标注废弃**：旧文档如果整体被拆分迁移，在顶部加一条"**⚠️ 本文件的内容已迁移至 docs/ 及 AGENTS.md。保留此文件仅供历史追溯，后续更新请前往对应新位置。**"——不要立刻删除，让 git blame / PR 评论等历史引用还能找到。
 5. **记录到 CHANGELOG**：用 `python scripts/changelog.py add ...` 把本次迁移作为一次独立变更记录。
 
@@ -555,18 +568,19 @@ python scripts/changelog.py add \
 3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
 4. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
 5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
-6. `AGENTS.md` 行数不超过约 200 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+6. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
+7. `AGENTS.md` 行数不超过约 200 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
 
 **中型 / 大型项目额外项：**
 
-7. `STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
-8. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
-9. 出生档案 `docs/plans/completed/initialization.md` 已写入
+8. `STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
+9. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
+10. 出生档案 `docs/plans/completed/initialization.md` 已写入
 
 **小型项目额外项：**
 
-7. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
-8. 没有创建 `docs/plans/`、`STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
+8. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
+9. 没有创建 `docs/plans/`、`STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
 
 ### 第 8 步：reviewer-perspective 自检（必做）
 
