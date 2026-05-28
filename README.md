@@ -11,7 +11,8 @@
 - `CHANGELOG.md`：倒序变更记录
 - `scripts/changelog.py`：CHANGELOG 标题树、局部读取和追加
 - `scripts/agent_links.py`：`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步检查与修复
-- `docs/{overview,api,deployment,pitfalls,CURRENT}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md`）
+- `scripts/audit.py`：文档一致性机械检查（死链 / 结构完整性 / 依赖漂移）
+- `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.githooks/`：可选 lint 质量门控，调用 `scripts/agent_links.py` 做同步兜底
 
@@ -25,10 +26,11 @@ init-agent-docs/
 ├── README.md                             # 你现在读的这份文件
 └── assets/
     ├── templates/
-    │   └── zh/                           # 中文模板集（9 个 .tpl）
+    │   └── zh/                           # 中文模板集（10 个 .tpl）
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
-    │   └── agent_links.py                # 同步检查与修复
+    │   ├── agent_links.py                # 同步检查与修复
+    │   └── audit.py                      # 文档一致性机械检查
     ├── hooks/
     │   ├── pre-commit-python.sh          # ruff / flake8
     │   ├── pre-commit-node.sh            # eslint / prettier

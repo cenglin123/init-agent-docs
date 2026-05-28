@@ -112,7 +112,9 @@ Agent 没有长期记忆（Claude Code 的 memory 系统除外，但那更适合
 
 因此需要**完工检查清单**来机械化地保证文档同步。这不是建议，是硬约束——每次任务结束都必须走完清单，就像飞行员的起飞检查清单一样。
 
-但完工检查清单解决的是"本次任务改了代码、是否同步了文档"——它防的是**即时遗忘**。另一种更隐蔽的腐化是**渐进漂移**：六个月后文档声称"使用 SQLite"，实际已被悄然迁移到 PostgreSQL，而中间没有任何一次任务显式触发过"改数据库"这一步。这种漂移无法靠完工清单发现，因为它不是某一次任务的遗漏，而是无数次微调的累积。这不是本 SKILL 的职责范围（本 SKILL 只负责初始化），但初始化的项目应在维护计划中预留文档审计节点，避免单向推送的死循环。
+但完工检查清单解决的是"本次任务改了代码、是否同步了文档"——它防的是**即时遗忘**。另一种更隐蔽的腐化是**渐进漂移**：六个月后文档声称"使用 SQLite"，实际已被悄然迁移到 PostgreSQL，而中间没有任何一次任务显式触发过"改数据库"这一步。这种漂移无法靠完工清单发现，因为它不是某一次任务的遗漏，而是无数次微调的累积。
+
+为此本 SKILL 内置了两层防线：**`scripts/audit.py`** 做机械检查（死链、STRUCTURE 索引完整性、依赖声明漂移、出生档案存在性、AGENTS.md 行数、同步一致性），**`docs/audit-checklist.md`** 做 Agent 手动裁决（设计决策仍成立？环境仍准确？未记录的变更？）。审计机制详见执行步骤第 9 步。
 
 ### 7. CHANGELOG 是高频写入的文件，必须脚本化操作
 
@@ -185,16 +187,18 @@ AGENTS.md、CLAUDE.md、GEMINI.md 必须保持内容一致（因为不同 Agent 
 ├── CHANGELOG.md           # 变更记录（倒序，最新在前）
 ├── scripts/
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
-│   └── agent_links.py     # AGENTS/CLAUDE/GEMINI 同步检查与修复
+│   ├── agent_links.py     # AGENTS/CLAUDE/GEMINI 同步检查与修复
+│   └── audit.py            # 文档一致性机械检查（死链/漂移/结构）
 ├── .githooks/             # （可选）质量门控
 │   └── pre-commit
-└── docs/
-    ├── CURRENT.md         # 当前任务状态（单 owner handoff / 全局入口）
-    ├── overview.md        # 系统主线与设计决策
-    ├── api.md             # API 约定（如有 API 的项目）
-    ├── deployment.md      # 部署与环境配置
-    ├── pitfalls.md        # 已知环境陷阱
-    └── plans/
+├── docs/
+│   ├── CURRENT.md         # 当前任务状态（单 owner handoff / 全局入口）
+│   ├── overview.md        # 系统主线与设计决策
+│   ├── api.md             # API 约定（如有 API 的项目）
+│   ├── deployment.md      # 部署与环境配置
+│   ├── pitfalls.md        # 已知环境陷阱
+│   ├── audit-checklist.md # 文档一致性审计清单（Agent 手动裁决用）
+│   └── plans/
         ├── active/        # 进行中的执行计划
         │   └── .gitkeep
         └── completed/     # 已完成的执行计划
@@ -212,10 +216,11 @@ init-agent-docs/
     ├── templates/
     │   └── zh/                       # 中文模板集
     │       （AGENTS, STRUCTURE, CURRENT, overview, api, deployment,
-    │        pitfalls, plan, CHANGELOG — 共 9 个 .tpl 文件）
+    │        pitfalls, plan, CHANGELOG, audit-checklist — 共 10 个 .tpl 文件）
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
-    │   └── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
+    │   ├── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
+    │   └── audit.py                  # 文档一致性机械检查（死链/漂移/结构完整性）
     ├── references/
     │   ├── workflow-patterns.md      # 执行计划工作流与跨上下文协作详细说明
     │   └── eval-baseline.md          # Skill 质量评估框架与测试用例
@@ -389,6 +394,7 @@ python scripts/agent_links.py check  --mode=hardlink
 | `docs/api.md`（可选） | `api.md.tpl` |
 | `docs/deployment.md` | `deployment.md.tpl` |
 | `docs/pitfalls.md`（可选） | `pitfalls.md.tpl` |
+| `docs/audit-checklist.md` | `audit-checklist.md.tpl` |
 | `CHANGELOG.md` | `CHANGELOG.md.tpl` |
 
 然后建立计划目录：
@@ -570,19 +576,22 @@ python scripts/changelog.py add \
 3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
 4. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
 5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
-6. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
-7. `AGENTS.md` 行数不超过约 200 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+6. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
+7. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
+8. `AGENTS.md` 行数不超过约 200 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
 
 **中型 / 大型项目额外项：**
 
 8. `STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
-9. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
-10. 出生档案 `docs/plans/completed/initialization.md` 已写入
+9. `docs/audit-checklist.md` 已创建，且 `STRUCTURE.md` 索引表中包含其链接
+10. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
+11. 出生档案 `docs/plans/completed/initialization.md` 已写入
 
 **小型项目额外项：**
 
 8. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
-9. 没有创建 `docs/plans/`、`STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
+9. `docs/audit-checklist.md` 已创建，且 AGENTS.md 信息导航中包含其链接
+10. 没有创建 `docs/plans/`、`STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
 
 ### 第 8 步：reviewer-perspective 自检（必做）
 
@@ -605,6 +614,52 @@ python scripts/changelog.py add \
 这个测试的成本很低（十几分钟），但收益极高：它验证的恰恰是 AGENTS.md 作为"入口地图"最核心的功能。**未通过本步前不要向用户报告"初始化已完成"。**
 
 初始化完成后，把第 0 步回答 + 自检结果追加到出生档案的"完成记录"里：中型 / 大型项目写入 `docs/plans/completed/initialization.md`，小型项目写入 `docs/initialization.md`。
+
+---
+
+### 第 9 步：初始化审计能力
+
+这一步补上设计哲学第 6 条揭示的"渐进漂移"防线。审计分两层：`scripts/audit.py` 做机械检查，`docs/audit-checklist.md` 做 Agent 手动裁决。
+
+1. 复制审计脚本到目标项目：
+
+   ```bash
+   cp assets/scripts/audit.py scripts/
+   ```
+
+   PowerShell 等价：
+
+   ```powershell
+   Copy-Item assets\scripts\audit.py scripts\
+   ```
+
+2. 基于模板创建审计清单——**所有规模都要创建**：
+
+   - 读 `assets/templates/zh/audit-checklist.md.tpl`
+   - 写入 `docs/audit-checklist.md`
+   - 模板已可直接使用，无需裁剪
+
+3. **更新 STRUCTURE.md 索引表**：在表格中新增一行：
+
+   ```markdown
+   | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
+   ```
+
+4. **更新 AGENTS.md 信息导航**：在 `docs/` 指针段末尾追加：
+
+   ```markdown
+   - 文档一致性审计：[docs/audit-checklist.md](docs/audit-checklist.md)
+   ```
+
+5. 本地试跑确认脚本能执行：
+
+   ```bash
+   python scripts/audit.py check
+   ```
+
+   初始化完成时通常是干净的（无死链、无漂移、行数正常），脚本应退出 0。如果有 `[MISS]` 出生档案项——那是正常的，出生档案要到第 5 步才写入；但其他项不应该出现。
+
+   **小型项目注意**：因为不建 `STRUCTURE.md`，`audit.py structure` 会输出 0 条结果（相当于跳过），不会报错。不需要为小型项目裁剪 `audit.py` 本身。
 
 ---
 

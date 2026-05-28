@@ -8,5 +8,6 @@
 | API 接口 | [docs/api.md](docs/api.md) |
 | 部署与配置 | [docs/deployment.md](docs/deployment.md) |
 | 已知环境陷阱 | [docs/pitfalls.md](docs/pitfalls.md) |
+| 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
 | 当前任务状态 | [docs/CURRENT.md](docs/CURRENT.md) |
 | 变更记录 | [CHANGELOG.md](CHANGELOG.md) |

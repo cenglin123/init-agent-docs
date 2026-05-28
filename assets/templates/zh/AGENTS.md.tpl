@@ -31,6 +31,7 @@
 - API 约定：[docs/api.md](docs/api.md)
 - 部署与同步：[docs/deployment.md](docs/deployment.md)
 - 环境陷阱：[docs/pitfalls.md](docs/pitfalls.md)
+- 文档一致性审计：[docs/audit-checklist.md](docs/audit-checklist.md)
 - 复杂任务计划：[docs/plans/](docs/plans/)
 - 当前任务状态（单 owner 摘要 / 全局入口）：[docs/CURRENT.md](docs/CURRENT.md)
 - 变更记录：[CHANGELOG.md](CHANGELOG.md)
@@ -111,6 +112,10 @@
 11. 写入 [CHANGELOG.md](CHANGELOG.md) 前**不要读全文**；使用 `python scripts/changelog.py titles --limit 5` 查看标题树，`python scripts/changelog.py show --date YYYY-MM-DD` 或 `--match 关键词` 读取局部内容，`python scripts/changelog.py add --title "..." --body "..."` 追加条目。
 12. 当前任务状态写入 [docs/CURRENT.md](docs/CURRENT.md)，不要写进 CHANGELOG。
 13. 只写"改了什么、为什么改、有什么迁移影响"，不贴代码，不重复 `docs/` 中已经存在的设计说明。
+
+**定期审计**
+
+14. 每 ~20 次任务或每月，运行 `python scripts/audit.py check` 做机械检查。如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
 
 ## 完工检查清单
 
