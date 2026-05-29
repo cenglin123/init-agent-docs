@@ -23,6 +23,17 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 
 MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+FENCED_BLOCK_RE = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+INLINE_CODE_RE = re.compile(r"`[^`]+`")
+HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
+
+
+def _strip_noise(text: str) -> str:
+    """Remove fenced code blocks, inline code, and HTML comments."""
+    text = FENCED_BLOCK_RE.sub("", text)
+    text = INLINE_CODE_RE.sub("", text)
+    text = HTML_COMMENT_RE.sub("", text)
+    return text
 
 DOC_FILES = [
     "AGENTS.md",
@@ -47,6 +58,11 @@ MANIFEST_GLOBS = [
     "build.gradle.kts",
 ]
 
+# DRIFT_PATTERNS is a fixed heuristic, not a complete taxonomy. This is exactly the
+# kind of 硬编码先验 that philosophy #8 warns against — but as a pragmatic starting
+# seed it catches common drift without the complexity of a dynamic resolver. Projects
+# should extend or replace these patterns for their specific stack. The --json output
+# leaves interpretation to the agent, not the dictionary.
 DRIFT_PATTERNS: dict[str, list[str]] = {
     "SQLite":            ["sqlite", "aiosqlite", "better-sqlite3", "sql.js"],
     "PostgreSQL":        ["postgres", "postgresql", "psycopg2", "psycopg", "pg", "pg-promise"],
@@ -93,6 +109,17 @@ def _exists(rel: str) -> bool:
     return (ROOT / rel).is_file()
 
 
+def _resolve(target: str, source_dir: Path) -> Path:
+    """Resolve a markdown link target relative to the source file's directory.
+
+    Per CommonMark spec, all paths are relative to the containing file except
+    those starting with '/'. Absolute paths (/) are resolved against ROOT.
+    """
+    if target.startswith("/"):
+        return (ROOT / target.lstrip("/")).resolve()
+    return (source_dir / target).resolve()
+
+
 def _find_manifests() -> list[Path]:
     found: list[Path] = []
     for g in MANIFEST_GLOBS:
@@ -105,9 +132,15 @@ def _find_manifests() -> list[Path]:
 # ---------------------------------------------------------------------------
 
 def _extract_file_links(text: str) -> list[tuple[str, str, int]]:
-    """Return (target_path, display_text, line_number) for every local file link."""
+    """Return (target_path, display_text, line_number) for every local file link.
+
+    Strips code blocks, inline code, and HTML comments before extraction to
+    avoid false positives from example links and commented-out references.
+    Line numbers are preserved relative to the original text.
+    """
+    clean = _strip_noise(text)
     links: list[tuple[str, str, int]] = []
-    for lineno, line in enumerate(text.splitlines(), 1):
+    for lineno, line in enumerate(clean.splitlines(), 1):
         for m in MARKDOWN_LINK_RE.finditer(line):
             target = m.group(2).strip()
             if target.startswith(("http://", "https://", "#")):
@@ -126,23 +159,17 @@ def _check_dead_links() -> list[dict[str, Any]]:
         path = ROOT / doc_rel
         if not path.is_file():
             continue
+        source_dir = path.parent
         for target, _label, lineno in _extract_file_links(_read(path)):
-            if not _exists(target):
-                results.append({
-                    "kind": "dead_link",
-                    "status": "dead",
-                    "source": doc_rel,
-                    "line": lineno,
-                    "target": target,
-                })
-            else:
-                results.append({
-                    "kind": "dead_link",
-                    "status": "ok",
-                    "source": doc_rel,
-                    "line": lineno,
-                    "target": target,
-                })
+            resolved = _resolve(target, source_dir)
+            exists = resolved.is_file()
+            results.append({
+                "kind": "dead_link",
+                "status": "ok" if exists else "dead",
+                "source": doc_rel,
+                "line": lineno,
+                "target": target,
+            })
     return results
 
 
@@ -376,9 +403,11 @@ _STATUS_GLYPHS: dict[str, str] = {
 }
 
 
-def _format_text(results: list[dict[str, Any]]) -> str:
+def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
     lines_out: list[str] = []
     for r in results:
+        if not verbose and r["status"] in ("ok", "found"):
+            continue
         glyph = _STATUS_GLYPHS.get(r["status"], r["status"].upper())
         kind = r["kind"]
 
@@ -432,7 +461,7 @@ def _cmd_check(args: argparse.Namespace) -> None:
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        print(_format_text(results))
+        print(_format_text(results, verbose=args.verbose))
 
     has_issues = any(r["status"] not in ("ok", "found", "skip") for r in results)
     if has_issues:
@@ -444,7 +473,7 @@ def _cmd_dead_links(args: argparse.Namespace) -> None:
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        print(_format_text(results))
+        print(_format_text(results, verbose=args.verbose))
     if any(r["status"] != "ok" for r in results):
         raise SystemExit(1)
 
@@ -454,7 +483,7 @@ def _cmd_structure(args: argparse.Namespace) -> None:
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        print(_format_text(results))
+        print(_format_text(results, verbose=args.verbose))
     if any(r["status"] != "ok" for r in results):
         raise SystemExit(1)
 
@@ -464,7 +493,7 @@ def _cmd_drift(args: argparse.Namespace) -> None:
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
-        print(_format_text(results))
+        print(_format_text(results, verbose=args.verbose))
     if any(r["status"] not in ("ok",) for r in results):
         raise SystemExit(1)
 
@@ -481,18 +510,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_check = sub.add_parser("check", help="Run all checks")
     p_check.add_argument("--json", action="store_true", help="Output JSON")
+    p_check.add_argument("--verbose", action="store_true", help="Show OK entries")
     p_check.set_defaults(func=_cmd_check)
 
     p_dead = sub.add_parser("dead-links", help="Dead link check only")
     p_dead.add_argument("--json", action="store_true", help="Output JSON")
+    p_dead.add_argument("--verbose", action="store_true", help="Show OK entries")
     p_dead.set_defaults(func=_cmd_dead_links)
 
     p_struct = sub.add_parser("structure", help="STRUCTURE index check only")
     p_struct.add_argument("--json", action="store_true", help="Output JSON")
+    p_struct.add_argument("--verbose", action="store_true", help="Show OK entries")
     p_struct.set_defaults(func=_cmd_structure)
 
     p_drift = sub.add_parser("drift", help="Dependency drift check only")
     p_drift.add_argument("--json", action="store_true", help="Output JSON")
+    p_drift.add_argument("--verbose", action="store_true", help="Show OK entries")
     p_drift.set_defaults(func=_cmd_drift)
 
     return parser

@@ -5,7 +5,9 @@
 
 ## 1. 机械检查结果复核
 
-运行 `python scripts/audit.py check`，对每个非 OK 项逐条复核：
+运行 `python scripts/audit.py check`，对每个非 OK 项逐条复核。
+
+> **首次审计注意**：`audit.py` 内置的 DRIFT_PATTERNS 只覆盖 24 种常见技术栈。如果你的项目使用了不在字典中的技术（如 Cassandra、DynamoDB、NATS、SQS），应编辑 `scripts/audit.py` 的 `DRIFT_PATTERNS` 字典，追加项目实际使用的技术关键词。这是设计哲学第 8 条的预期行为——通用字典是起点，不是终点。
 
 - [ ] 死链：是文件被移动了？还是 AGENTS.md 指针过时？
 - [ ] STRUCTURE 索引偏差：docs/ 下多了/少了文件？更新索引或清理孤儿文件。
@@ -16,10 +18,11 @@
 
 ## 2. 关键设计决策仍成立？
 
-重新读取 `docs/overview.md` 中"关键设计决策"段，逐条对照当前代码：
+重新读取 `docs/overview.md` 中"关键设计决策"段，逐条验证：
 
-- [ ] 决策仍成立？如已变化，更新文档或标注"已过时（YYYY-MM-DD）"。
-- [ ] 是否有新的重要决策未记录？
+- [ ] 对每条决策中提到的技术栈，检查 manifest（`package.json` / `pyproject.toml` 等）中是否仍有对应依赖。若文档说"使用 SQLite"，但 manifest 中已无 sqlite 相关依赖 → 决策已过时，标注"已过时（YYYY-MM-DD）"并记录替代方案。
+- [ ] 对每条决策中提到的约束条件（如"单机部署"、"数据量 < 10GB"），用 `git log --oneline --since="6 months ago"` 检查是否有相关的基础设施变更。若有重构/迁移类 commit → 约束可能已失效，需更新。
+- [ ] 是否有新的重要决策未记录？浏览最近 CHANGELOG 中涉及架构/基础设施的变更，确认已反映到 `docs/overview.md`。
 
 ## 3. 环境与部署仍准确？
 

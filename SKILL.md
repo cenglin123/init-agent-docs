@@ -317,6 +317,7 @@ init-agent-docs/
    mkdir -p scripts
    cp assets/scripts/changelog.py scripts/
    cp assets/scripts/agent_links.py scripts/
+   cp assets/scripts/audit.py scripts/
    ```
 
    Windows / PowerShell 等价操作：
@@ -325,6 +326,7 @@ init-agent-docs/
    New-Item -ItemType Directory -Force scripts
    Copy-Item assets\scripts\changelog.py scripts\
    Copy-Item assets\scripts\agent_links.py scripts\
+   Copy-Item assets\scripts\audit.py scripts\
    ```
 
 5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中，然后再执行 repair。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
@@ -619,39 +621,27 @@ python scripts/changelog.py add \
 
 ### 第 9 步：初始化审计能力
 
-这一步补上设计哲学第 6 条揭示的"渐进漂移"防线。审计分两层：`scripts/audit.py` 做机械检查，`docs/audit-checklist.md` 做 Agent 手动裁决。
+这一步补上设计哲学第 6 条揭示的"渐进漂移"防线。审计分两层：`scripts/audit.py`（已在第 1 步复制）做机械检查，`docs/audit-checklist.md` 做 Agent 手动裁决。
 
-1. 复制审计脚本到目标项目：
-
-   ```bash
-   cp assets/scripts/audit.py scripts/
-   ```
-
-   PowerShell 等价：
-
-   ```powershell
-   Copy-Item assets\scripts\audit.py scripts\
-   ```
-
-2. 基于模板创建审计清单——**所有规模都要创建**：
+1. 基于模板创建审计清单——**所有规模都要创建**：
 
    - 读 `assets/templates/zh/audit-checklist.md.tpl`
    - 写入 `docs/audit-checklist.md`
    - 模板已可直接使用，无需裁剪
 
-3. **更新 STRUCTURE.md 索引表**：在表格中新增一行：
+2. **更新 STRUCTURE.md 索引表**：在表格中新增一行：
 
    ```markdown
    | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
    ```
 
-4. **更新 AGENTS.md 信息导航**：在 `docs/` 指针段末尾追加：
+3. **更新 AGENTS.md 信息导航**：在 `docs/` 指针段末尾追加：
 
    ```markdown
    - 文档一致性审计：[docs/audit-checklist.md](docs/audit-checklist.md)
    ```
 
-5. 本地试跑确认脚本能执行：
+4. 本地试跑确认脚本能执行：
 
    ```bash
    python scripts/audit.py check
