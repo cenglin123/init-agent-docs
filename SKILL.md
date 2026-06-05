@@ -120,7 +120,7 @@ Agent 没有长期记忆（Claude Code 的 memory 系统除外，但那更适合
 
 CHANGELOG 会随项目推进不断增长，可能达到几百甚至上千行。如果 Agent 每次写日志前都读取全文，会浪费大量上下文空间。更危险的是，Agent 可能在错误的位置插入条目，破坏倒序结构。
 
-因此 CHANGELOG 有一套专门的脚本操作规则（详见 AGENTS.md 模板中的"CHANGELOG 规则"部分），核心是：**不读全文，通过 `scripts/changelog.py` 查看标题树、读取局部内容或追加条目。** 这把高频重复动作从上下文里挪到工具里，同时保留 Agent 对内容取舍的判断空间。当前任务状态不进入 CHANGELOG，由 `docs/CURRENT.md` 承担。
+因此 CHANGELOG 有一套专门的脚本操作规则（详见 AGENTS.md 模板中的"CHANGELOG 规则"部分），核心是：**不读全文，通过 `scripts/changelog.py` 查看标题树、查看近期条目、读取局部内容或追加条目。** 这把高频重复动作从上下文里挪到工具里，同时保留 Agent 对内容取舍的判断空间。当前任务状态不进入 CHANGELOG，由 `docs/CURRENT.md` 承担。
 
 ### 8. Occam 与 Bitter Lesson 是防止治理系统自增殖的护栏
 
@@ -138,7 +138,7 @@ CHANGELOG 会随项目推进不断增长，可能达到几百甚至上千行。�
 | 应保留的结构性先验 | 应避免的硬编码先验 |
 |---|---|
 | `agent_links.py` + copy 同步：承载"三文件同步"这个可验证、重复、会消耗上下文的动作 | 任务类型枚举表（"如果是 bug 修复就读 X，如果是新功能就读 Y"） |
-| `changelog.py titles/show/add`：把"读全文"这个高频耗 token 动作下沉到工具 | CHANGELOG 条目的关键词分类规则（"必须以 fix:/feat: 开头并归到 X 类"） |
+| `changelog.py titles/show/add/recent`：把"读全文"这个高频耗 token 动作下沉到工具 | CHANGELOG 条目的关键词分类规则（"必须以 fix:/feat: 开头并归到 X 类"） |
 | 计划文件 + 状态机（queue/in_progress/review/completed）：承载跨上下文交接 | 给每种业务领域预先写好的"专属计划模板" |
 | 完工检查清单：把易遗忘的硬约束机械化 | 用关键词匹配判断"任务是否需要复查" |
 
@@ -703,7 +703,7 @@ python scripts/changelog.py add \
 
 9. **信息散落多处**：同一个事实在三个文件里各写一遍，改了一处忘了其他。解法："不重复"原则，同一信息只在最合适的位置出现一次。
 
-10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add` 做标题树查看、局部读取和追加，不读全文。
+10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add/recent` 做标题树查看、局部读取、追加和近期浏览，不读全文。
 
 11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
 

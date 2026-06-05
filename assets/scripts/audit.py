@@ -35,12 +35,24 @@ def _strip_noise(text: str) -> str:
     text = HTML_COMMENT_RE.sub("", text)
     return text
 
-DOC_FILES = [
+# Root-level instruction files always checked.
+_ROOT_DOC_FILES = [
     "AGENTS.md",
     "STRUCTURE.md",
-    "docs/overview.md",
-    "docs/deployment.md",
 ]
+
+# Dynamic discovery: all .md files under docs/ (excluding plans/ and __pycache__).
+def _discover_doc_files() -> list[str]:
+    """Discover all markdown files to check for dead links."""
+    files = list(_ROOT_DOC_FILES)
+    docs_dir = ROOT / "docs"
+    if docs_dir.is_dir():
+        for f in sorted(docs_dir.rglob("*.md")):
+            rel = str(f.relative_to(ROOT)).replace("\\", "/")
+            if rel.startswith("docs/plans/"):
+                continue
+            files.append(rel)
+    return files
 
 MANIFEST_GLOBS = [
     "package.json",
@@ -155,7 +167,7 @@ def _extract_file_links(text: str) -> list[tuple[str, str, int]]:
 
 def _check_dead_links() -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    for doc_rel in DOC_FILES:
+    for doc_rel in _discover_doc_files():
         path = ROOT / doc_rel
         if not path.is_file():
             continue
