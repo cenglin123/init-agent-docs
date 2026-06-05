@@ -9,7 +9,7 @@
 - `AGENTS.md`（同步到 `CLAUDE.md` / `GEMINI.md`）：行为规则 + 信息导航
 - `STRUCTURE.md`：架构文档总索引
 - `CHANGELOG.md`：倒序变更记录
-- `scripts/changelog.py`：CHANGELOG 标题树、局部读取和追加
+- `scripts/changelog.py`：CHANGELOG 标题树、近期条目、局部读取和追加
 - `scripts/agent_links.py`：`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步检查与修复
 - `scripts/audit.py`：文档一致性机械检查（死链 / 结构完整性 / 依赖漂移）
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
