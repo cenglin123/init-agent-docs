@@ -19,3 +19,4 @@ Thumbs.db
 .converge/
 .github/workflows/
 .workflow/
+/plans/
