@@ -42,7 +42,7 @@ AGENTS.md（及其同步副本 CLAUDE.md、GEMINI.md）是 Agent 上下文中**�
 
 **为什么需要三个文件名？** 不同 Agent 框架加载不同入口：Claude Code 加载 CLAUDE.md，Codex 加载 AGENTS.md，Gemini CLI 加载 GEMINI.md。通过脚本同步（copy 模式默认），让三个文件始终承载同一份内容，编辑 AGENTS.md 后运行 repair 即可同步到其他两个，避免内容漂移。
 
-**建议控制在 200 行以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。完工检查清单和 CHANGELOG 规则留在 AGENTS.md 里是有意为之——它们是最高频被违反的硬约束，下沉到按需读取的 docs/ 反而会被遗漏。
+**建议控制在 200 行 / 400 词以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。完工检查清单和 CHANGELOG 规则留在 AGENTS.md 里是有意为之——它们是最高频被违反的硬约束，下沉到按需读取的 docs/ 反而会被遗漏。
 
 ### 2. 渐进式披露（Progressive Disclosure）
 
@@ -51,7 +51,7 @@ Agent 从一个小而稳定的入口出发，按需深入查阅。这和给新�
 信息分层结构：
 
 ```
-AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~200 行）
+AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~200 行 / 400 词）
 STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
 docs/*.md          → 各专题深度文档（Agent 按需读取特定文件）
 docs/plans/        → 执行计划（Agent 接到复杂任务时读取）
@@ -310,6 +310,9 @@ init-agent-docs/
    - "信息导航"一节：没 API 删 api.md 行，没部署删 deployment.md 行
    - "硬约束"一节：填入项目的构建产物路径、特殊约束
    - "测试要求"一节：按有无测试套件填
+   - "安全与配置"一节：项目涉及密钥/认证/敏感数据时保留并填写，否则删除整节
+   - "提交规范"一节：按项目实际 commit 风格填写，PR 要求按需裁剪
+   - 裁剪后在"信息导航"下方填写"省略声明"，声明哪些信息被有意省略（如"本文件未包含 API 约定——项目无 API 接口"）
    - 添加代码风格约定（语言 / 缩进 / 命名）
 4. 先把脚本资产复制到目标项目：
 
@@ -580,7 +583,7 @@ python scripts/changelog.py add \
 5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
 6. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
 7. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
-8. `AGENTS.md` 行数不超过约 200 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+8. `AGENTS.md` 行数不超过约 200 行、词数不超过约 400 词（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
 
 **中型 / 大型项目额外项：**
 
@@ -679,7 +682,7 @@ python scripts/changelog.py add \
 | 中型单体应用 | 全部 | 根据需要省略 api.md 或 pitfalls.md |
 | 大型多模块项目 | 全部 + 按模块拆分 docs/ | 无 |
 
-对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 200 行）。但一旦项目开始增长，就应该及时拆分。
+对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 200 行 / 400 词）。但一旦项目开始增长，就应该及时拆分。
 
 ---
 

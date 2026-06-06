@@ -357,10 +357,17 @@ def _check_birth_record() -> list[dict[str, Any]]:
 def _check_line_budget() -> list[dict[str, Any]]:
     p = ROOT / "AGENTS.md"
     if not p.is_file():
-        return [{"kind": "line_budget", "status": "missing", "lines": 0}]
-    count = len(_lines(p))
-    status = "ok" if count <= 200 else "warn"
-    return [{"kind": "line_budget", "status": status, "lines": count}]
+        return [{"kind": "line_budget", "status": "missing", "lines": 0, "words": 0}]
+    text = _read(p)
+    line_count = len(text.splitlines())
+    word_count = len(text.split())
+    lines_ok = line_count <= 200
+    words_ok = word_count <= 400
+    if lines_ok and words_ok:
+        status = "ok"
+    elif not lines_ok or not words_ok:
+        status = "warn"
+    return [{"kind": "line_budget", "status": status, "lines": line_count, "words": word_count}]
 
 
 def _check_sync() -> list[dict[str, Any]]:
@@ -448,11 +455,11 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append("[MISS  ] AGENTS.md not found")
             elif r["status"] == "warn":
                 lines_out.append(
-                    f"[WARN   ] AGENTS.md: {r['lines']} lines (limit 200)"
+                    f"[WARN   ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 200/400)"
                 )
             else:
                 lines_out.append(
-                    f"[OK    ] AGENTS.md: {r['lines']} lines (limit 200)"
+                    f"[OK    ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 200/400)"
                 )
         elif kind == "sync":
             if r["status"] == "broken":
