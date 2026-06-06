@@ -6,7 +6,8 @@
 
 为一个代码仓库初始化"面向 AI agent 协作"的文档体系：
 
-- `AGENTS.md`（同步到 `CLAUDE.md` / `GEMINI.md`）：行为规则 + 信息导航
+- `AGENTS.md`（同步到 `CLAUDE.md` / `GEMINI.md`）：行为规则 + 信息导航（Agent 面向）
+- `README.md`：项目概述、快速开始、贡献指南（人类面向；从模板生成或迁移保留）
 - `STRUCTURE.md`：架构文档总索引
 - `CHANGELOG.md`：倒序变更记录
 - `scripts/changelog.py`：CHANGELOG 标题树、近期条目、局部读取和追加
@@ -26,7 +27,7 @@ init-agent-docs/
 ├── README.md                             # 你现在读的这份文件
 └── assets/
     ├── templates/
-    │   └── zh/                           # 中文模板集（10 个 .tpl）
+    │   └── zh/                           # 中文模板集（11 个 .tpl）
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
     │   ├── agent_links.py                # 同步检查与修复

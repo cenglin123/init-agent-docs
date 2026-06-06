@@ -180,9 +180,10 @@ AGENTS.md、CLAUDE.md、GEMINI.md 必须保持内容一致（因为不同 Agent 
 
 ```
 目标项目/
-├── AGENTS.md              # 主文件（行为规则 + 导航）
+├── AGENTS.md              # 主文件（行为规则 + 导航，Agent 面向）
 ├── CLAUDE.md              # → AGENTS.md 的同步副本
 ├── GEMINI.md              # → AGENTS.md 的同步副本
+├── README.md              # 人类面向入口（项目概述、快速开始、贡献指南）
 ├── STRUCTURE.md           # 文档总索引（一张导航表）
 ├── CHANGELOG.md           # 变更记录（倒序，最新在前）
 ├── scripts/
@@ -216,7 +217,7 @@ init-agent-docs/
     ├── templates/
     │   └── zh/                       # 中文模板集
     │       （AGENTS, STRUCTURE, CURRENT, overview, api, deployment,
-    │        pitfalls, plan, CHANGELOG, audit-checklist — 共 10 个 .tpl 文件）
+     │        pitfalls, plan, CHANGELOG, audit-checklist, README — 共 11 个 .tpl 文件）
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
     │   ├── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
@@ -419,9 +420,32 @@ touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
 
 **不要留空文件**——至少写一个标题 + 一句话说明文件的定位，否则 Agent 不知道该往里写什么。模板指导注释只供生成前理解，不是最终内容；最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符。
 
-### 第 3 步（条件性）：迁移已有文档
+### 第 3 步：生成 README.md 或迁移已有文档
 
-**仅当目标项目已有 README / ARCHITECTURE / ONBOARDING / docs/ 等文档时执行。** 从零开始的项目跳过这一步。
+本步骤根据目标项目情况选择执行：没有 README.md 时从模板生成一份（3a），已有 README / 旧文档时走迁移流程（3b）。
+
+#### 3a. 生成 README.md（目标项目没有 README.md 时）
+
+如果目标项目**没有** README.md（从零开始的项目），基于 `assets/templates/zh/README.md.tpl` 生成一份人类面向的入口文档。
+
+模板内容：
+- 项目概述（来自第 0 步调查）
+- 快速开始（安装、运行、测试命令——从 CI / manifest / task runner 提取）
+- 项目结构（关键目录职责，指向 docs/overview.md）
+- 文档索引（指向 docs/ 下的文件）
+- 贡献指南（commit 规范、PR 流程）
+- AI Agent 协作指针（指向 AGENTS.md）
+- 许可证
+
+**填写原则**：
+- 从第 0 步收集的信息填充所有 `[方括号]` 占位符
+- 命令以 CI / hook / manifest scripts 为准，不要从 README 默认文案复制
+- 没有 API 删 api.md 行，没有部署删 deployment.md 行
+- 最终文件不得残留 HTML 注释或占位符
+
+**如果目标项目已有 README.md**：跳过本子步骤，走 3b 迁移流程。
+
+#### 3b. 迁移已有文档（目标项目已有 README / ARCHITECTURE / ONBOARDING / docs/ 时）
 
 迁移的目标不是"删掉旧的一切"，而是**把有价值的信息归口到新结构里**，同时避免信息在两处并存腐烂。
 
@@ -579,7 +603,8 @@ python scripts/changelog.py add \
 1. 所有应创建的文件已创建且路径正确（按第 0 步用户确认的规模判断"应创建"的范围，不要按全套查）
 2. `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步一致：`python scripts/agent_links.py check` 返回 0
 3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
-4. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
+4. `README.md` 已创建（从模板生成或迁移保留），且内容不含占位符
+5. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
 5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
 6. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
 7. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
@@ -678,7 +703,7 @@ python scripts/changelog.py add \
 
 | 项目规模 | 建议保留 | 可省略 |
 |---------|---------|--------|
-| 小型脚本/工具 | AGENTS.md + CHANGELOG.md + docs/CURRENT.md | docs/ 专题文档、STRUCTURE.md |
+| 小型脚本/工具 | AGENTS.md + README.md + CHANGELOG.md + docs/CURRENT.md | docs/ 专题文档、STRUCTURE.md |
 | 中型单体应用 | 全部 | 根据需要省略 api.md 或 pitfalls.md |
 | 大型多模块项目 | 全部 + 按模块拆分 docs/ | 无 |
 
@@ -708,7 +733,7 @@ python scripts/changelog.py add \
 
 10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add/recent` 做标题树查看、局部读取、追加和近期浏览，不读全文。
 
-11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
+11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + README.md + CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
 
 12. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是 AGENTS.md 同步——见哲学第 9 条与第 6 步）。
 
