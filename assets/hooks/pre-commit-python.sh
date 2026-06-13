@@ -84,6 +84,35 @@ check_memory_structure() {
     return 0
 }
 
+check_governance_changes() {
+    # Detect staged changes to governance documents (AGENTS.md, hooks, scripts, memory)
+    # WARN only — does not block commit. This is a reminder, not a gate.
+    STAGED_FILES=$(git diff --cached --name-only)
+    GOV_PATTERNS="^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^STRUCTURE\.md$|^scripts/|^.githooks/|^.agent/memory/|^docs/audit-checklist\.md$"
+
+    GOV_FILES=""
+    while IFS= read -r path; do
+        if echo "$path" | grep -qE "$GOV_PATTERNS"; then
+            GOV_FILES="$GOV_FILES  - $path"$'\n'
+        fi
+    done <<< "$STAGED_FILES"
+
+    if [ -n "$GOV_FILES" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "📋 检测到治理文档变更"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "以下治理文档（AGENTS.md / hooks / scripts / 记忆索引等）已变更："
+        echo "$GOV_FILES"
+        echo "治理文档定义项目的行为规则和强制机制，修改后请确认已进行独立审查。"
+        echo "本次提交不会因此被拒绝。"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+    fi
+    return 0
+}
+
 if ! check_agents_sync; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -114,5 +143,7 @@ if ! check_memory_structure; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
 fi
+
+check_governance_changes
 
 echo "=== OK ==="
