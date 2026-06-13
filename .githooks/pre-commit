@@ -33,6 +33,16 @@ while IFS= read -r path; do
 done <<< "$STAGED_FILES"
 
 if [ "$GOV_CHANGED" -eq 1 ]; then
+    # Detect whether converge is available on this device
+    CONVERGE_AVAILABLE=0
+    if [ -d "$HOME/.claude/skills/converge" ] || [ -d "$HOME/.agents/skills/converge" ]; then
+        CONVERGE_AVAILABLE=1
+    elif [ -d ".converge" ]; then
+        CONVERGE_AVAILABLE=1
+    elif command -v converge >/dev/null 2>&1; then
+        CONVERGE_AVAILABLE=1
+    fi
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📋 检测到治理文档变更"
@@ -40,11 +50,23 @@ if [ "$GOV_CHANGED" -eq 1 ]; then
     echo ""
     echo "以下治理文档已变更："
     echo "$GOV_FILES"
-    echo "按 SKILL.md 哲学第 5 条治理文档层要求："
-    echo "  准则段改动（新增/删除/重定义行为规则）→ ultraverge（≥3 Reviewer）"
-    echo "  其他治理文档修改（导航/说明/引用修正）→ 标准 converge"
-    echo ""
-    echo "本次提交不会被拒绝，但请确认是否已执行对应的收敛流程。"
+
+    if [ "$CONVERGE_AVAILABLE" -eq 1 ]; then
+        echo ""
+        echo "按 SKILL.md 哲学第 5 条治理文档层要求："
+        echo "  准则段改动（新增/删除/重定义行为规则）→ ultraverge（≥3 Reviewer）"
+        echo "  其他治理文档修改（导航/说明/引用修正）→ 标准 converge"
+        echo ""
+        echo "本次提交不会被拒绝，但请确认是否已执行对应的收敛流程。"
+    else
+        echo ""
+        echo "当前环境未检测到 converge 工具。降级方案："
+        echo "  在提交前，至少启动一个独立上下文的子 agent，"
+        echo "  让它全面审计本次修改——检查规则一致性、边界条件、遗漏项。"
+        echo "  不要依赖执行者自检。"
+        echo ""
+        echo "本次提交不会被拒绝，但请确认已执行独立审计。"
+    fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 fi

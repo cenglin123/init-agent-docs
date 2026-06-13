@@ -98,6 +98,16 @@ check_governance_changes() {
     done <<< "$STAGED_FILES"
 
     if [ -n "$GOV_FILES" ]; then
+        # Detect whether converge is available on this device
+        CONVERGE_AVAILABLE=0
+        if [ -d "$HOME/.claude/skills/converge" ] || [ -d "$HOME/.agents/skills/converge" ]; then
+            CONVERGE_AVAILABLE=1
+        elif [ -d ".converge" ]; then
+            CONVERGE_AVAILABLE=1
+        elif command -v converge >/dev/null 2>&1; then
+            CONVERGE_AVAILABLE=1
+        fi
+
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "📋 检测到治理文档变更"
@@ -105,7 +115,20 @@ check_governance_changes() {
         echo ""
         echo "以下治理文档（AGENTS.md / hooks / scripts / 记忆索引等）已变更："
         echo "$GOV_FILES"
-        echo "治理文档定义项目的行为规则和强制机制，修改后请确认已进行独立审查。"
+
+        if [ "$CONVERGE_AVAILABLE" -eq 1 ]; then
+            echo ""
+            echo "建议走 converge 流程进行独立审查："
+            echo "  准则段改动（行为规则/禁止事项）→ ultraverge（≥3 Reviewer）"
+            echo "  其他治理文档修改（导航/说明）→ 标准 converge"
+        else
+            echo ""
+            echo "当前环境未检测到 converge 工具。降级方案："
+            echo "  在提交前，至少启动一个独立上下文的子 agent，"
+            echo "  让它全面审计本次修改——检查规则一致性、边界条件、遗漏项。"
+            echo "  不要依赖执行者自检。"
+        fi
+        echo ""
         echo "本次提交不会因此被拒绝。"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
