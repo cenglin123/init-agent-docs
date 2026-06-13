@@ -34,6 +34,7 @@
 - 文档一致性审计：[docs/audit-checklist.md](docs/audit-checklist.md)
 - 复杂任务计划：[docs/plans/](docs/plans/)
 - 当前任务状态（单 owner 摘要 / 全局入口）：[docs/CURRENT.md](docs/CURRENT.md)
+- 项目记忆索引：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
 - 变更记录：[CHANGELOG.md](CHANGELOG.md)
 
 <!-- 根据第 0 步的结果裁剪：没有 API 就删掉 api.md 那行，没有部署需求就删掉 deployment.md -->
@@ -44,7 +45,30 @@
      - 本文件未包含部署说明（项目无独立部署流程）。
      根据实际裁剪情况填写，全部保留时删除本段。 -->
 
+## 项目记忆
+
+<!-- 本节是硬约束——AGENTS.md 始终在 Agent 上下文中，因此关键记忆内联于此保证模型可见。
+     详细记忆见 .agent/memory/MEMORY.md。小型项目删除本节。 -->
+
+- **用户**：<!-- 称呼、关键偏好、技术栈 -->
+- **项目上下文**：<!-- 当前活跃项目的一句话描述 -->
+- **最近教训**：<!-- 最重要的 1-2 条 -->
+- **详细记忆**：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
+
+> 每次更新 `.agent/memory/` 后，同步维护本节摘要。
+
 ## 行为规则
+
+### Compact 恢复（上下文压缩后强制执行）
+
+若你的上下文中包含 "continued from a previous conversation"（compact 恢复信号），在继续任何实质性工作前：
+
+1. 读取 `docs/CURRENT.md` — 确认当前任务状态
+2. <!-- 非小型项目保留本行；小型项目删除本行 -->
+   读取 `.agent/memory/MEMORY.md` — 恢复项目记忆与用户画像
+3. 上述步骤完成前，**禁止执行写操作、禁止做出有副作用的判断**
+
+> 本条是止损措施——compact 后 Agent 丢失大量上下文，必须先恢复关键状态再行动。当前依赖 Agent 遵守（软约束）；待框架支持 compact 事件 hook 后迁移为硬约束。
 
 ### 硬约束（不可违反）
 <!-- 候选项：只有目标仓库已有约束或用户确认时保留。下面的密钥、构建产物、hook 等通用规则不要无脑写入最终 AGENTS.md；保留时必须改成目标仓库的具体路径、命令或约束。 -->
@@ -149,3 +173,4 @@
 - [ ] **CHANGELOG.md**：是否值得记录？如是，用 `python scripts/changelog.py add ...` 插入到当天日期节；需要查看历史时只用 `titles/show` 局部读取。
 - [ ] **同步一致性**：本文件若被编辑，运行 `python scripts/agent_links.py check`；只有不一致时才用 `python scripts/agent_links.py repair` 修复。
 - [ ] **跳过条件**：纯格式修改、注释修改、同一会话内已记录的变更，可跳过文档更新步骤（但验证步骤不可跳过）。
+- [ ] **记忆自检**：本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agent/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要。<!-- 小型项目：标注"小型项目，无记忆目录" -->

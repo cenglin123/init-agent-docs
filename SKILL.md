@@ -172,6 +172,17 @@ AGENTS.md、CLAUDE.md、GEMINI.md 必须保持内容一致（因为不同 Agent 
 
 **唯一正解：Git pre-commit hook 调用 `scripts/agent_links.py check`，断链/不一致时拒绝提交。** 具体落地见"执行步骤"第 6 步。脚本一处实现，hook 一行调用，不要在 hook 里再写一份独立的比对逻辑（避免双份维护成本和"工具缺失静默放行"的洞）。
 
+### 10. 跨会话记忆——硬约束保证可见，软约束扩展容量
+
+AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此记忆系统设计必须遵循"硬约束内联 + 软约束外置"的双层结构：
+
+- **内联层（硬约束）**：AGENTS.md「项目记忆」段承载用户称呼、关键偏好、活跃项目、最近教训等 5-10 行关键信息。因为 AGENTS.md 始终在上下文，模型每次对话都能看到这些内容——这是硬的、无法绕过的保证。
+- **外置层（软约束）**：`.agent/memory/` 目录承载完整用户画像、项目上下文、反馈历史等详细内容。Agent 通过指针按需读取，compact 后由哨兵提示重新加载。
+- **结构硬约束**：pre-commit hook 检查 `.agent/memory/` 目录不为空壳；`audit.py` 检查记忆文件完整性和 AGENTS.md 指针存在性——防止记忆系统静默腐化。
+- **规模裁剪**：小型项目不建 `.agent/memory/` 目录（单次会话即可完成的工具脚本不需要跨会话记忆）；中型+项目建立全套记忆目录。
+
+这不违反 Occam——跨会话协作缺少记忆载体，会导致 Agent 在每次新对话中重复询问用户偏好、忘记项目上下文、重蹈已知教训。它解决的是真实发生的、有成本的具体问题。
+
 ---
 
 ## 目标文件结构
@@ -281,11 +292,11 @@ init-agent-docs/
 
 根据以上 10 个维度的信息，向用户展示以下选项的差异，由用户拍板选择初始化规模：
 
-| 选项 | 规模定义 | 创建哪些文件 | plans/ 目录 | 典型场景 |
-|------|---------|------------|------------|---------|
-| **小型** | 脚本/工具，核心文件 < 5 个 | AGENTS.md + CHANGELOG.md + docs/CURRENT.md | **不建** | 单次会话能完成的工具脚本 |
-| **中型** | 单体应用，5–30 个文件 | 全套：STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | 需要长期维护的独立应用 |
-| **大型** | 多模块/微服务，> 30 个文件 | 中型全套 + 模块级拆分提示 | active + completed + 模块子计划 | 多团队协作的复杂系统 |
+| 选项 | 规模定义 | 创建哪些文件 | plans/ 目录 | 记忆系统 | 典型场景 |
+|------|---------|------------|------------|---------|---------|
+| **小型** | 脚本/工具，核心文件 < 5 个 | AGENTS.md + CHANGELOG.md + docs/CURRENT.md | **不建** | **不建** | 单次会话能完成的工具脚本 |
+| **中型** | 单体应用，5–30 个文件 | 全套：STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | `.agent/memory/` + MEMORY.md + user/role.md | 需要长期维护的独立应用 |
+| **大型** | 多模块/微服务，> 30 个文件 | 中型全套 + 模块级拆分提示 | active + completed + 模块子计划 | 同中型 | 多团队协作的复杂系统 |
 
 **执行原则：**
 - 默认从轻量开始，但**必须向用户说明推荐理由并征得同意**，例如："根据项目规模和任务类型，建议选择中型初始化，创建全套 docs/ 和 plans/ 目录。是否确认？"
@@ -384,8 +395,10 @@ python scripts/agent_links.py check  --mode=hardlink
 - `部署与同步：[docs/deployment.md]...`
 - `环境陷阱：[docs/pitfalls.md]...`
 - `复杂任务计划：[docs/plans/]...`
+- `项目记忆索引：[.agent/memory/MEMORY.md]...`
+- `## 项目记忆` 整段（含其下所有行和 HTML 注释）
 
-只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。
+只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录。
 
 裁剪后运行 `python scripts/agent_links.py repair` 把改动同步到 CLAUDE.md / GEMINI.md。
 
@@ -409,6 +422,14 @@ python scripts/agent_links.py check  --mode=hardlink
 mkdir -p docs/plans/active docs/plans/completed
 touch docs/plans/active/.gitkeep docs/plans/completed/.gitkeep
 ```
+
+建立记忆目录（中型+项目）：
+
+```bash
+mkdir -p .agent/memory/user
+```
+
+> 记忆目录的模板生成和内容填充见第 5.5 步。
 
 #### 大型项目
 生成中型项目的全套文件，并额外在 AGENTS.md 或 `docs/overview.md` 中加入提示：
@@ -492,6 +513,27 @@ python scripts/changelog.py add \
   --title "初始化文档体系" \
   --body "建立 agent-first 文档结构：AGENTS.md（含同步副本 CLAUDE.md / GEMINI.md）+ STRUCTURE.md + docs/ 层级；配置 scripts/changelog.py 与 scripts/agent_links.py，脚本化维护日志和同步副本；迁移/整合旧文档（如适用）：见 docs/plans/completed/initialization.md"
 ```
+
+### 第 5.5 步：初始化记忆系统（中型+项目）
+
+小型项目跳过本步。
+
+1. 确认第 2 步已创建 `.agent/memory/` 目录（`mkdir -p .agent/memory/user`）。
+
+2. 基于模板生成记忆文件：
+
+   - 读 `assets/templates/zh/MEMORY.md.tpl` → 写入 `.agent/memory/MEMORY.md`
+   - 读 `assets/templates/zh/user-role.md.tpl` → 写入 `.agent/memory/user/role.md`
+
+3. 将第 0 步收集的用户信息填入 `user/role.md`（至少填称呼和技术栈）。Agent 在初始化时已有这些信息，不要留空占位符。
+
+4. 更新 AGENTS.md「项目记忆」内联段：将已知的用户信息和项目上下文写入摘要中的 `- **用户**：` 和 `- **项目上下文**：` 行。不要留 `<!--  -->` 注释——这是最终交付物。
+
+5. 运行 `python scripts/agent_links.py repair` 同步 CLAUDE.md / GEMINI.md。
+
+6. 确认 AGENTS.md 信息导航包含记忆指针行（`- 项目记忆索引：[.agent/memory/MEMORY.md]...`）。
+
+> **设计理由**：AGENTS.md 内联段是硬约束——始终在 Agent 上下文；外置 `.agent/memory/` 是扩展容量。两者互补，缺一不可。详见设计哲学第 10 条。
 
 ### 第 6 步：初始化质量门控
 
@@ -616,6 +658,10 @@ python scripts/changelog.py add \
 9. `docs/audit-checklist.md` 已创建，且 `STRUCTURE.md` 索引表中包含其链接
 10. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
 11. 出生档案 `docs/plans/completed/initialization.md` 已写入
+12. `.agent/memory/MEMORY.md` 和 `.agent/memory/user/role.md` 已创建且非空
+13. AGENTS.md 包含「项目记忆」内联段且非空（不含 `<!--  -->` 模板注释）
+14. AGENTS.md 信息导航包含 `.agent/memory/MEMORY.md` 指针
+15. `python scripts/audit.py memory` 退出码为 0
 
 **小型项目额外项：**
 
@@ -744,3 +790,5 @@ python scripts/changelog.py add \
 15. **为了完整感复制治理形式**：看到多层规则、完整组织隐喻或复杂流程，就照搬到新仓库。解法：只保留能解决真实问题的原则和结构；具体形式必须由目标项目的实际约束长出来。
 
 16. **迁移时直接删旧文档**：历史引用瞬间失效。解法：第 3 步先标"已迁移"，保留一段时间再彻底删除。
+
+17. **记忆目录空转**：中型项目创建了 `.agent/memory/` 但从不在其中写入记忆，目录沦为摆设。解法：完工检查清单的"记忆自检"项应被实际触发；审计时若发现持续 30 天无更新，应提示删除或激活。

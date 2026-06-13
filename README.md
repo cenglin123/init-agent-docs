@@ -15,6 +15,7 @@
 - `scripts/audit.py`：文档一致性机械检查（死链 / 结构完整性 / 依赖漂移）
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
+- `.agent/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
 - `.githooks/`：可选 lint 质量门控，调用 `scripts/agent_links.py` 做同步兜底
 
 背后的设计哲学见 SKILL.md"设计哲学"一节。
@@ -40,6 +41,25 @@ init-agent-docs/
     │   └── pre-commit-config.yaml        # 给使用 pre-commit 框架的项目
     └── pitch/
         └── presentation.html             # 对外分享用的 pitch deck，不是运行时产物
+```
+
+目标项目结构（中型项目，含记忆系统）：
+
+```
+目标项目/
+├── AGENTS.md              # 行为规则 + 内联记忆（硬约束）+ 导航
+├── CLAUDE.md / GEMINI.md  # 同步副本
+├── .agent/memory/         # 跨会话记忆（硬约束内联在 AGENTS.md）
+│   ├── MEMORY.md          # 记忆索引
+│   └── user/role.md       # 用户画像
+├── docs/
+│   ├── CURRENT.md         # 当前任务状态
+│   ├── overview.md        # 系统主线
+│   └── ...
+└── scripts/
+    ├── changelog.py
+    ├── agent_links.py
+    └── audit.py
 ```
 
 ## 模板占位符约定

@@ -62,6 +62,27 @@ check_agents_sync() {
     return 0
 }
 
+check_memory_structure() {
+    # Only check if memory directory exists (medium+ projects)
+    [ -d ".agent/memory" ] || return 0
+
+    if [ ! -f ".agent/memory/MEMORY.md" ]; then
+        echo "[pre-commit] FAIL — .agent/memory/ exists but MEMORY.md is missing" >&2
+        return 1
+    fi
+
+    if [ ! -s ".agent/memory/MEMORY.md" ]; then
+        echo "[pre-commit] FAIL — .agent/memory/MEMORY.md is empty" >&2
+        return 1
+    fi
+
+    if ! grep -q ".agent/memory/MEMORY.md" AGENTS.md 2>/dev/null; then
+        echo "[pre-commit] WARN — AGENTS.md missing pointer to .agent/memory/MEMORY.md" >&2
+    fi
+
+    return 0
+}
+
 if ! check_agents_sync; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -75,6 +96,20 @@ if ! check_agents_sync; then
     echo "  1. 编辑 AGENTS.md（不要编辑 CLAUDE.md 或 GEMINI.md）"
     echo "  2. 运行：python3 scripts/agent_links.py repair（或 python）"
     echo "  3. 重新 stage 并提交"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    exit 1
+fi
+
+if ! check_memory_structure; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ".agent/memory/ 目录结构不完整。"
+    echo ""
+    echo "这可能是因为："
+    echo "  1. .agent/memory/ 目录存在但 MEMORY.md 缺失或为空"
+    echo "  2. 记忆文件被误删"
+    echo ""
+    echo "修复：重新创建 .agent/memory/MEMORY.md 或从模板恢复。"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
 fi
