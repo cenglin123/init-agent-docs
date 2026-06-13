@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -e
+
+# ============================================================
+# init-agent-docs pre-commit hook
+#
+# 1. 测试必须通过
+# 2. 治理文档变更提醒（WARN，不阻断）
+# ============================================================
+
+STAGED_FILES=$(git diff --cached --name-only)
+
+# --- 1. 跑测试（hard block） ---
+echo "[pre-commit] 运行测试…"
+if ! python -m pytest tests/ -q --tb=short 2>&1; then
+    echo ""
+    echo "❌ 测试未通过。请先修复测试，再重新 stage/commit。"
+    exit 1
+fi
+
+# --- 2. 治理文档变更提醒（WARN） ---
+# 治理文档 = 被 Agent 作为行为规则消费的文件（SKILL.md 哲学 #5 定义）
+# 包括：SKILL.md、AGENTS.md 模板、脚本资产、hook 模板、README（维护者笔记）
+GOV_PATTERNS="^SKILL\.md$|^README\.md$|^assets/templates/zh/|^assets/scripts/|^assets/hooks/|^assets/references/"
+GOV_CHANGED=0
+GOV_FILES=""
+
+while IFS= read -r path; do
+    if echo "$path" | grep -qE "$GOV_PATTERNS"; then
+        GOV_CHANGED=1
+        GOV_FILES="$GOV_FILES  - $path"$'\n'
+    fi
+done <<< "$STAGED_FILES"
+
+if [ "$GOV_CHANGED" -eq 1 ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📋 检测到治理文档变更"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "以下治理文档已变更："
+    echo "$GOV_FILES"
+    echo "按 SKILL.md 哲学第 5 条治理文档层要求："
+    echo "  准则段改动（新增/删除/重定义行为规则）→ ultraverge（≥3 Reviewer）"
+    echo "  其他治理文档修改（导航/说明/引用修正）→ 标准 converge"
+    echo ""
+    echo "本次提交不会被拒绝，但请确认是否已执行对应的收敛流程。"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+fi
+
+exit 0
