@@ -21,7 +21,7 @@ fi
 # --- 2. 治理文档变更提醒（WARN） ---
 # 治理文档 = 被 Agent 作为行为规则消费的文件（SKILL.md 哲学 #5 定义）
 # 包括：SKILL.md、AGENTS.md 模板、脚本资产、hook 模板、README（维护者笔记）
-GOV_PATTERNS="^SKILL\.md$|^README\.md$|^assets/templates/zh/|^assets/scripts/|^assets/hooks/|^assets/references/"
+GOV_PATTERNS="^SKILL\.md$|^README\.md$|^assets/templates/zh/|^assets/scripts/|^assets/hooks/|^assets/references/|^.githooks/"
 GOV_CHANGED=0
 GOV_FILES=""
 
