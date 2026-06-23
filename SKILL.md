@@ -51,14 +51,14 @@ Agent 从一个小而稳定的入口出发，按需深入查阅。这和给新�
 信息分层结构：
 
 ```
-AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~200 行 / 400 词）
+AGENTS.md          → 行为规则 + 导航指针 + docs/ 文件治理规则（始终在上下文，~200 行 / 400 词）
 docs/STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
 docs/*.md          → 各专题深度文档（Agent 按需读取特定文件）
 docs/plans/        → 执行计划（Agent 接到复杂任务时读取）
 docs/CHANGELOG.md       → 变更记录（Agent 需要了解近期改动时读取）
 ```
 
-**关键点：** 除了 AGENTS.md 始终在上下文中，其他文件都是 Agent 主动去读的。所以 AGENTS.md 必须告诉 Agent "什么信息在哪里"，这样它才知道该去哪找。
+**关键点：** 除了 AGENTS.md 始终在上下文中，其他文件都是 Agent 主动去读的。所以 AGENTS.md 必须告诉 Agent "什么信息在哪里"，这样它才知道该去哪找。docs/ 文件的治理规则（存在条件/合并条件/创建原则/删除原则）在 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段中，不在 STRUCTURE.md 中。
 
 ### 3. 只记代码里读不出来的东西
 
@@ -385,6 +385,8 @@ python scripts/agent_links.py check  --mode=hardlink
 
 ### 第 2 步：创建 docs/STRUCTURE.md 和 docs/ 目录
 
+> STRUCTURE.md 是纯文档索引。docs/ 文件的治理规则（存在条件/合并条件/创建原则/删除原则）在 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段中。治理规则始终在 AGENTS.md 中，因此小型项目裁剪时只需去掉 STRUCTURE.md 指针，治理规则自然保留（AGENTS.md 始终存在）。
+
 **根据第 0 步用户确认的规模，按以下分支执行：**
 
 #### 小型项目
@@ -659,6 +661,7 @@ python scripts/changelog.py add \
 6. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
 7. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
 8. `AGENTS.md` 行数不超过约 200 行、词数不超过约 400 词（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+9. `AGENTS.md` 包含「### docs/ 文件的治理规则」子段（存在条件/合并条件/创建原则/删除原则/自免声明），且使用 Occam + Bitter Lesson 通用原则无枚举阈值
 
 **中型 / 大型项目额外项：**
 

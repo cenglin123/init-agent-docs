@@ -3,6 +3,8 @@
 > **何时触发**：`python scripts/audit.py check` 报告发现后，或每 ~20 次任务 / 每月主动执行一次。
 > **角色**：本文件由 Agent 读取并填写，不是人类维护的文档。
 
+<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+
 ## 1. 机械检查结果复核
 
 运行 `python scripts/audit.py check`，对每个非 OK 项逐条复核。

@@ -8,3 +8,5 @@
 - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
 - 文件初始化后保持空壳；第一条记录由 `python scripts/changelog.py add ...` 创建（见 SKILL.md 第 5 步）。
 -->
+
+<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
