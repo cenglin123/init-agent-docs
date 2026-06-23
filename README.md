@@ -6,7 +6,7 @@
 
 为一个代码仓库初始化"面向 AI agent 协作"的文档体系：
 
-- `AGENTS.md`（同步到 `CLAUDE.md` / `GEMINI.md`）：行为规则 + 信息导航（Agent 面向）
+- `AGENTS.md`（同步到 `CLAUDE.md` / `GEMINI.md`）：行为规则 + 信息导航 + docs/ 文件治理规则（Agent 面向）
 - `README.md`：项目概述、快速开始、贡献指南（人类面向；从模板生成或迁移保留）
 - `docs/STRUCTURE.md`：架构文档总索引
 - `docs/CHANGELOG.md`：倒序变更记录
@@ -47,12 +47,14 @@ init-agent-docs/
 
 ```
 目标项目/
-├── AGENTS.md              # 行为规则 + 内联记忆（硬约束）+ 导航
+├── AGENTS.md              # 行为规则 + 治理规则 + 内联记忆（硬约束）+ 导航
 ├── CLAUDE.md / GEMINI.md  # 同步副本
 ├── .agent/memory/         # 跨会话记忆（硬约束内联在 AGENTS.md）
 │   ├── MEMORY.md          # 记忆索引
 │   └── user/role.md       # 用户画像
 ├── docs/
+│   ├── STRUCTURE.md       # 文档总索引
+│   ├── CHANGELOG.md       # 变更记录
 │   ├── CURRENT.md         # 当前任务状态
 │   ├── overview.md        # 系统主线
 │   └── ...
