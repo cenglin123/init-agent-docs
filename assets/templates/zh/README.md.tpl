@@ -64,7 +64,7 @@ cd [项目目录]
 | [docs/overview.md](docs/overview.md) | 系统架构与设计决策 |
 | [docs/api.md](docs/api.md) | API 约定（如有） |
 | [docs/deployment.md](docs/deployment.md) | 部署与环境配置 |
-| [CHANGELOG.md](CHANGELOG.md) | 变更记录 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 变更记录 |
 
 <!-- 根据项目实际情况裁剪：没有 API 删 api.md 行，没有部署删 deployment.md 行。 -->
 

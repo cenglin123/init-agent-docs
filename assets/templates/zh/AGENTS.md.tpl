@@ -26,7 +26,7 @@
 
 ## 信息导航
 
-- 文档总索引：[STRUCTURE.md](STRUCTURE.md)
+- 文档总索引：[docs/STRUCTURE.md](docs/STRUCTURE.md)
 - 系统主线与设计决策：[docs/overview.md](docs/overview.md)
 - API 约定：[docs/api.md](docs/api.md)
 - 部署与同步：[docs/deployment.md](docs/deployment.md)
@@ -35,7 +35,7 @@
 - 复杂任务计划：[docs/plans/](docs/plans/)
 - 当前任务状态（单 owner 摘要 / 全局入口）：[docs/CURRENT.md](docs/CURRENT.md)
 - 项目记忆索引：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
-- 变更记录：[CHANGELOG.md](CHANGELOG.md)
+- 变更记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)
 
 <!-- 根据第 0 步的结果裁剪：没有 API 就删掉 api.md 那行，没有部署需求就删掉 deployment.md -->
 
@@ -149,14 +149,14 @@
 **`docs/` 的使用边界**
 
 6. 新增设计决策写入 [docs/overview.md](docs/overview.md)；接口变更更新 [docs/api.md](docs/api.md)；部署或环境约束更新 [docs/deployment.md](docs/deployment.md)；环境陷阱写入 [docs/pitfalls.md](docs/pitfalls.md)。
-7. 先更新对应 `docs/*.md`，再写 [CHANGELOG.md](CHANGELOG.md)。CHANGELOG 只记变更摘要，不重复架构文档正文。
-8. 单个架构文档接近 300 行时按主题拆分，并在 [STRUCTURE.md](STRUCTURE.md) 里补索引，不在原文件里继续堆叠。
+7. 先更新对应 `docs/*.md`，再写 [docs/CHANGELOG.md](docs/CHANGELOG.md)。CHANGELOG 只记变更摘要，不重复架构文档正文。
+8. 单个架构文档接近 300 行时按主题拆分，并在 [docs/STRUCTURE.md](docs/STRUCTURE.md) 里补索引，不在原文件里继续堆叠。
 9. 需要走"复杂任务闭环"的任务，先在 `docs/plans/active/` 落盘计划，实施完成后移到 `docs/plans/completed/`。单会话小任务不必建计划。
 
 **CHANGELOG 规则**
 
 10. 日期节倒序排列，最新在前；同一天的多次修改合并到同一个日期节，用 `###` 区分主题。
-11. 写入 [CHANGELOG.md](CHANGELOG.md) 前**不要读全文**；使用 `python scripts/changelog.py titles --limit 5` 查看标题树，`python scripts/changelog.py show --date YYYY-MM-DD` 或 `--match 关键词` 读取局部内容，`python scripts/changelog.py add --title "..." --body "..."` 追加条目。
+11. 写入 [docs/CHANGELOG.md](docs/CHANGELOG.md) 前**不要读全文**；使用 `python scripts/changelog.py titles --limit 5` 查看标题树，`python scripts/changelog.py show --date YYYY-MM-DD` 或 `--match 关键词` 读取局部内容，`python scripts/changelog.py add --title "..." --body "..."` 追加条目。
 12. 当前任务状态写入 [docs/CURRENT.md](docs/CURRENT.md)，不要写进 CHANGELOG。
 13. 只写"改了什么、为什么改、有什么迁移影响"，不贴代码，不重复 `docs/` 中已经存在的设计说明。
 

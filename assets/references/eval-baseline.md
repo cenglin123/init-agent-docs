@@ -19,8 +19,8 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 | 项目代号 | 规模 | 特征 | 初始化预期选项 |
 |---------|------|------|-------------|
-| `eval-small` | 小型 | Python 单文件脚本（< 5 个核心文件），无现有文档 | 小型：AGENTS.md + CHANGELOG.md + docs/CURRENT.md |
-| `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | 中型：全套 docs/ + STRUCTURE.md + plans/ |
+| `eval-small` | 小型 | Python 单文件脚本（< 5 个核心文件），无现有文档 | 小型：AGENTS.md + docs/CHANGELOG.md + docs/CURRENT.md |
+| `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | 中型：全套 docs/ + docs/STRUCTURE.md + plans/ |
 | `eval-large` | 大型 | 多模块微服务（> 30 个文件），多语言混合，已有 DESIGN.md | 大型：中型全套 + 模块级拆分提示 + 迁移旧文档 |
 
 **新增事实源冲突夹具**：
@@ -55,7 +55,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 ### 中型 / 大型额外项
 
-- [ ] `STRUCTURE.md` 存在且索引表与 `docs/` 文件一一对应
+- [ ] `docs/STRUCTURE.md` 存在且索引表与 `docs/` 文件一一对应
 - [ ] `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
 - [ ] `docs/overview.md` 已创建且包含至少一句设计决策说明
 - [ ] `docs/deployment.md` 已创建
@@ -157,7 +157,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 | 信息密度低（混入可推导信息） | AGENTS.md 模板 | 收紧模板中的"不要放什么"清单，增加反模式提示 |
 | 导航不清晰 | AGENTS.md 模板"信息导航"段 | 增加具体示例，或调整指针顺序 |
 | 硬约束无工具支撑 | 执行步骤第 6 步 | 强化 pre-commit hook 的必做要求，增加 CI 矩阵 |
-| 渐进披露不合理 | SKILL.md 设计哲学第 2 条 | 调整 AGENTS.md 行数上限建议，或增加 STRUCTURE.md 的强制要求 |
+| 渐进披露不合理 | SKILL.md 设计哲学第 2 条 | 调整 AGENTS.md 行数上限建议，或增加 docs/STRUCTURE.md 的强制要求 |
 | 维护机制缺失 | 执行步骤第 5 步 | 强化"出生档案"和 CHANGELOG 脚本的必做要求 |
 | 事实源裁决错误 | SKILL.md 第 0 / 第 3 步 | 强化可执行事实源优先规则，补充 README 写旧命令的夹具 |
 | 旧指令文件丢失 | SKILL.md 第 1 步 | 扩展已有 instruction 文件整合范围，要求读取 Cursor / Copilot / OpenCode 指令 |

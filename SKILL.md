@@ -2,7 +2,7 @@
 name: init-agent-docs
 description: >
   Initialize or migrate an agent-first doc system for AI collaboration.
-  Creates synchronized AGENTS.md/CLAUDE.md/GEMINI.md, STRUCTURE.md, docs/ hierarchy
+  Creates synchronized AGENTS.md/CLAUDE.md/GEMINI.md, docs/STRUCTURE.md, docs/ hierarchy
   with progressive disclosure, plan-as-handoff, and scripted CHANGELOG.
   Triggers when: setting up agent docs, scaffolding CLAUDE.md, building AI collaboration
   guidelines, migrating README/ARCHITECTURE to agent-friendly format.
@@ -52,10 +52,10 @@ Agent 从一个小而稳定的入口出发，按需深入查阅。这和给新�
 
 ```
 AGENTS.md          → 行为规则 + 导航指针（始终在上下文，~200 行 / 400 词）
-STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
+docs/STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
 docs/*.md          → 各专题深度文档（Agent 按需读取特定文件）
 docs/plans/        → 执行计划（Agent 接到复杂任务时读取）
-CHANGELOG.md       → 变更记录（Agent 需要了解近期改动时读取）
+docs/CHANGELOG.md       → 变更记录（Agent 需要了解近期改动时读取）
 ```
 
 **关键点：** 除了 AGENTS.md 始终在上下文中，其他文件都是 Agent 主动去读的。所以 AGENTS.md 必须告诉 Agent "什么信息在哪里"，这样它才知道该去哪找。
@@ -102,7 +102,7 @@ CHANGELOG.md       → 变更记录（Agent 需要了解近期改动时读取）
   - **判定范围**：AGENTS.md、CLAUDE.md、GEMINI.md、SKILL.md、预提交 hook、审计脚本，以及任何被 Agent 作为行为规则消费的文件。识别辅助：若文件被 AGENTS.md 引用为规则执行工具（如 pre-commit hook、audit.py），或被框架自动加载（如 `.claude/settings.json` 中的 hooks），即属于治理文档。
   - **独占性**：治理文档层是独占判定——一个改动只要触及治理文档，就按本层规则处理，不叠加或降级到下层（高风险/中等风险/低风险）。若同一任务同时触及治理文档和业务文件，仅治理文档部分按本层复查，业务文件部分按原有分级独立判断——两个部分可分别走不同的审查流程。
   - **ultraverge vs 标准 converge**：
-    - **ultraverge**（≥3 Reviewer）：涉及新增、删除或重定义**准则段**。准则段是文档中规定行为规则、禁止事项或判断标准的段落——区别于导航表、信息指针和示例性说明。判定以段落的首要功能为准：约束速查表（禁止/替代）的首要功能是规则，属于准则段；纯导航指针（如"文档总索引：[STRUCTURE.md]"）不属于。若一段落同时含规则和指针，以主导功能判定。
+    - **ultraverge**（≥3 Reviewer）：涉及新增、删除或重定义**准则段**。准则段是文档中规定行为规则、禁止事项或判断标准的段落——区别于导航表、信息指针和示例性说明。判定以段落的首要功能为准：约束速查表（禁止/替代）的首要功能是规则，属于准则段；纯导航指针（如"文档总索引：[docs/STRUCTURE.md]"）不属于。若一段落同时含规则和指针，以主导功能判定。
     - **标准 converge**：其他治理文档修改（如调整导航表、增补说明性文字、修正交叉引用）。
   - **初始化豁免**：AGENTS.md 通过本 skill 初始化（而非后续自发修改）时，Step 8 的单次 reviewer-perspective 自检已充分——初始化是模板化操作，不同于对已有治理文档的自发修改；初始化不触发 ultraverge。
   - **引导说明**：本条自身的创建通过标准 converge 引导生效——这是规则引导自身进入存在的必要过渡。合并后，后续对本文件及所有治理文档的修改均按本条分级执行。
@@ -203,8 +203,6 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 ├── CLAUDE.md              # → AGENTS.md 的同步副本
 ├── GEMINI.md              # → AGENTS.md 的同步副本
 ├── README.md              # 人类面向入口（项目概述、快速开始、贡献指南）
-├── STRUCTURE.md           # 文档总索引（一张导航表）
-├── CHANGELOG.md           # 变更记录（倒序，最新在前）
 ├── scripts/
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
 │   ├── agent_links.py     # AGENTS/CLAUDE/GEMINI 同步检查与修复
@@ -212,6 +210,8 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 ├── .githooks/             # （可选）质量门控
 │   └── pre-commit
 ├── docs/
+│   ├── STRUCTURE.md        # 文档总索引（一张导航表）
+│   ├── CHANGELOG.md        # 变更记录（倒序，最新在前）
 │   ├── CURRENT.md         # 当前任务状态（单 owner handoff / 全局入口）
 │   ├── overview.md        # 系统主线与设计决策
 │   ├── api.md             # API 约定（如有 API 的项目）
@@ -302,8 +302,8 @@ init-agent-docs/
 
 | 选项 | 规模定义 | 创建哪些文件 | plans/ 目录 | 记忆系统 | 典型场景 |
 |------|---------|------------|------------|---------|---------|
-| **小型** | 脚本/工具，核心文件 < 5 个 | AGENTS.md + CHANGELOG.md + docs/CURRENT.md | **不建** | **不建** | 单次会话能完成的工具脚本 |
-| **中型** | 单体应用，5–30 个文件 | 全套：STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | `.agent/memory/` + MEMORY.md + user/role.md | 需要长期维护的独立应用 |
+| **小型** | 脚本/工具，核心文件 < 5 个 | AGENTS.md + docs/CHANGELOG.md + docs/CURRENT.md | **不建** | **不建** | 单次会话能完成的工具脚本 |
+| **中型** | 单体应用，5–30 个文件 | 全套：docs/STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | `.agent/memory/` + MEMORY.md + user/role.md | 需要长期维护的独立应用 |
 | **大型** | 多模块/微服务，> 30 个文件 | 中型全套 + 模块级拆分提示 | active + completed + 模块子计划 | 同中型 | 多团队协作的复杂系统 |
 
 **执行原则：**
@@ -383,21 +383,21 @@ python scripts/agent_links.py repair --mode=hardlink
 python scripts/agent_links.py check  --mode=hardlink
 ```
 
-### 第 2 步：创建 STRUCTURE.md 和 docs/ 目录
+### 第 2 步：创建 docs/STRUCTURE.md 和 docs/ 目录
 
 **根据第 0 步用户确认的规模，按以下分支执行：**
 
 #### 小型项目
 只生成以下文件：
-- `CHANGELOG.md`（从 `CHANGELOG.md.tpl`）
+- `docs/CHANGELOG.md`（从 `CHANGELOG.md.tpl`）
 - `docs/CURRENT.md`（从 `CURRENT.md.tpl`）
 
-**不生成** `STRUCTURE.md`、`docs/overview.md`、`docs/deployment.md`、`docs/pitfalls.md`。
+**不生成** `docs/STRUCTURE.md`、`docs/overview.md`、`docs/deployment.md`、`docs/pitfalls.md`。
 **不建** `docs/plans/` 目录。
 
 **对应裁剪 AGENTS.md（必做）**：第 1 步生成的 AGENTS.md 默认信息导航包含全套指针。小型项目要回到 AGENTS.md 删除以下行，避免死链：
 
-- `文档总索引：[STRUCTURE.md]...`
+- `文档总索引：[docs/STRUCTURE.md]...`
 - `系统主线与设计决策：[docs/overview.md]...`
 - `API 约定：[docs/api.md]...`
 - `部署与同步：[docs/deployment.md]...`
@@ -406,7 +406,7 @@ python scripts/agent_links.py check  --mode=hardlink
 - `项目记忆索引：[.agent/memory/MEMORY.md]...`
 - `## 项目记忆` 整段（含其下所有行和 HTML 注释）
 
-只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录。
+只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录。
 
 裁剪后运行 `python scripts/agent_links.py repair` 把改动同步到 CLAUDE.md / GEMINI.md。
 
@@ -415,14 +415,14 @@ python scripts/agent_links.py check  --mode=hardlink
 
 | 目标路径 | 模板 |
 |---------|------|
-| `STRUCTURE.md` | `STRUCTURE.md.tpl` |
+| `docs/STRUCTURE.md` | `STRUCTURE.md.tpl` |
 | `docs/CURRENT.md` | `CURRENT.md.tpl` |
 | `docs/overview.md` | `overview.md.tpl` |
 | `docs/api.md`（可选） | `api.md.tpl` |
 | `docs/deployment.md` | `deployment.md.tpl` |
 | `docs/pitfalls.md`（可选） | `pitfalls.md.tpl` |
 | `docs/audit-checklist.md` | `audit-checklist.md.tpl` |
-| `CHANGELOG.md` | `CHANGELOG.md.tpl` |
+| `docs/CHANGELOG.md` | `CHANGELOG.md.tpl` |
 
 然后建立计划目录：
 
@@ -519,7 +519,7 @@ mkdir -p .agent/memory/user
 ```bash
 python scripts/changelog.py add \
   --title "初始化文档体系" \
-  --body "建立 agent-first 文档结构：AGENTS.md（含同步副本 CLAUDE.md / GEMINI.md）+ STRUCTURE.md + docs/ 层级；配置 scripts/changelog.py 与 scripts/agent_links.py，脚本化维护日志和同步副本；迁移/整合旧文档（如适用）：见 docs/plans/completed/initialization.md"
+  --body "建立 agent-first 文档结构：AGENTS.md（含同步副本 CLAUDE.md / GEMINI.md）+ docs/STRUCTURE.md + docs/ 层级；配置 scripts/changelog.py 与 scripts/agent_links.py，脚本化维护日志和同步副本；迁移/整合旧文档（如适用）：见 docs/plans/completed/initialization.md"
 ```
 
 ### 第 5.5 步：初始化记忆系统（中型+项目）
@@ -652,18 +652,18 @@ python scripts/changelog.py add \
 
 1. 所有应创建的文件已创建且路径正确（按第 0 步用户确认的规模判断"应创建"的范围，不要按全套查）
 2. `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步一致：`python scripts/agent_links.py check` 返回 0
-3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
+3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 docs/STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
 4. `README.md` 已创建（从模板生成或迁移保留），且内容不含占位符
 5. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
-5. `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
+5. `docs/CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
 6. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
 7. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
 8. `AGENTS.md` 行数不超过约 200 行、词数不超过约 400 词（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
 
 **中型 / 大型项目额外项：**
 
-8. `STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
-9. `docs/audit-checklist.md` 已创建，且 `STRUCTURE.md` 索引表中包含其链接
+8. `docs/STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
+9. `docs/audit-checklist.md` 已创建，且 `docs/STRUCTURE.md` 索引表中包含其链接
 10. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
 11. 出生档案 `docs/plans/completed/initialization.md` 已写入
 12. `.agent/memory/MEMORY.md` 和 `.agent/memory/user/role.md` 已创建且非空
@@ -675,7 +675,7 @@ python scripts/changelog.py add \
 
 8. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
 9. `docs/audit-checklist.md` 已创建，且 AGENTS.md 信息导航中包含其链接
-10. 没有创建 `docs/plans/`、`STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
+10. 没有创建 `docs/plans/`、`docs/STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
 
 ### 第 8 步：reviewer-perspective 自检（必做）
 
@@ -711,7 +711,7 @@ python scripts/changelog.py add \
    - 写入 `docs/audit-checklist.md`
    - 模板已可直接使用，无需裁剪
 
-2. **更新 STRUCTURE.md 索引表**：在表格中新增一行：
+2. **更新 docs/STRUCTURE.md 索引表**：在表格中新增一行：
 
    ```markdown
    | 文档一致性审计 | [docs/audit-checklist.md](docs/audit-checklist.md) |
@@ -731,7 +731,7 @@ python scripts/changelog.py add \
 
    初始化完成时通常是干净的（无死链、无漂移、行数正常），脚本应退出 0。如果有 `[MISS]` 出生档案项——那是正常的，出生档案要到第 5 步才写入；但其他项不应该出现。
 
-   **小型项目注意**：因为不建 `STRUCTURE.md`，`audit.py structure` 会输出 0 条结果（相当于跳过），不会报错。不需要为小型项目裁剪 `audit.py` 本身。
+   **小型项目注意**：因为不建 `docs/STRUCTURE.md`，`audit.py structure` 会输出 0 条结果（相当于跳过），不会报错。不需要为小型项目裁剪 `audit.py` 本身。
 
 ---
 
@@ -757,7 +757,7 @@ python scripts/changelog.py add \
 
 | 项目规模 | 建议保留 | 可省略 |
 |---------|---------|--------|
-| 小型脚本/工具 | AGENTS.md + README.md + CHANGELOG.md + docs/CURRENT.md | docs/ 专题文档、STRUCTURE.md |
+| 小型脚本/工具 | AGENTS.md + README.md + docs/CHANGELOG.md + docs/CURRENT.md | docs/ 专题文档、docs/STRUCTURE.md |
 | 中型单体应用 | 全部 | 根据需要省略 api.md 或 pitfalls.md |
 | 大型多模块项目 | 全部 + 按模块拆分 docs/ | 无 |
 
@@ -787,7 +787,7 @@ python scripts/changelog.py add \
 
 10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add/recent` 做标题树查看、局部读取、追加和近期浏览，不读全文。
 
-11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + README.md + CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
+11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + README.md + docs/CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
 
 12. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是 AGENTS.md 同步——见哲学第 9 条与第 6 步）。
 

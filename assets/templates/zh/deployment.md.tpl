@@ -1,7 +1,7 @@
 # 部署与环境配置
 
 > 记录部署方式、环境差异和启动约定。
-> 修改本文件后同步更新 [CHANGELOG.md](../CHANGELOG.md)。
+> 修改本文件后同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 环境变量
 

@@ -1,7 +1,7 @@
 # API 约定
 
 > 记录 API 的设计约定和非显而易见的行为。具体端点列表可从代码获取，这里只记约定。
-> 修改本文件后同步更新 [CHANGELOG.md](../CHANGELOG.md)。
+> 修改本文件后同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 通用约定
 

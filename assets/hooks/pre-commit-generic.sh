@@ -81,7 +81,7 @@ check_governance_changes() {
     # Detect staged changes to governance documents (AGENTS.md, hooks, scripts, memory)
     # WARN only — does not block commit. This is a reminder, not a gate.
     STAGED_FILES=$(git diff --cached --name-only)
-    GOV_PATTERNS="^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^STRUCTURE\.md$|^scripts/|^.githooks/|^.agent/memory/|^docs/audit-checklist\.md$"
+    GOV_PATTERNS="^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^docs/STRUCTURE\.md$|^scripts/|^.githooks/|^.agent/memory/|^docs/audit-checklist\.md$"
 
     GOV_FILES=""
     while IFS= read -r path; do

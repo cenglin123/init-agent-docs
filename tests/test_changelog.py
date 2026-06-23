@@ -20,7 +20,7 @@ INITIAL_CHANGELOG = """# CHANGELOG
 
 ### 初始化文档体系
 
-- 创建 agent-first 文档结构：AGENTS.md（含硬链接）+ STRUCTURE.md + docs/ 层级
+- 创建 agent-first 文档结构：AGENTS.md（含硬链接）+ docs/STRUCTURE.md + docs/ 层级
 - 配置 scripts/changelog.py 与 scripts/agent_links.py，脚本化维护日志和硬链接
 """
 
