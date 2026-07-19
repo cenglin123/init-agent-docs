@@ -206,9 +206,11 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 ├── scripts/
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
 │   ├── agent_links.py     # AGENTS/CLAUDE/GEMINI 同步检查与修复
+│   ├── worktree_task.py   # （可选）多 Agent worktree 四动作运行时（第 6.5 步）
 │   └── audit.py            # 文档一致性机械检查（死链/漂移/结构）
 ├── .githooks/             # （可选）质量门控
-│   └── pre-commit
+│   ├── pre-commit
+│   └── reference-transaction  # （可选）canonical 分支快进保护（第 6.5 步）
 ├── docs/
 │   ├── STRUCTURE.md        # 文档总索引（一张导航表）
 │   ├── CHANGELOG.md        # 变更记录（倒序，最新在前）
@@ -240,6 +242,7 @@ init-agent-docs/
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
     │   ├── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
+    │   ├── worktree_task.py          # 多 Agent worktree 四动作运行时（可选，第 6.5 步）
     │   └── audit.py                  # 文档一致性机械检查（死链/漂移/结构完整性）
     ├── references/
     │   ├── workflow-patterns.md      # 执行计划工作流与跨上下文协作详细说明
@@ -249,6 +252,7 @@ init-agent-docs/
     │   ├── pre-commit-node.sh
     │   ├── pre-commit-go.sh
     │   ├── pre-commit-generic.sh
+    │   ├── reference-transaction.sh  # canonical 分支快进保护（可选，第 6.5 步）
     │   └── pre-commit-config.yaml    # pre-commit 框架样例
     └── pitch/
         └── presentation.html         # 对外宣讲 deck（非运行时产物，可忽略）
@@ -282,7 +286,7 @@ init-agent-docs/
 5. **项目使用哪些 AI Agent？**（Claude Code、Codex、Gemini CLI、Cursor 等——这决定需要哪些同步文件名）
 6. **项目的构建产物在哪里？**（dist/、build/、data/、node_modules/ 等——这些路径需要写入硬约束）
 7. **项目有没有自动化测试？** 测试命令是什么？这决定了测试要求部分怎么写。
-8. **这个项目的默认协作倾向是什么？**（通常是单 Agent 顺序推进，还是经常多 Agent / 多窗口并行？这是默认倾向，不是对每个任务的一刀切规定）
+8. **这个项目的默认协作倾向是什么？**（通常是单 Agent 顺序推进，还是经常多 Agent / 多窗口并行？这是默认倾向，不是对每个任务的一刀切规定。若确认多 Agent 并行倾向，初始化时应向用户提议安装多 Agent worktree 运行时——见第 6.5 步）
 9. **这个项目更常见的是哪类任务？**（小修改、分阶段任务，还是需要 reviewer / verifier 的高风险改动？）
 10. **文档语言？** 当前模板仅提供中文（`assets/templates/zh/`）。如目标项目以英文为主，需要先把 zh 模板翻译成英文再使用，或在初始化后人工改写——本 skill 不再附带英文模板。
 
@@ -290,7 +294,7 @@ init-agent-docs/
 
 - **直接执行模式**：小任务、低风险修改，不建详细计划；`docs/CURRENT.md` 写 1-3 行即可。
 - **分阶段模式**：中等复杂度任务，需要计划文件，但通常仍是单 owner 顺序推进。
-- **协作模式**：高复杂度或高风险任务，存在多 Agent / 多窗口并行，计划文件中必须包含任务分配、领取状态和复查节点。
+- **协作模式**：高复杂度或高风险任务，存在多 Agent / 多窗口并行，计划文件中必须包含任务分配、领取状态和复查节点；多个 owner 并行时用 worktree 机制（第 6.5 步）隔离各自的工作区。
 
 如果用户没有明确说明，默认从轻量模式开始；一旦任务跨模块、跨会话或需要并行，就升级到更重的模式。**不要在初始化阶段把某个模式永久写死给整个项目**。
 
@@ -648,6 +652,48 @@ python scripts/changelog.py add \
 
    `git reset --soft HEAD~1` 仅撤回 commit 不动工作区；如果该 commit 是仓库的第一次 commit，跳过这条命令（无 HEAD~1 可回退）。
 
+### 第 6.5 步：多 Agent worktree 运行时（协作倾向项目可选，默认跳过）
+
+**触发条件**：第 0 步维度 8 确认项目经常多 Agent / 多窗口并行（协作模式倾向），且用户同意安装。单 Agent 顺序推进的项目**跳过本步**——机制成本不为偶发场景预付（Occam）；将来协作成为常态时可随时补装，只需执行本步并在 AGENTS.md 保留路由节。
+
+**要解决的问题**：多个 Agent 共享同一工作树时，未提交修改互相可见、`git add`/commit 的 index 竞争、半成品互相污染。git worktree 物理隔离工作区与 index；helper 把"先建 worktree 再干活"从口头约定变成四动作机械入口。
+
+1. 复制四动作 helper 到项目：
+
+   ```bash
+   cp assets/scripts/worktree_task.py scripts/
+   ```
+
+2. （推荐）安装 canonical 分支快进保护 hook——防止普通 Agent 在 canonical 分支上 amend / 非快进改写历史：
+
+   ```bash
+   cp assets/hooks/reference-transaction.sh .githooks/reference-transaction
+   chmod +x .githooks/reference-transaction
+   ```
+
+   前提是第 6 步已配置 `core.hooksPath = .githooks`。使用 pre-commit 框架（路径 C）的项目：hook 不经过框架，仍按上面方式放入 `.githooks/` 并设 `core.hooksPath`，或改写为 local hook 加入 `.pre-commit-config.yaml`（`hook_types: [reference-transaction]`）。
+
+3. 主分支不是 `main` / `master` 时显式声明（helper 与 hook 共用这个配置；默认解析顺序 config → main → master → 当前分支）：
+
+   ```bash
+   git config worktree-task.canonicalRef refs/heads/<主分支名>
+   ```
+
+4. 在 AGENTS.md 保留模板候选节「多 Agent worktree 路由」（默认偏好段之后），并运行 `python scripts/agent_links.py repair` 同步。
+
+5. 验证一次全生命周期（可选但推荐）：
+
+   ```bash
+   python scripts/worktree_task.py create          # → created + task/<id> + 独立 worktree 路径
+   # 在 worktree 内随便提交一个改动，然后：
+   python scripts/worktree_task.py integrate <id>  # → integrated，主分支快进
+   python scripts/worktree_task.py cleanup <id>    # → cleaned，worktree 与分支移除
+   ```
+
+**helper 的四动作语义**（详细失败语义表见 `assets/references/workflow-patterns.md`「工具支持」节）：`create` 每次生成新不透明 ID；`check` 只读报告；`integrate` 持 per-repo 锁 + canonical 校验 + `merge --ff-only`，`needs-rebase` / `head-drift` 失败时保留 task 对象；`cleanup` 仅对可证明已集成且 clean 的对象生效，半缺失 fail closed。响应丢失不认领原调用——重试 `create` 生成新 ID，重试 `integrate` 由 Git ancestry 判 `already-integrated`，孤儿经 `git worktree list --porcelain` 与 `git branch --list 'task/*'` 可发现。
+
+---
+
 ### 第 7 步：静态自检
 
 **通用项（所有规模都要过）：**
@@ -742,7 +788,7 @@ python scripts/changelog.py add \
 
 复杂任务需要跨上下文窗口交接。计划文件是不同 Agent / 会话之间的唯一记忆载体，其详细设计 rationale 见设计哲学第 4 条。
 
-执行计划的具体工作模式（单 Agent 顺序推进 vs 多 Agent 并行协作）、git worktree 用法、阶段粒度控制、协调人职责，以及计划文件的生命周期管理，详见 `assets/references/workflow-patterns.md`。
+执行计划的具体工作模式（单 Agent 顺序推进 vs 多 Agent 并行协作）、git worktree 隔离与 `worktree_task` 四动作机制、阶段粒度控制、协调人职责，以及计划文件的生命周期管理，详见 `assets/references/workflow-patterns.md`。
 
 计划模板在 `assets/templates/zh/plan.md.tpl`。关键字段包括任务分配表、阶段划分、决策记录、风险与遗留。
 
@@ -803,3 +849,5 @@ python scripts/changelog.py add \
 16. **在文档里留迁移考古**：旧文档迁移后加"⚠️ 已迁移至…"、"仅供历史追溯"等弃用标注。这等于在文档内部埋考古层，污染当前信息空间。解法：`git rm` 删除旧文档，CHANGELOG 记录迁移事件，考古查询走 `git log -- <旧路径>`——`git log` 是考古信息的唯一合法归宿。
 
 17. **记忆目录空转**：中型项目创建了 `.agent/memory/` 但从不在其中写入记忆，目录沦为摆设。解法：完工检查清单的"记忆自检"项应被实际触发；审计时若发现持续 30 天无更新，应提示删除或激活。
+
+18. **并行协作共享同一工作树**：多个 Agent 在同一目录工作，未提交修改互相覆盖、`git add` / commit 的 index 竞争、半成品互相污染。解法：协作倾向项目按第 6.5 步安装 worktree 运行时——普通写任务默认 `create` 隔离，canonical 分支历史由 `reference-transaction` hook 机械保护，不靠"记得切 worktree"的口头约定。

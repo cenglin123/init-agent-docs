@@ -106,6 +106,16 @@
 - TypeScript/React `camelCase` 变量、`PascalCase` 组件
 -->
 
+### 多 Agent worktree 路由（可选机制）
+
+<!-- 候选项：仅当项目确认多 Agent / 多窗口并行倾向、且已按 SKILL.md 第 6.5 步
+     安装 scripts/worktree_task.py（及可选 reference-transaction hook）时保留；
+     否则整节删除。 -->
+
+- 普通 tracked 写任务默认先 `python scripts/worktree_task.py create` 获得独立 branch（`task/<id>`）与 linked worktree，在 worktree 内提交后 `integrate` 回主分支。纯查询、用户直接编辑、单文件小修补不创建 worktree。
+- 四动作：`create` / `check <id>` / `integrate <id>` / `cleanup <id>`。失败保留 task 对象：`needs-rebase` 在 task worktree 内 rebase 主分支后重试；`head-drift` 复核后重试；响应丢失重试由 Git ancestry 判 `already-integrated`。
+- 孤儿发现：`git worktree list --porcelain` 与 `git branch --list 'task/*'`；仅对可证明 clean 的对象执行 `cleanup`。
+
 ## 测试要求
 
 <!-- 根据项目实际情况填写。示例：

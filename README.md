@@ -17,6 +17,7 @@
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agent/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
 - `.githooks/`：可选 lint 质量门控，调用 `scripts/agent_links.py` 做同步兜底
+- `scripts/worktree_task.py` + `.githooks/reference-transaction`：可选的多 Agent worktree 运行时（SKILL.md 第 6.5 步；四动作 create/check/integrate/cleanup + canonical 分支快进保护），协作倾向项目才安装
 
 背后的设计哲学见 SKILL.md"设计哲学"一节。
 
@@ -32,12 +33,14 @@ init-agent-docs/
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
     │   ├── agent_links.py                # 同步检查与修复
+    │   ├── worktree_task.py              # 多 Agent worktree 四动作运行时（可选）
     │   └── audit.py                      # 文档一致性机械检查
     ├── hooks/
     │   ├── pre-commit-python.sh          # ruff / flake8
     │   ├── pre-commit-node.sh            # eslint / prettier
     │   ├── pre-commit-go.sh              # gofmt / go vet
     │   ├── pre-commit-generic.sh         # 空壳，自己填
+    │   ├── reference-transaction.sh      # canonical 分支快进保护（可选，配 worktree_task）
     │   └── pre-commit-config.yaml        # 给使用 pre-commit 框架的项目
     └── pitch/
         └── presentation.html             # 对外分享用的 pitch deck，不是运行时产物

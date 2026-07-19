@@ -71,7 +71,7 @@ Agent 的上下文窗口是有限的。一个复杂任务（如"重构认证系�
 
 2. **并行执行**：
    - 不同 owner 在各自的窗口中领取任务（状态从 `queue` 改为 `in_progress`）
-   - **（推荐）使用 git worktree 为每个 owner 创建独立工作环境**，避免多 Agent 同时修改同一分支产生冲突，详见下方"工具支持：Git Worktree"
+   - **（推荐）使用 worktree 机制为每个 owner 创建独立工作环境**（已安装 `scripts/worktree_task.py` 时一律走四动作），避免多 Agent 共享工作树产生冲突，详见下方"工具支持：Git Worktree 与 worktree_task 四动作"
    - 各自推进、验证、提交代码
    - 完成后更新计划：状态改为 `review`，填写完成记录
 
@@ -95,84 +95,80 @@ Agent 的上下文窗口是有限的。一个复杂任务（如"重构认证系�
 
 ---
 
-### 工具支持：Git Worktree
+### 工具支持：Git Worktree 与 worktree_task 四动作
 
-在多 Agent 并行协作时，**推荐使用 git worktree** 来隔离不同 owner 的工作环境。
+在多 Agent 并行协作时，**必须隔离不同 owner 的工作环境**——共享同一工作树意味着未提交修改互相可见、index 竞争、半成品互相污染。
 
 **什么是 git worktree？**
 
-Git worktree 允许你在同一个仓库的不同目录下检出不同的分支，这些工作目录共享同一个 `.git` 仓库，但各自有独立的工作区。
+Git worktree 允许你在同一个仓库的不同目录下检出不同的分支，这些工作目录共享同一个 `.git` 仓库，但各自有独立的工作区和 index。
 
-**为什么需要 git worktree？**
+**为什么需要隔离机制而不只是口头约定？**
 
-多个 Agent 同时修改同一个分支会产生冲突和混乱。git worktree 让每个 owner 在自己的分支上工作，通过 PR/MR 合并，避免了这些问题。
+多个 Agent 同时修改同一个工作树会产生冲突和混乱。推荐 worktree 是软约束——Agent 忘了切就重新暴露竞态。机制化（helper 默认路由 + canonical 分支保护 hook）把隔离变成硬约束：进入 create 后工作树和 index 物理分离；canonical 分支的历史由 hook 机械保护。
 
-**使用示例：**
+#### 机制化：worktree_task 四动作
 
-```bash
-# 1. 主分支是 main，当前在项目根目录工作
-# 2. 为 owner A 创建一个 worktree
-git worktree add ../project-owner-a feature/owner-a-task
+本 skill 附带 `assets/scripts/worktree_task.py`（安装步骤见 SKILL.md 第 6.5 步）。它是四动作 Git wrapper，不保存任务状态——Git branch / worktree registration / history 是唯一事实源：
 
-# 3. 为 owner B 创建另一个 worktree
-git worktree add ../project-owner-b feature/owner-b-task
+| 动作 | 行为 |
+|------|------|
+| `create` | 从当前 canonical 分支创建 `task/<id>` 分支与独立 linked worktree；每次调用生成新不透明 ID（同语义重复派单也得不同身份） |
+| `check <id>` | 只读报告 branch / registration / clean / ahead-behind / 是否已是 canonical 祖先 |
+| `integrate <id>` | 取得 per-repo 共享锁，校验 canonical 主工作树（git-dir == common-dir 且 symbolic-ref == canonical 分支）与 task 身份，复核 ref 未漂移后 `merge --ff-only` |
+| `cleanup <id>` | 仅在 tip 已是 canonical 祖先、worktree clean、身份完全匹配时移除 worktree + 删分支；半缺失 fail closed |
 
-# 4. 每个 owner 在自己的目录中工作
-# owner A 在 ../project-owner-a
-# owner B 在 ../project-owner-b
+**失败语义**（失败后 task 对象一律保留，不覆盖不清理不确定状态）：
 
-# 5. 查看所有 worktree
-git worktree list
+| result | 含义 | 处置 |
+|--------|------|------|
+| `needs-rebase` | task 不含当前 canonical tip | 在 task worktree 内 `git rebase <canonical>` 后重试 |
+| `head-drift` | 校验后 canonical/task 漂移 | 未合并未清理；复核后重试 |
+| `already-integrated` | tip 已是 canonical 祖先 | 响应丢失后的安全重试结果；不重复提交 |
+| `lock-busy` | canonical writer 锁被持有 | 稍后重试 |
+| `partial-state` / `refused` | cleanup 身份不符 | fail closed，人工核对 |
 
-# 6. owner 完成任务后，删除 worktree（可选）
-git worktree remove ../project-owner-a
-```
+**响应丢失恢复**：不认领原调用。重试 `create` 生成新 ID；旧对象经 `git worktree list --porcelain` 与 `git branch --list 'task/*'` 可发现，仅对可证明 clean 的对象执行 cleanup；重试 `integrate` 经 ancestry 判 `already-integrated`。
 
-**与 Agent 的配合使用：**
-
-1. **协调人创建 worktree**：
-   ```bash
-   # 为每个子任务创建独立分支和 worktree
-   git worktree add ../project-auth refactor/auth
-   git worktree add ../project-payment refactor/payment
-   ```
-
-2. **分配 worktree 给 owner**：
-   - 告诉 owner A："在 `../project-auth` 目录下工作，这是你的独立环境"
-   - 告诉 owner B："在 `../project-payment` 目录下工作"
-
-3. **owner 在各自 worktree 中工作**：
-   - 独立修改、提交代码
-   - 互不干扰，不会产生冲突
-
-4. **合并代码**：
-   - owner 完成后，创建 PR/MR 合并到主分支
-   - reviewer 代码审查通过后合并
-   - 删除 worktree（可选）
+**canonical 分支快进保护 hook**（`assets/hooks/reference-transaction.sh`）：安装后，canonical 分支（默认解析 `main` → `master`，可用 `git config worktree-task.canonicalRef` 显式指定）的每次更新必须能证明快进——amend、向非后代的 reset、rebase rewrite、直接 non-FF update-ref 被机械拒绝；`task/*` 分支不受门控，owner 在 task worktree 内可自由 amend/rebase。
 
 **git worktree 的优势：**
 
 | 优势 | 说明 |
 |------|------|
-| **隔离性** | 每个 owner 有独立的工作目录，互不干扰 |
+| **隔离性** | 每个 owner 有独立的工作目录和 index，互不干扰 |
 | **共享 Git 历史** | 所有 worktree 共享同一个 `.git`，节省空间 |
 | **独立分支** | 每个任务在不同分支上，便于代码审查和回滚 |
 | **无冲突** | 不会因为同时修改同一文件而产生冲突 |
-| **易于清理** | 任务完成后可删除 worktree，保持工作区整洁 |
+| **易于清理** | 任务完成后 cleanup 移除 worktree + 分支 |
 
 **注意事项：**
 
-- worktree 路径建议放在项目根目录的父目录下（如 `../project-xxx`），避免混入项目本身的文件结构
-- 每个 worktree 应该有明确的命名（如 `../project-auth`、`../project-payment`），便于识别
-- 协调人需要用 `git worktree list` 定期检查活跃的 worktree，避免遗留过多未清理的工作目录
+- worktree 根目录默认在仓库父目录的 `<仓库名>.worktrees/`（可用 `git config worktree-task.worktreeRoot` 覆盖），避免混入项目本身的文件结构
+- 协调人用 `git worktree list` 或 `worktree_task.py check <id>` 定期检查活跃 task，避免遗留孤儿；孤儿只清理可证明 clean 的对象
+- 工作树内脚本若按"脚本位置向上找仓库根"定位，会自动指向 worktree 自身——派生数据类脚本（embedding 重建、全量 lint 等）应只在主工作树运行，集成后统一执行
 
-**不使用 git worktree 的风险：**
+**不使用隔离机制的风险：**
 
-多个 Agent 在同一个分支上工作会导致：
-- 同时修改同一文件产生冲突
-- 未完成的代码影响其他 owner
-- 难以追溯谁改了什么
-- 代码审查困难
+多个 Agent 在同一个工作树上工作会导致：
+- 未提交的修改互相可见、互相覆盖
+- git index 竞争（`git add` / commit 交错）
+- 半成品代码污染其他 owner 的工作区
+- 难以追溯谁改了什么，代码审查困难
+
+#### 手工命令（helper 不可用时的降级路径）
+
+```bash
+# 为 owner A / B 各建独立分支和 worktree
+git worktree add ../project-owner-a feature/owner-a-task
+git worktree add ../project-owner-b feature/owner-b-task
+
+# 查看 / 清理
+git worktree list
+git worktree remove ../project-owner-a
+```
+
+手工路径只适用于 helper 未安装的项目；安装后一律走四动作（身份、校验、失败语义由 helper 保证，不靠 Agent 记忆）。
 
 ---
 
