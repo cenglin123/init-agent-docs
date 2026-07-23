@@ -55,7 +55,7 @@
 - **最近教训**：<!-- 最重要的 1-2 条 -->
 - **详细记忆**：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
 
-> 每次更新 `.agent/memory/` 后，同步维护本节摘要。
+> 每次更新 `.agent/memory/` 后，同步维护本节摘要。MEMORY.md 的索引标记段（`<!-- memory-index:start/end -->`）由 `python scripts/maintain.py` 自动重建——agent 只负责记忆的沉淀与检索，不手工编辑标记段内容。
 
 ## 行为规则
 
@@ -69,6 +69,16 @@
 3. 上述步骤完成前，**禁止执行写操作、禁止做出有副作用的判断**
 
 > 本条是止损措施——compact 后 Agent 丢失大量上下文，必须先恢复关键状态再行动。当前依赖 Agent 遵守（软约束）；待框架支持 compact 事件 hook 后迁移为硬约束。
+
+### 任务前记忆检索
+
+除非任务非常简单明确，开始实质性工作前必须先检索记忆系统获取参考——git log / CHANGELOG / `.agent/memory/` 都是记忆系统的一部分：
+
+1. `git log --oneline -15` 和/或 `python scripts/changelog.py recent` — 近期变更脉络
+2. 读取 [.agent/memory/MEMORY.md](.agent/memory/MEMORY.md) — 过往经验、教训与用户画像<!-- 小型项目删除本行 -->
+3. 命中相关记忆文件时按需深入阅读
+
+唯一豁免：用户当次明确表示不需要。
 
 ### 硬约束（不可违反）
 <!-- 候选项：只有目标仓库已有约束或用户确认时保留。下面的密钥、构建产物、hook 等通用规则不要无脑写入最终 AGENTS.md；保留时必须改成目标仓库的具体路径、命令或约束。 -->
@@ -172,7 +182,7 @@
 
 **定期审计**
 
-14. 每 ~20 次任务或每月，运行 `python scripts/audit.py check` 做机械检查。如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
+14. 每 ~20 次任务或每月，运行 `python scripts/maintain.py`（重建记忆索引 + 机械检查 + 记忆活性报告 + 近期脉络摘要）；无记忆系统的小型项目直接运行 `python scripts/audit.py check`。如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
 
 ### docs/ 文件的治理规则
 
@@ -210,4 +220,4 @@
 - [ ] **CHANGELOG.md**：是否值得记录？如是，用 `python scripts/changelog.py add ...` 插入到当天日期节；需要查看历史时只用 `titles/show` 局部读取。
 - [ ] **同步一致性**：本文件若被编辑，运行 `python scripts/agent_links.py check`；只有不一致时才用 `python scripts/agent_links.py repair` 修复。
 - [ ] **跳过条件**：纯格式修改、注释修改、同一会话内已记录的变更，可跳过文档更新步骤（但验证步骤不可跳过）。
-- [ ] **记忆自检**：本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agent/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要。<!-- 小型项目：标注"小型项目，无记忆目录" -->
+- [ ] **记忆自检**：本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agent/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要；MEMORY.md 索引段由 `python scripts/maintain.py` 维护，无需手改。<!-- 小型项目：标注"小型项目，无记忆目录" -->

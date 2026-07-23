@@ -186,6 +186,8 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 
 - **内联层（硬约束）**：AGENTS.md「项目记忆」段承载用户称呼、关键偏好、活跃项目、最近教训等 5-10 行关键信息。因为 AGENTS.md 始终在上下文，模型每次对话都能看到这些内容——这是硬的、无法绕过的保证。
 - **外置层（软约束）**：`.agent/memory/` 目录承载完整用户画像、项目上下文、反馈历史等详细内容。Agent 通过指针按需读取，compact 后由哨兵提示重新加载。
+- **检索硬约束**：有记忆系统时，除非任务非常简单明确，任务执行前必须先检索记忆系统获取参考——`git log` / CHANGELOG / `.agent/memory/` 都是记忆系统的一部分。记忆系统不检索就等于不存在，这条必须作为行为规则写入 AGENTS.md，而不是依赖 Agent 自发想起。
+- **维护管线**：中型及以上项目安装 `scripts/maintain.py`，把"重建记忆索引 + audit 机械检查 + 记忆活性统计 + 近期脉络摘要"编成一条命令。其中 MEMORY.md 的索引标记段（`<!-- memory-index:start/end -->`）由脚本每次维护自动重建——索引是纯派生信息（文件清单 + 标题 + 时间），手工维护必然腐烂且浪费上下文；Agent 的判断力应花在记忆内容的取舍（写什么、更新什么）上，而不是目录维护上。这是设计哲学第 9 条"硬约束靠工具"在记忆系统上的兑现。
 - **结构硬约束**：pre-commit hook 检查 `.agent/memory/` 目录不为空壳；`audit.py` 检查记忆文件完整性和 AGENTS.md 指针存在性——防止记忆系统静默腐化。
 - **规模裁剪**：小型项目不建 `.agent/memory/` 目录（单次会话即可完成的工具脚本不需要跨会话记忆）；中型+项目建立全套记忆目录。
 
@@ -206,6 +208,7 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 ├── scripts/
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
 │   ├── agent_links.py     # AGENTS/CLAUDE/GEMINI 同步检查与修复
+│   ├── maintain.py        # （中型+）文档体系维护管线：记忆索引重建 + 审计 + 活性报告
 │   ├── worktree_task.py   # （可选）多 Agent worktree 四动作运行时（第 6.5 步）
 │   └── audit.py            # 文档一致性机械检查（死链/漂移/结构）
 ├── .githooks/             # （可选）质量门控
@@ -242,6 +245,7 @@ init-agent-docs/
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
     │   ├── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
+    │   ├── maintain.py               # 文档体系维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
     │   ├── worktree_task.py          # 多 Agent worktree 四动作运行时（可选，第 6.5 步）
     │   └── audit.py                  # 文档一致性机械检查（死链/漂移/结构完整性）
     ├── references/
@@ -328,7 +332,7 @@ git log --oneline HEAD..origin/main
 | 选项 | 规模定义 | 创建哪些文件 | plans/ 目录 | 记忆系统 | 典型场景 |
 |------|---------|------------|------------|---------|---------|
 | **小型** | 脚本/工具，核心文件 < 5 个 | AGENTS.md + docs/CHANGELOG.md + docs/CURRENT.md | **不建** | **不建** | 单次会话能完成的工具脚本 |
-| **中型** | 单体应用，5–30 个文件 | 全套：docs/STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | `.agent/memory/` + MEMORY.md + user/role.md | 需要长期维护的独立应用 |
+| **中型** | 单体应用，5–30 个文件 | 全套：docs/STRUCTURE.md + docs/*（overview/deployment/pitfalls） | active + completed | `.agent/memory/` + MEMORY.md + user/role.md + `scripts/maintain.py` | 需要长期维护的独立应用 |
 | **大型** | 多模块/微服务，> 30 个文件 | 中型全套 + 模块级拆分提示 | active + completed + 模块子计划 | 同中型 | 多团队协作的复杂系统 |
 
 **执行原则：**
@@ -433,7 +437,7 @@ python scripts/agent_links.py check  --mode=hardlink
 - `项目记忆索引：[.agent/memory/MEMORY.md]...`
 - `## 项目记忆` 整段（含其下所有行和 HTML 注释）
 
-只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录。
+只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录；「任务前记忆检索」中的第 2 条（读取 `.agent/memory/MEMORY.md`）同步删除，保留 git log / CHANGELOG 检索。
 
 裁剪后运行 `python scripts/agent_links.py repair` 把改动同步到 CLAUDE.md / GEMINI.md。
 
@@ -562,11 +566,20 @@ python scripts/changelog.py add \
 
 3. 将第 0 步收集的用户信息填入 `user/role.md`（至少填称呼和技术栈）。Agent 在初始化时已有这些信息，不要留空占位符。
 
-4. 更新 AGENTS.md「项目记忆」内联段：将已知的用户信息和项目上下文写入摘要中的 `- **用户**：` 和 `- **项目上下文**：` 行。不要留 `<!--  -->` 注释——这是最终交付物。
+4. 安装维护管线并生成首版记忆索引：
 
-5. 运行 `python scripts/agent_links.py repair` 同步 CLAUDE.md / GEMINI.md。
+   ```bash
+   cp assets/scripts/maintain.py scripts/
+   python scripts/maintain.py --memory-index
+   ```
 
-6. 确认 AGENTS.md 信息导航包含记忆指针行（`- 项目记忆索引：[.agent/memory/MEMORY.md]...`）。
+   maintain.py 是文档体系的自动化维护入口：重建 MEMORY.md 索引标记段（`<!-- memory-index:start/end -->`，段内禁止手改）+ 调用 audit.py / agent_links.py 机械检查 + 记忆活性统计 + 近期脉络摘要。日常维护一条命令 `python scripts/maintain.py`；`--check` 为只读校验（索引过期或检查失败时退出码非 0，可挂 CI）。**MEMORY.md 索引是纯派生信息，由脚本维护；agent 只负责记忆的沉淀与检索。**
+
+5. 更新 AGENTS.md「项目记忆」内联段：将已知的用户信息和项目上下文写入摘要中的 `- **用户**：` 和 `- **项目上下文**：` 行。不要留 `<!--  -->` 注释——这是最终交付物。
+
+6. 运行 `python scripts/agent_links.py repair` 同步 CLAUDE.md / GEMINI.md。
+
+7. 确认 AGENTS.md 信息导航包含记忆指针行（`- 项目记忆索引：[.agent/memory/MEMORY.md]...`）。
 
 > **设计理由**：AGENTS.md 内联段是硬约束——始终在 Agent 上下文；外置 `.agent/memory/` 是扩展容量。两者互补，缺一不可。详见设计哲学第 10 条。
 
@@ -740,6 +753,8 @@ python scripts/changelog.py add \
 13. AGENTS.md 包含「项目记忆」内联段且非空（不含 `<!--  -->` 模板注释）
 14. AGENTS.md 信息导航包含 `.agent/memory/MEMORY.md` 指针
 15. `python scripts/audit.py memory` 退出码为 0
+16. `scripts/maintain.py` 已复制且 `python scripts/maintain.py --check` 退出码为 0；MEMORY.md 索引标记段已重建（不含"暂无记忆条目"以外的占位文字）
+17. AGENTS.md 行为规则包含「任务前记忆检索」段，且其中第 2 条指向 `.agent/memory/MEMORY.md`
 
 **小型项目额外项：**
 
@@ -801,7 +816,9 @@ python scripts/changelog.py add \
 
    初始化完成时通常是干净的（无死链、无漂移、行数正常），脚本应退出 0。如果有 `[MISS]` 出生档案项——那是正常的，出生档案要到第 5 步才写入；但其他项不应该出现。
 
-   **小型项目注意**：因为不建 `docs/STRUCTURE.md`，`audit.py structure` 会输出 0 条结果（相当于跳过），不会报错。不需要为小型项目裁剪 `audit.py` 本身。
+    **小型项目注意**：因为不建 `docs/STRUCTURE.md`，`audit.py structure` 会输出 0 条结果（相当于跳过），不会报错。不需要为小型项目裁剪 `audit.py` 本身。
+
+5. **中型及以上项目**：`scripts/maintain.py` 已在第 5.5 步安装，它是日常维护的统一入口（内部已包含 `audit.py check`）；AGENTS.md「定期审计」条目应指向 `python scripts/maintain.py`。小型项目不装 maintain.py，「定期审计」条目保留 `python scripts/audit.py check`。
 
 ---
 
@@ -869,6 +886,10 @@ python scripts/changelog.py add \
 
 16. **在文档里留迁移考古**：旧文档迁移后加"⚠️ 已迁移至…"、"仅供历史追溯"等弃用标注。这等于在文档内部埋考古层，污染当前信息空间。解法：`git rm` 删除旧文档，CHANGELOG 记录迁移事件，考古查询走 `git log -- <旧路径>`——`git log` 是考古信息的唯一合法归宿。
 
-17. **记忆目录空转**：中型项目创建了 `.agent/memory/` 但从不在其中写入记忆，目录沦为摆设。解法：完工检查清单的"记忆自检"项应被实际触发；审计时若发现持续 30 天无更新，应提示删除或激活。
+17. **记忆目录空转**：中型项目创建了 `.agent/memory/` 但从不在其中写入记忆，目录沦为摆设。解法：完工检查清单的"记忆自检"项应被实际触发；`maintain.py` 的记忆活性统计会在 30 天无更新时提示，审计时应据此决定激活或裁剪。
 
 18. **并行协作共享同一工作树**：多个 Agent 在同一目录工作，未提交修改互相覆盖、`git add` / commit 的 index 竞争、半成品互相污染。解法：协作倾向项目按第 6.5 步安装 worktree 运行时——普通写任务默认 `create` 隔离，canonical 分支历史由 `reference-transaction` hook 机械保护，不靠"记得切 worktree"的口头约定。
+
+19. **手工维护 MEMORY.md 索引**：索引是纯派生信息（文件清单 + 标题 + 时间），手工维护必然腐烂，且每次维护都消耗上下文。解法：索引标记段（`<!-- memory-index:start/end -->`）由 `scripts/maintain.py` 自动重建，agent 只负责记忆内容的沉淀与检索。
+
+20. **凭当前上下文直接开干**：接到任务不查记忆系统就开始实现，重蹈已知教训、重复已否决的方案。解法：AGENTS.md「任务前记忆检索」硬约束——除非任务非常简单明确，先查 git log / CHANGELOG / `.agent/memory/MEMORY.md` 再动手。

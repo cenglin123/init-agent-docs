@@ -13,6 +13,7 @@
 - `scripts/changelog.py`：CHANGELOG 标题树、近期条目、局部读取和追加
 - `scripts/agent_links.py`：`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步检查与修复
 - `scripts/audit.py`：文档一致性机械检查（死链 / 结构完整性 / 依赖漂移）
+- `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段 + 调用 audit/agent_links 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agent/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
@@ -33,6 +34,7 @@ init-agent-docs/
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
     │   ├── agent_links.py                # 同步检查与修复
+    │   ├── maintain.py                   # 维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
     │   ├── worktree_task.py              # 多 Agent worktree 四动作运行时（可选）
     │   └── audit.py                      # 文档一致性机械检查
     ├── hooks/
@@ -53,7 +55,7 @@ init-agent-docs/
 ├── AGENTS.md              # 行为规则 + 治理规则 + 内联记忆（硬约束）+ 导航
 ├── CLAUDE.md / GEMINI.md  # 同步副本
 ├── .agent/memory/         # 跨会话记忆（硬约束内联在 AGENTS.md）
-│   ├── MEMORY.md          # 记忆索引
+│   ├── MEMORY.md          # 记忆索引（标记段由 maintain.py 自动重建，禁止手改）
 │   └── user/role.md       # 用户画像
 ├── docs/
 │   ├── STRUCTURE.md       # 文档总索引
@@ -64,6 +66,7 @@ init-agent-docs/
 └── scripts/
     ├── changelog.py
     ├── agent_links.py
+    ├── maintain.py
     └── audit.py
 ```
 
@@ -122,6 +125,7 @@ git branch --show-current
 - 修改模板后，手工在一个测试项目上跑一遍 skill 看是否还通顺。
 - 如果新增一个模板文件，记得在 zh/ 下添加，并在 SKILL.md 的"目标文件结构"一节补说明。
 - 维护 CHANGELOG 相关规则时，优先改 `assets/scripts/changelog.py` 的能力和 AGENTS 模板中的调用说明，不要把手工插入流程重新塞回模板。
+- 维护 MEMORY.md 索引相关规则时，优先改 `assets/scripts/maintain.py` 的重建逻辑；索引标记段（`<!-- memory-index:start/end -->`）是脚本领地，模板里不要要求 agent 手工维护索引。
 - 维护同步规则时，优先改 `assets/scripts/agent_links.py` 和 hook 调用，不要要求 Agent 记平台差异命令。
 - 维护方法论时，只保留跨项目可迁移、能解决真实问题的原则（如 Occam / Bitter Lesson），不要复制不必要的治理形式或组织隐喻。
 - 哲学条款尽量保留，增改需要在 SKILL.md 顶部说清"为什么"——本 skill 的价值一半以上在于设计哲学的阐释，纯模板替换价值有限。

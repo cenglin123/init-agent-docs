@@ -59,6 +59,41 @@ class SkillGuidanceTestCase(unittest.TestCase):
             ],
         )
 
+    def test_maintain_pipeline_and_memory_retrieval_guidance(self) -> None:
+        skill = read_repo_file("SKILL.md")
+        self.assert_contains_all(
+            skill,
+            [
+                "maintain.py",
+                "任务前记忆检索",
+                "memory-index:start",
+                "scripts/maintain.py --memory-index",
+                "手工维护 MEMORY.md 索引",
+            ],
+        )
+
+        tpl = read_repo_file("assets/templates/zh/AGENTS.md.tpl")
+        self.assert_contains_all(
+            tpl,
+            [
+                "任务前记忆检索",
+                "git log / CHANGELOG / `.agent/memory/` 都是记忆系统的一部分",
+                "python scripts/maintain.py",
+                "<!-- memory-index:start/end -->",
+            ],
+        )
+
+        memory_tpl = read_repo_file("assets/templates/zh/MEMORY.md.tpl")
+        self.assert_contains_all(
+            memory_tpl,
+            [
+                "<!-- memory-index:start -->",
+                "<!-- memory-index:end -->",
+                "禁止手工编辑标记段内容",
+                "维护分工",
+            ],
+        )
+
     def test_worktree_runtime_guidance_present(self) -> None:
         skill = read_repo_file("SKILL.md")
         self.assert_contains_all(
