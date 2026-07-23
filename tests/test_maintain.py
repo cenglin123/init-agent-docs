@@ -102,6 +102,58 @@ class MaintainPipelineTestCase(unittest.TestCase):
         check = self.run_maintain("--check")
         self.assertEqual(check.returncode, 1)
 
+    def test_no_markers_fails(self) -> None:
+        index = self.root / ".agent" / "memory" / "MEMORY.md"
+        index.write_text("# 项目记忆索引\n\n无标记段的旧版文件。\n", encoding="utf-8")
+        result = self.run_maintain("--memory-index")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("memory-index:start", result.stdout)
+        check = self.run_maintain("--check")
+        self.assertEqual(check.returncode, 1)
+
+    def test_small_project_skip(self) -> None:
+        import shutil as _shutil
+
+        _shutil.rmtree(self.root / ".agent")
+        result = self.run_maintain("--memory-index")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("small project", result.stdout)
+        full = self.run_maintain()
+        self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
+        check = self.run_maintain("--check")
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_staleness_uses_git_commit_time_over_mtime(self) -> None:
+        """git 不保留 mtime：fresh clone 后活性统计应以最后提交时间为准。"""
+        from datetime import datetime, timedelta
+
+        def git(*args: str, env: dict[str, str] | None = None) -> None:
+            proc = subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                cwd=self.root,
+                capture_output=True,
+                env=env,
+                timeout=30,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+
+        old_date = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%S")
+        commit_env = dict(
+            os.environ,
+            GIT_AUTHOR_DATE=old_date,
+            GIT_COMMITTER_DATE=old_date,
+        )
+        git("init")
+        git("add", ".")
+        git("commit", "-m", "old memory", env=commit_env)
+        # 模拟 fresh clone：所有记忆文件 mtime 刷成现在
+        for p in (self.root / ".agent" / "memory").rglob("*.md"):
+            os.utime(p)
+
+        result = self.run_maintain()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("memory untouched", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

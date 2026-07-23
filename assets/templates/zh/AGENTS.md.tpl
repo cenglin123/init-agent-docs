@@ -78,7 +78,7 @@
 2. 读取 [.agent/memory/MEMORY.md](.agent/memory/MEMORY.md) — 过往经验、教训与用户画像<!-- 小型项目删除本行 -->
 3. 命中相关记忆文件时按需深入阅读
 
-唯一豁免：用户当次明确表示不需要。
+唯一豁免：任务非常简单明确时可跳过；此外，用户当次明确表示不需要时也可豁免。
 
 ### 硬约束（不可违反）
 <!-- 候选项：只有目标仓库已有约束或用户确认时保留。下面的密钥、构建产物、hook 等通用规则不要无脑写入最终 AGENTS.md；保留时必须改成目标仓库的具体路径、命令或约束。 -->
@@ -182,7 +182,7 @@
 
 **定期审计**
 
-14. 每 ~20 次任务或每月，运行 `python scripts/maintain.py`（重建记忆索引 + 机械检查 + 记忆活性报告 + 近期脉络摘要）；无记忆系统的小型项目直接运行 `python scripts/audit.py check`。如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
+14. 每 ~20 次任务或每月，运行 `python scripts/maintain.py`（重建记忆索引 + 机械检查 + 记忆活性报告 + 近期脉络摘要）；无记忆系统的小型项目直接运行 `python scripts/audit.py check`。<!-- 小型项目：删去 maintain.py 半句，本条仅保留"每 ~20 次任务或每月，运行 `python scripts/audit.py check` 做机械检查" -->如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
 
 ### docs/ 文件的治理规则
 

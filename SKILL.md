@@ -188,7 +188,7 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 - **外置层（软约束）**：`.agent/memory/` 目录承载完整用户画像、项目上下文、反馈历史等详细内容。Agent 通过指针按需读取，compact 后由哨兵提示重新加载。
 - **检索硬约束**：有记忆系统时，除非任务非常简单明确，任务执行前必须先检索记忆系统获取参考——`git log` / CHANGELOG / `.agent/memory/` 都是记忆系统的一部分。记忆系统不检索就等于不存在，这条必须作为行为规则写入 AGENTS.md，而不是依赖 Agent 自发想起。
 - **维护管线**：中型及以上项目安装 `scripts/maintain.py`，把"重建记忆索引 + audit 机械检查 + 记忆活性统计 + 近期脉络摘要"编成一条命令。其中 MEMORY.md 的索引标记段（`<!-- memory-index:start/end -->`）由脚本每次维护自动重建——索引是纯派生信息（文件清单 + 标题 + 时间），手工维护必然腐烂且浪费上下文；Agent 的判断力应花在记忆内容的取舍（写什么、更新什么）上，而不是目录维护上。这是设计哲学第 9 条"硬约束靠工具"在记忆系统上的兑现。
-- **结构硬约束**：pre-commit hook 检查 `.agent/memory/` 目录不为空壳；`audit.py` 检查记忆文件完整性和 AGENTS.md 指针存在性——防止记忆系统静默腐化。
+- **结构硬约束**：pre-commit hook 检查 `.agent/memory/MEMORY.md` 存在且非空；`audit.py` 检查记忆文件完整性和 AGENTS.md 指针存在性；`maintain.py` 的 `empty` 状态覆盖"目录存在但从未沉淀记忆"的空壳场景（告警不阻塞）——三层分工防止记忆系统静默腐化。
 - **规模裁剪**：小型项目不建 `.agent/memory/` 目录（单次会话即可完成的工具脚本不需要跨会话记忆）；中型+项目建立全套记忆目录。
 
 这不违反 Occam——跨会话协作缺少记忆载体，会导致 Agent 在每次新对话中重复询问用户偏好、忘记项目上下文、重蹈已知教训。它解决的是真实发生的、有成本的具体问题。
@@ -437,7 +437,7 @@ python scripts/agent_links.py check  --mode=hardlink
 - `项目记忆索引：[.agent/memory/MEMORY.md]...`
 - `## 项目记忆` 整段（含其下所有行和 HTML 注释）
 
-只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录；「任务前记忆检索」中的第 2 条（读取 `.agent/memory/MEMORY.md`）同步删除，保留 git log / CHANGELOG 检索。
+只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录；「任务前记忆检索」中的第 2 条（读取 `.agent/memory/MEMORY.md`）同步删除，保留 git log / CHANGELOG 检索。「定期审计」条目删去 maintain.py 半句，仅保留 `python scripts/audit.py check`——小型项目不装 maintain.py，留着是死引用。
 
 裁剪后运行 `python scripts/agent_links.py repair` 把改动同步到 CLAUDE.md / GEMINI.md。
 
@@ -737,30 +737,31 @@ python scripts/changelog.py add \
 3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 docs/STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
 4. `README.md` 已创建（从模板生成或迁移保留），且内容不含占位符
 5. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
-5. `docs/CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
-6. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
-7. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
-8. `AGENTS.md` 行数不超过约 200 行、词数不超过约 400 词（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
-9. `AGENTS.md` 包含「### docs/ 文件的治理规则」子段（存在条件/合并条件/创建原则/删除原则/自免声明），且使用 Occam + Bitter Lesson 通用原则无枚举阈值
+6. `docs/CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
+7. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
+8. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
+9. `AGENTS.md` 行数不超过约 200 行、词数不超过约 400 词（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+10. `AGENTS.md` 包含「### docs/ 文件的治理规则」子段（存在条件/合并条件/创建原则/删除原则/自免声明），且使用 Occam + Bitter Lesson 通用原则无枚举阈值
 
 **中型 / 大型项目额外项：**
 
-8. `docs/STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
-9. `docs/audit-checklist.md` 已创建，且 `docs/STRUCTURE.md` 索引表中包含其链接
-10. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
-11. 出生档案 `docs/plans/completed/initialization.md` 已写入
-12. `.agent/memory/MEMORY.md` 和 `.agent/memory/user/role.md` 已创建且非空
-13. AGENTS.md 包含「项目记忆」内联段且非空（不含 `<!--  -->` 模板注释）
-14. AGENTS.md 信息导航包含 `.agent/memory/MEMORY.md` 指针
-15. `python scripts/audit.py memory` 退出码为 0
-16. `scripts/maintain.py` 已复制且 `python scripts/maintain.py --check` 退出码为 0；MEMORY.md 索引标记段已重建（不含"暂无记忆条目"以外的占位文字）
-17. AGENTS.md 行为规则包含「任务前记忆检索」段，且其中第 2 条指向 `.agent/memory/MEMORY.md`
+11. `docs/STRUCTURE.md` 中的索引表与 `docs/` 下的文件一一对应（多了或少了都修）
+12. `docs/audit-checklist.md` 已创建，且 `docs/STRUCTURE.md` 索引表中包含其链接
+13. `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
+14. 出生档案 `docs/plans/completed/initialization.md` 已写入
+15. `.agent/memory/MEMORY.md` 和 `.agent/memory/user/role.md` 已创建且非空
+16. AGENTS.md 包含「项目记忆」内联段且非空（不含 `<!--  -->` 模板注释）
+17. AGENTS.md 信息导航包含 `.agent/memory/MEMORY.md` 指针
+18. `python scripts/audit.py memory` 退出码为 0
+19. `scripts/maintain.py` 已复制且 `python scripts/maintain.py --check` 退出码为 0；MEMORY.md 索引标记段已重建（不含"暂无记忆条目"以外的占位文字）。注意：maintain.py 内部会跑 `audit.py check`，出生档案（第 14 项）未写入时 audit 会报 `[MISS]` 导致整体非 0——因此本项必须在第 5 步出生档案写入之后再验
+20. AGENTS.md 行为规则包含「任务前记忆检索」段，且其中第 2 条指向 `.agent/memory/MEMORY.md`
 
 **小型项目额外项：**
 
-8. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
-9. `docs/audit-checklist.md` 已创建，且 AGENTS.md 信息导航中包含其链接
-10. 没有创建 `docs/plans/`、`docs/STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
+11. 出生档案 `docs/initialization.md` 已写入（不是 `docs/plans/completed/initialization.md`）
+12. `docs/audit-checklist.md` 已创建，且 AGENTS.md 信息导航中包含其链接
+13. 没有创建 `docs/plans/`、`docs/STRUCTURE.md`、`docs/overview.md` 等文件——如果创建了说明规模分支判断错
+14. 没有复制 `scripts/maintain.py`；「定期审计」条目已按第 2 步裁剪为仅保留 `python scripts/audit.py check`
 
 ### 第 8 步：reviewer-perspective 自检（必做）
 

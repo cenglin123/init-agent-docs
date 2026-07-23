@@ -146,6 +146,29 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
 # memory staleness
 # ---------------------------------------------------------------------------
 
+def _memory_last_update_ts(files: list[Path]) -> float:
+    """Last memory-update timestamp.
+
+    git 不保留 mtime（fresh clone / checkout 会把 mtime 刷成当前时间），
+    因此优先取 git 最后提交时间；非 git 环境回退到文件 mtime。
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "log", "-1", "--format=%ct", "--", ".agent/memory/"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return float(proc.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return max(p.stat().st_mtime for p in files)
+
+
 def memory_staleness() -> tuple[str, str]:
     """Returns (status, detail); status ∈ ok / stale / empty / skip."""
     if not MEMORY_DIR.is_dir():
@@ -153,8 +176,7 @@ def memory_staleness() -> tuple[str, str]:
     files = _memory_files()
     if not files:
         return "empty", "no memory entries yet — 目录存在但从未沉淀记忆"
-    newest = max(p.stat().st_mtime for p in files)
-    age = datetime.now() - datetime.fromtimestamp(newest)
+    age = datetime.now() - datetime.fromtimestamp(_memory_last_update_ts(files))
     if age > timedelta(days=STALE_DAYS):
         return (
             "stale",
@@ -268,6 +290,9 @@ def run_full(*, check_only: bool) -> int:
     else:
         rc, out = sync
         print(_line("ok" if rc == 0 else "fail", f"agent_links.py check (exit {rc})"))
+        if out and rc != 0:
+            for line in out.splitlines():
+                print(f"           {line}")
         if rc != 0:
             failures += 1
 
