@@ -34,7 +34,8 @@
 - 文档一致性审计：[docs/audit-checklist.md](docs/audit-checklist.md)
 - 复杂任务计划：[docs/plans/](docs/plans/)
 - 当前任务状态（单 owner 摘要 / 全局入口）：[docs/CURRENT.md](docs/CURRENT.md)
-- 项目记忆索引：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
+- 项目记忆索引：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)（含 bugfix 分区）
+- Bugfix 档案：[docs/problems/bugfix/](docs/problems/bugfix/)（逐篇索引见 MEMORY.md；写作模板 `_template.md`）
 - 变更记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)
 
 <!-- 根据第 0 步的结果裁剪：没有 API 就删掉 api.md 那行，没有部署需求就删掉 deployment.md -->
@@ -55,7 +56,7 @@
 - **最近教训**：<!-- 最重要的 1-2 条 -->
 - **详细记忆**：[.agent/memory/MEMORY.md](.agent/memory/MEMORY.md)
 
-> 每次更新 `.agent/memory/` 后，同步维护本节摘要。MEMORY.md 的索引标记段（`<!-- memory-index:start/end -->`）由 `python scripts/maintain.py` 自动重建——agent 只负责记忆的沉淀与检索，不手工编辑标记段内容。
+> 每次更新 `.agent/memory/` 后，同步维护本节摘要。MEMORY.md 的索引标记段（`<!-- memory-index:start/end -->`）由 `python scripts/maintain.py` 自动重建——索引覆盖记忆条目与 `docs/problems/bugfix/` 文档，agent 只负责经验的沉淀与检索，不手工编辑标记段内容。
 
 ## 行为规则
 
@@ -72,13 +73,23 @@
 
 ### 任务前记忆检索
 
-除非任务非常简单明确，开始实质性工作前必须先检索记忆系统获取参考——git log / CHANGELOG / `.agent/memory/` 都是记忆系统的一部分：
+除非任务非常简单明确，开始实质性工作前必须先检索记忆系统。`.agent/memory/MEMORY.md` 的索引段是**经验类知识的统一检索入口**——由 `python scripts/maintain.py` 派生，覆盖记忆条目与 `docs/problems/bugfix/` 文档；未来新增经验载体只扩充索引，不修改本规则：
 
 1. `git log --oneline -15` 和/或 `python scripts/changelog.py recent` — 近期变更脉络
-2. 读取 [.agent/memory/MEMORY.md](.agent/memory/MEMORY.md) — 过往经验、教训与用户画像<!-- 小型项目删除本行 -->
-3. 命中相关记忆文件时按需深入阅读
+2. 读取 [.agent/memory/MEMORY.md](.agent/memory/MEMORY.md) 索引段 — 命中相关条目（记忆文件或 bugfix 文档）时按需深入阅读<!-- 小型项目删除第 2、3 条 -->
+3. **触发词硬性前置**：任务是修 bug、排查异常、处理回归时（用户提到"修复 / fix / bug / 报错 / 异常 / 不工作了"等——示例非穷举，按任务语义判定），必须先查索引段的 bugfix 分区确认是否踩过同类坑。判据以检索动作是否发生为准，不落在关键词匹配质量上；检索后确认无相关记录，如实说明即合规，不以"产出是否引用命中"为判据
 
 唯一豁免：任务非常简单明确时可跳过；此外，用户当次明确表示不需要时也可豁免。
+
+### Bugfix 沉淀
+
+<!-- 小型项目删除本节及信息导航中的 Bugfix 档案行 -->
+修复 bug、排查异常、处理回归（含临时规避 / 回滚 / 止血）完工时，必须按 [docs/problems/bugfix/_template.md](docs/problems/bugfix/_template.md) 沉淀一篇 `docs/problems/bugfix/<slug>.md`（ASCII kebab-case 文件名）：
+
+- frontmatter 填 `status` / `severity` / `liveness` 等字段（verification / evidence 等完整字段说明见 _template.md）；多个独立 bug 分别建文档，不混在一篇
+- 可稳定复现的优先补自动化验证（接入现有测试体系优先）；无法自动化时在文中说明原因与人工验证方式，禁止伪造"已通过"
+- 只写已确认事实，未确认部分标注"待确认 / 推测"
+- 逐篇索引由 `python scripts/maintain.py` 派生到 MEMORY.md 索引段——不手工登记到 STRUCTURE.md 或任何索引文件；`_` 前缀文件（如 `_template.md`）视为模板/辅助材料，不入索引
 
 ### 硬约束（不可违反）
 <!-- 候选项：只有目标仓库已有约束或用户确认时保留。下面的密钥、构建产物、hook 等通用规则不要无脑写入最终 AGENTS.md；保留时必须改成目标仓库的具体路径、命令或约束。 -->
@@ -182,7 +193,7 @@
 
 **定期审计**
 
-14. 每 ~20 次任务或每月，运行 `python scripts/maintain.py`（重建记忆索引 + 机械检查 + 记忆活性报告 + 近期脉络摘要）；无记忆系统的小型项目直接运行 `python scripts/audit.py check`。<!-- 小型项目：删去 maintain.py 半句，本条仅保留"每 ~20 次任务或每月，运行 `python scripts/audit.py check` 做机械检查" -->如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
+14. 每 ~20 次任务或每月，运行 `python scripts/maintain.py`（重建记忆+bugfix 索引 + 机械检查 + 记忆活性报告 + 近期脉络摘要）；无记忆系统的小型项目直接运行 `python scripts/audit.py check`。<!-- 小型项目：删去 maintain.py 半句，本条仅保留"每 ~20 次任务或每月，运行 `python scripts/audit.py check` 做机械检查" -->如发现 `[DEAD]` / `[DRIFT]` / `[UNDOC]` / `[ORPHAN]` / `[BROKEN]` 项，读取 [docs/audit-checklist.md](docs/audit-checklist.md) 按清单逐项裁决。审计完成后将结果写入 CHANGELOG。
 
 ### docs/ 文件的治理规则
 
@@ -220,4 +231,4 @@
 - [ ] **CHANGELOG.md**：是否值得记录？如是，用 `python scripts/changelog.py add ...` 插入到当天日期节；需要查看历史时只用 `titles/show` 局部读取。
 - [ ] **同步一致性**：本文件若被编辑，运行 `python scripts/agent_links.py check`；只有不一致时才用 `python scripts/agent_links.py repair` 修复。
 - [ ] **跳过条件**：纯格式修改、注释修改、同一会话内已记录的变更，可跳过文档更新步骤（但验证步骤不可跳过）。
-- [ ] **记忆自检**：本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agent/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要；MEMORY.md 索引段由 `python scripts/maintain.py` 维护，无需手改。<!-- 小型项目：标注"小型项目，无记忆目录" -->
+- [ ] **记忆自检**（双向）：**写出**——本次对话是否产生值得沉淀的记忆（用户偏好、项目上下文、可复用教训）？如是，更新 `.agent/memory/` 对应文件并同步 AGENTS.md「项目记忆」内联摘要；MEMORY.md 索引段由 `python scripts/maintain.py` 维护，无需手改。**读入（touch 规范）**——若任务前检索命中并实际遵循了某条记忆条目或 bugfix 文档，将其 frontmatter `last_confirmed` 更新为当日、`confirmed_count` +1；未实际遵循不 touch。<!-- 小型项目：整项替换为"小型项目，无记忆目录"（写出/读入两段均删） -->

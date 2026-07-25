@@ -118,7 +118,8 @@ def _lines(path: Path) -> list[str]:
 
 
 def _exists(rel: str) -> bool:
-    return (ROOT / rel).is_file()
+    # 索引目标可以是目录（如 problems/bugfix/、plans/ 目录行）
+    return (ROOT / rel).exists()
 
 
 def _resolve(target: str, source_dir: Path) -> Path:
@@ -174,7 +175,8 @@ def _check_dead_links() -> list[dict[str, Any]]:
         source_dir = path.parent
         for target, _label, lineno in _extract_file_links(_read(path)):
             resolved = _resolve(target, source_dir)
-            exists = resolved.is_file()
+            # 目录不算死链（docs/plans/、docs/problems/bugfix/ 等目录链接）
+            exists = resolved.exists()
             results.append({
                 "kind": "dead_link",
                 "status": "ok" if exists else "dead",
@@ -219,11 +221,13 @@ def _check_structure() -> list[dict[str, Any]]:
         return results
 
     index_entries = _structure_table_links()
-    indexed_paths = {e[0] for e in index_entries}
+    # 索引表目标相对于 docs/（STRUCTURE.md 所在目录）；
+    # 孤儿判定统一换算为仓库根相对路径再比较。
+    indexed_paths = {"docs/" + e[0] for e in index_entries}
 
     # Check each indexed target exists.
     for target, _label, lineno in index_entries:
-        if not _exists(target):
+        if not _exists("docs/" + target):
             results.append({
                 "kind": "structure",
                 "status": "missing",
@@ -247,11 +251,18 @@ def _check_structure() -> list[dict[str, Any]]:
             rel = str(f.relative_to(ROOT)).replace("\\", "/")
             if rel in indexed_paths:
                 continue
+            # Skip STRUCTURE.md itself — 索引表不登记自身。
+            if rel == "docs/STRUCTURE.md":
+                continue
             # Skip plan files — they are transient by design.
             if rel.startswith("docs/plans/"):
                 continue
             # Skip audit-checklist itself.
             if rel == "docs/audit-checklist.md":
+                continue
+            # Skip bugfix docs — 逐篇索引由 maintain.py 派生到 MEMORY.md 索引段，
+            # 与 plans/ 同理不逐篇登记进 STRUCTURE.md。
+            if rel.startswith("docs/problems/bugfix/"):
                 continue
             results.append({
                 "kind": "structure",

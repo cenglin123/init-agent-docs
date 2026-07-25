@@ -1,8 +1,8 @@
 # 项目记忆索引
 
-> Agent 启动或 compact 恢复时应读取本文件。
+> Agent 启动或 compact 恢复时应读取本文件——本文件的索引段是**经验类知识的统一检索入口**。
 > 关键摘要已内联在 AGENTS.md「项目记忆」段——本文件是详细版本。
-> **索引段由 `python scripts/maintain.py` 自动重建——agent 只负责记忆的沉淀与检索，禁止手工编辑标记段内容。**
+> **索引段由 `python scripts/maintain.py` 自动重建——覆盖 `.agent/memory/` 记忆条目与 `docs/problems/bugfix/` 文档；agent 只负责经验的沉淀与检索，禁止手工编辑标记段内容。**
 
 <!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
 
@@ -19,15 +19,22 @@
 - `user/role.md`：首次透露偏好 / 用户明确要求 / ≥2 次同模式反馈
 - `project/`：用户说"我要做 X 项目" / 多轮对话深入且跨会话
 - `feedback/`：用户明确评价输出 / 同一类修正 ≥2 次
+- `docs/problems/bugfix/`：bugfix 文档（何时写、怎么写见 AGENTS.md「Bugfix 沉淀」段与该目录 `_template.md`，此处不重复定义）
 
 ### 写入前查重
 
-新建记忆文件前，先读上方索引确认是否已有相似条目：
-- 高相似 → 更新现有文件
+新建记忆文件或 bugfix 文档前，先读上方索引确认是否已有相似条目：
+- 高相似 → 更新现有文件（bugfix 文档一事一篇除外——同根因再犯时**修订原文档**补充条件，不新开第二篇）
 - 中等相似（同主题不同视角）→ 新文件引用旧文件
 - 低相似 → 正常新增
 
+### 确认 touch（读入方向）
+
+记忆文件（`user/`、`project/`、`feedback/` 等）的 frontmatter 约定与 bugfix 文档一致：`liveness: active | dormant | archived`、`last_confirmed`、`confirmed_count`。新建记忆文件时带上这三个字段；touch 时更新后两个。
+
+任务前检索命中某条记忆条目或 bugfix 文档并**实际遵循**后，在完工清单「记忆自检」项更新其 frontmatter：`last_confirmed` 更新为当日、`confirmed_count` +1。未实际遵循不 touch。字段缺失时维护统计以 git 最后提交时间兜底——git 修改 ≠ 确认有效，只补日期，不虚增计数。口径以 AGENTS.md 完工检查清单「记忆自检」项为准。
+
 ### 维护分工
 
-- **Agent 负责**：记忆的沉淀（写入 / 更新记忆文件）与检索（任务前读索引）；更新记忆后同步 AGENTS.md「项目记忆」内联摘要
+- **Agent 负责**：经验的沉淀（写入 / 更新记忆文件与 bugfix 文档）与检索（任务前读索引）；更新记忆后同步 AGENTS.md「项目记忆」内联摘要
 - **脚本负责**：MEMORY.md 索引段由 `python scripts/maintain.py` 每次维护自动重建；`.agent/memory/` 持续 30 天无更新 → 维护报告提示"记忆目录空转"

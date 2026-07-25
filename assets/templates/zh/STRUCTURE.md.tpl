@@ -9,6 +9,7 @@
 | API 接口 | [api.md](api.md) |
 | 部署与配置 | [deployment.md](deployment.md) |
 | 已知环境陷阱 | [pitfalls.md](pitfalls.md) |
+| Bugfix 档案 | [problems/bugfix/](problems/bugfix/)（逐篇索引见 MEMORY.md，不逐篇登记到本表） |
 | 文档一致性审计 | [audit-checklist.md](audit-checklist.md) |
 | 当前任务状态 | [CURRENT.md](CURRENT.md) |
 | 变更记录 | [CHANGELOG.md](CHANGELOG.md) |

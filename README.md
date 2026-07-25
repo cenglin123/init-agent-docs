@@ -13,7 +13,7 @@
 - `scripts/changelog.py`：CHANGELOG 标题树、近期条目、局部读取和追加
 - `scripts/agent_links.py`：`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步检查与修复
 - `scripts/audit.py`：文档一致性机械检查（死链 / 结构完整性 / 依赖漂移）
-- `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段 + 调用 audit/agent_links 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
+- `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit/agent_links 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agent/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
@@ -30,11 +30,11 @@ init-agent-docs/
 ├── README.md                             # 你现在读的这份文件
 └── assets/
     ├── templates/
-    │   └── zh/                           # 中文模板集（11 个 .tpl）
+    │   └── zh/                           # 中文模板集（14 个 .tpl）
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
     │   ├── agent_links.py                # 同步检查与修复
-    │   ├── maintain.py                   # 维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
+    │   ├── maintain.py                   # 维护管线：记忆+bugfix 索引重建 + 审计 + 活性报告（中型+）
     │   ├── worktree_task.py              # 多 Agent worktree 四动作运行时（可选）
     │   └── audit.py                      # 文档一致性机械检查
     ├── hooks/

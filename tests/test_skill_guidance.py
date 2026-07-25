@@ -77,9 +77,12 @@ class SkillGuidanceTestCase(unittest.TestCase):
             tpl,
             [
                 "任务前记忆检索",
-                "git log / CHANGELOG / `.agent/memory/` 都是记忆系统的一部分",
+                "统一检索入口",
+                "触发词硬性前置",
+                "Bugfix 沉淀",
                 "python scripts/maintain.py",
                 "<!-- memory-index:start/end -->",
+                "last_confirmed",
             ],
         )
 
@@ -91,6 +94,19 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 "<!-- memory-index:end -->",
                 "禁止手工编辑标记段内容",
                 "维护分工",
+                "docs/problems/bugfix/",
+            ],
+        )
+
+        bugfix_tpl = read_repo_file("assets/templates/zh/bugfix.md.tpl")
+        self.assert_contains_all(
+            bugfix_tpl,
+            [
+                "liveness",
+                "last_confirmed",
+                "confirmed_count",
+                "verification",
+                "怎么修复的",
             ],
         )
 

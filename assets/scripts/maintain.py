@@ -2,10 +2,12 @@
 
 每次维护执行：
 1. 重建 .agent/memory/MEMORY.md 的索引标记段
-   （agent 只负责记忆的沉淀与检索；索引是纯派生信息，由本脚本机械维护）
+   （agent 只负责记忆的沉淀与检索；索引是纯派生信息，由本脚本机械维护。
+    索引覆盖两类经验载体：.agent/memory/ 记忆条目 + docs/problems/bugfix/ 文档——
+    后者是经验检索统一入口的一部分，bugfix 目录不存在时自动跳过）
 2. 运行 audit.py check（死链 / 结构完整性 / 依赖漂移 / 记忆健康）
 3. 运行 agent_links.py check（AGENTS / CLAUDE / GEMINI 同步一致性）
-4. 记忆活性统计（30 天未更新预警）
+4. 记忆活性统计（30 天未更新预警，统计范围含 bugfix 文档）
 5. 近期上下文摘要（git log + CHANGELOG 标题树，辅助 agent 快速恢复脉络）
 
 用法：
@@ -29,6 +31,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MEMORY_DIR = ROOT / ".agent" / "memory"
 MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
+BUGFIX_DIR = ROOT / "docs" / "problems" / "bugfix"
+# 索引段中 bugfix 条目的链接前缀：相对 .agent/memory/MEMORY.md 所在目录解析
+# （audit.py 死链检查按链接所在文件自身目录解析相对路径）
+BUGFIX_LINK_PREFIX = "../../docs/problems/bugfix"
 
 INDEX_START = "<!-- memory-index:start -->"
 INDEX_END = "<!-- memory-index:end -->"
@@ -57,9 +63,19 @@ def _memory_files() -> list[Path]:
 
 
 def _entry_title(path: Path) -> str:
-    """First ATX heading, else first non-empty line, else filename stem."""
+    """First ATX heading, else first non-empty line, else filename stem.
+
+    跳过开头的 YAML frontmatter 块（--- ... ---），否则 frontmatter 文档
+    的标题回退会取到 "---" 分隔线本身。
+    """
     try:
-        for line in _read(path).splitlines():
+        lines = _read(path).splitlines()
+        if lines and lines[0].strip() == "---":
+            for i in range(1, len(lines)):
+                if lines[i].strip() == "---":
+                    lines = lines[i + 1:]
+                    break
+        for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
@@ -75,15 +91,59 @@ def _fmt_date(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
 
+# ---------------------------------------------------------------------------
+# bugfix index (docs/problems/bugfix/)
+# ---------------------------------------------------------------------------
+
+def _bugfix_files() -> list[Path]:
+    """Bugfix 文档清单；`_` 开头的文件（如 _template.md）是模板，不入索引。"""
+    if not BUGFIX_DIR.is_dir():
+        return []
+    return sorted(
+        p for p in BUGFIX_DIR.glob("*.md")
+        if not p.name.startswith("_") and "__pycache__" not in p.parts
+    )
+
+
+def _frontmatter_value(text: str, key: str) -> str | None:
+    """从文件开头的 YAML frontmatter 提取标量字段（零依赖，只认 `key: value` 行）。"""
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    # 只认同行标量；空值返回 None（\s 会吞换行导致串读到下一行）
+    m = re.search(rf"^{re.escape(key)}:[ \t]*(.*?)[ \t]*$", text[3:end], re.MULTILINE)
+    if not m or not m.group(1):
+        return None
+    return m.group(1).strip("\"'")
+
+
+def _bugfix_meta(path: Path) -> dict[str, str]:
+    """提取索引行所需字段；frontmatter 缺失时回退到标题启发式。"""
+    meta: dict[str, str] = {}
+    try:
+        text = _read(path)
+    except OSError:
+        return {"title": path.stem}
+    for key in ("title", "status", "severity", "liveness", "updated_at", "created_at"):
+        value = _frontmatter_value(text, key)
+        if value:
+            meta[key] = value
+    meta.setdefault("title", _entry_title(path))
+    return meta
+
+
 def build_index_section() -> str:
     """Render the content that belongs between the index markers."""
     files = _memory_files()
+    bugfix = _bugfix_files()
     lines = [
         "> 本段由 `python scripts/maintain.py` 自动重建，禁止手工编辑。",
         f"> 最近重建：{datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
     ]
-    if not files:
+    if not files and not bugfix:
         lines.append("（暂无记忆条目）")
         return "\n".join(lines).rstrip()
 
@@ -98,9 +158,33 @@ def build_index_section() -> str:
         entries = sorted(groups[group], key=lambda p: p.stat().st_mtime, reverse=True)
         for p in entries:
             rel = str(p.relative_to(MEMORY_DIR)).replace("\\", "/")
-            lines.append(
+            line = (
                 f"- [{p.name}]({rel}) — {_entry_title(p)} · 更新于 {_fmt_date(p.stat().st_mtime)}"
             )
+            # 活性标记：有 frontmatter liveness 时追加；无 frontmatter 的旧记忆文件不追加（向后兼容）
+            try:
+                liveness = _frontmatter_value(_read(p), "liveness")
+            except OSError:
+                liveness = None
+            if liveness:
+                line += f" · {liveness}"
+            lines.append(line)
+        lines.append("")
+
+    if bugfix:
+        lines.append("### bugfix（docs/problems/bugfix/）")
+        entries = sorted(bugfix, key=lambda p: p.stat().st_mtime, reverse=True)
+        for p in entries:
+            meta = _bugfix_meta(p)
+            flags = " · ".join(
+                meta[k] for k in ("status", "severity", "liveness") if meta.get(k)
+            )
+            date = meta.get("updated_at") or meta.get("created_at") or _fmt_date(p.stat().st_mtime)
+            line = f"- [{meta['title'][:MAX_TITLE_LEN]}]({BUGFIX_LINK_PREFIX}/{p.name})"
+            if flags:
+                line += f" — {flags}"
+            line += f" · 更新于 {date}"
+            lines.append(line)
         lines.append("")
     return "\n".join(lines).rstrip()
 
@@ -154,7 +238,8 @@ def _memory_last_update_ts(files: list[Path]) -> float:
     """
     try:
         proc = subprocess.run(
-            ["git", "log", "-1", "--format=%ct", "--", ".agent/memory/"],
+            ["git", "log", "-1", "--format=%ct", "--",
+             ".agent/memory/", "docs/problems/bugfix/"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -166,7 +251,10 @@ def _memory_last_update_ts(files: list[Path]) -> float:
             return float(proc.stdout.strip())
     except (OSError, subprocess.TimeoutExpired, ValueError):
         pass
-    return max(p.stat().st_mtime for p in files)
+    pool = files + _bugfix_files()
+    if not pool:
+        return 0.0
+    return max(p.stat().st_mtime for p in pool)
 
 
 def memory_staleness() -> tuple[str, str]:
@@ -174,16 +262,18 @@ def memory_staleness() -> tuple[str, str]:
     if not MEMORY_DIR.is_dir():
         return "skip", "no .agent/memory/ directory (small project)"
     files = _memory_files()
-    if not files:
+    bugfix = _bugfix_files()
+    if not files and not bugfix:
         return "empty", "no memory entries yet — 目录存在但从未沉淀记忆"
     age = datetime.now() - datetime.fromtimestamp(_memory_last_update_ts(files))
+    total = len(files) + len(bugfix)
     if age > timedelta(days=STALE_DAYS):
         return (
             "stale",
             f"memory untouched for {age.days} days (> {STALE_DAYS}) — "
             "沉淀新记忆或考虑裁剪记忆系统",
         )
-    return "ok", f"newest memory update {age.days}d ago ({len(files)} entries)"
+    return "ok", f"newest memory update {age.days}d ago ({total} entries, 含 {len(bugfix)} bugfix)"
 
 
 # ---------------------------------------------------------------------------
