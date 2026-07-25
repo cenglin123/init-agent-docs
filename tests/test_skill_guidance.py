@@ -110,6 +110,19 @@ class SkillGuidanceTestCase(unittest.TestCase):
             ],
         )
 
+    def test_bitter_lesson_boundary_terms_present(self) -> None:
+        skill = read_repo_file("SKILL.md")
+        self.assert_contains_all(
+            skill,
+            [
+                "封顶型先验",
+                "防呆型机制",
+                "逃生舱",
+                "fail-closed",
+                "fail-open",
+            ],
+        )
+
     def test_worktree_runtime_guidance_present(self) -> None:
         skill = read_repo_file("SKILL.md")
         self.assert_contains_all(
