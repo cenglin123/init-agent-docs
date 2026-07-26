@@ -65,20 +65,20 @@ check_agents_sync() {
 
 check_memory_structure() {
     # Only check if memory directory exists (medium+ projects)
-    [ -d ".agent/memory" ] || return 0
+    [ -d ".agents/memory" ] || return 0
 
-    if [ ! -f ".agent/memory/MEMORY.md" ]; then
-        echo "[pre-commit] FAIL — .agent/memory/ exists but MEMORY.md is missing" >&2
+    if [ ! -f ".agents/memory/MEMORY.md" ]; then
+        echo "[pre-commit] FAIL — .agents/memory/ exists but MEMORY.md is missing" >&2
         return 1
     fi
 
-    if [ ! -s ".agent/memory/MEMORY.md" ]; then
-        echo "[pre-commit] FAIL — .agent/memory/MEMORY.md is empty" >&2
+    if [ ! -s ".agents/memory/MEMORY.md" ]; then
+        echo "[pre-commit] FAIL — .agents/memory/MEMORY.md is empty" >&2
         return 1
     fi
 
-    if ! grep -q ".agent/memory/MEMORY.md" AGENTS.md 2>/dev/null; then
-        echo "[pre-commit] WARN — AGENTS.md missing pointer to .agent/memory/MEMORY.md" >&2
+    if ! grep -q ".agents/memory/MEMORY.md" AGENTS.md 2>/dev/null; then
+        echo "[pre-commit] WARN — AGENTS.md missing pointer to .agents/memory/MEMORY.md" >&2
     fi
 
     return 0
@@ -88,7 +88,7 @@ check_governance_changes() {
     # Detect staged changes to governance documents (AGENTS.md, hooks, scripts, memory)
     # WARN only — does not block commit. This is a reminder, not a gate.
     STAGED_FILES=$(git diff --cached --name-only)
-    GOV_PATTERNS="^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^docs/STRUCTURE\.md$|^scripts/|^.githooks/|^.agent/memory/|^docs/audit-checklist\.md$"
+    GOV_PATTERNS="^AGENTS\.md$|^CLAUDE\.md$|^GEMINI\.md$|^docs/STRUCTURE\.md$|^scripts/|^.githooks/|^.agents/memory/|^docs/audit-checklist\.md$"
 
     GOV_FILES=""
     while IFS= read -r path; do
@@ -156,13 +156,13 @@ fi
 if ! check_memory_structure; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ".agent/memory/ 目录结构不完整。"
+    echo ".agents/memory/ 目录结构不完整。"
     echo ""
     echo "这可能是因为："
-    echo "  1. .agent/memory/ 目录存在但 MEMORY.md 缺失或为空"
+    echo "  1. .agents/memory/ 目录存在但 MEMORY.md 缺失或为空"
     echo "  2. 记忆文件被误删"
     echo ""
-    echo "修复：重新创建 .agent/memory/MEMORY.md 或从模板恢复。"
+    echo "修复：重新创建 .agents/memory/MEMORY.md 或从模板恢复。"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1
 fi

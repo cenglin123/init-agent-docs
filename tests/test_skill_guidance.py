@@ -110,6 +110,27 @@ class SkillGuidanceTestCase(unittest.TestCase):
             ],
         )
 
+    def test_delivery_files_use_agents_memory_directory(self) -> None:
+        delivery_files = [
+            "SKILL.md",
+            "README.md",
+            "assets/scripts/maintain.py",
+            "assets/scripts/audit.py",
+            "assets/templates/zh/AGENTS.md.tpl",
+            "assets/templates/zh/MEMORY.md.tpl",
+            "assets/templates/zh/audit-checklist.md.tpl",
+            "assets/templates/zh/bugfix.md.tpl",
+            "assets/hooks/pre-commit-generic.sh",
+            "assets/hooks/pre-commit-python.sh",
+            "assets/hooks/pre-commit-node.sh",
+            "assets/hooks/pre-commit-go.sh",
+        ]
+        for path in delivery_files:
+            with self.subTest(path=path):
+                text = read_repo_file(path)
+                self.assertNotIn(".agent/", text)
+                self.assertIn(".agents/memory", text)
+
     def test_bitter_lesson_boundary_terms_present(self) -> None:
         skill = read_repo_file("SKILL.md")
         self.assert_contains_all(

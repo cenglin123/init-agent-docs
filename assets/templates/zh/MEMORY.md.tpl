@@ -2,7 +2,7 @@
 
 > Agent 启动或 compact 恢复时应读取本文件——本文件的索引段是**经验类知识的统一检索入口**。
 > 关键摘要已内联在 AGENTS.md「项目记忆」段——本文件是详细版本。
-> **索引段由 `python scripts/maintain.py` 自动重建——覆盖 `.agent/memory/` 记忆条目与 `docs/problems/bugfix/` 文档；agent 只负责经验的沉淀与检索，禁止手工编辑标记段内容。**
+> **索引段由 `python scripts/maintain.py` 自动重建——覆盖 `.agents/memory/` 记忆条目与 `docs/problems/bugfix/` 文档；agent 只负责经验的沉淀与检索，禁止手工编辑标记段内容。**
 
 <!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
 
@@ -37,4 +37,4 @@
 ### 维护分工
 
 - **Agent 负责**：经验的沉淀（写入 / 更新记忆文件与 bugfix 文档）与检索（任务前读索引）；更新记忆后同步 AGENTS.md「项目记忆」内联摘要
-- **脚本负责**：MEMORY.md 索引段由 `python scripts/maintain.py` 每次维护自动重建；`.agent/memory/` 持续 30 天无更新 → 维护报告提示"记忆目录空转"
+- **脚本负责**：MEMORY.md 索引段由 `python scripts/maintain.py` 每次维护自动重建；`.agents/memory/` 持续 30 天无更新 → 维护报告提示"记忆目录空转"

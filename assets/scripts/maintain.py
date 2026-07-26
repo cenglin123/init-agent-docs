@@ -1,9 +1,9 @@
 """maintain.py — 文档体系自动化维护管线（init-agent-docs，中型及以上项目）。
 
 每次维护执行：
-1. 重建 .agent/memory/MEMORY.md 的索引标记段
+1. 重建 .agents/memory/MEMORY.md 的索引标记段
    （agent 只负责记忆的沉淀与检索；索引是纯派生信息，由本脚本机械维护。
-    索引覆盖两类经验载体：.agent/memory/ 记忆条目 + docs/problems/bugfix/ 文档——
+    索引覆盖两类经验载体：.agents/memory/ 记忆条目 + docs/problems/bugfix/ 文档——
     后者是经验检索统一入口的一部分，bugfix 目录不存在时自动跳过）
 2. 运行 audit.py check（死链 / 结构完整性 / 依赖漂移 / 记忆健康）
 3. 运行 agent_links.py check（AGENTS / CLAUDE / GEMINI 同步一致性）
@@ -15,7 +15,7 @@
     python scripts/maintain.py --check         # 只读校验（不修改文件），异常时退出码非 0
     python scripts/maintain.py --memory-index  # 仅重建 MEMORY.md 索引标记段
 
-无第三方依赖。小型项目（无 .agent/memory/ 目录）自动跳过记忆相关步骤。
+无第三方依赖。小型项目（无 .agents/memory/ 目录）自动跳过记忆相关步骤。
 """
 
 from __future__ import annotations
@@ -29,10 +29,10 @@ from pathlib import Path
 
 # Convention: this script lives at <project_root>/scripts/maintain.py.
 ROOT = Path(__file__).resolve().parents[1]
-MEMORY_DIR = ROOT / ".agent" / "memory"
+MEMORY_DIR = ROOT / ".agents" / "memory"
 MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
 BUGFIX_DIR = ROOT / "docs" / "problems" / "bugfix"
-# 索引段中 bugfix 条目的链接前缀：相对 .agent/memory/MEMORY.md 所在目录解析
+# 索引段中 bugfix 条目的链接前缀：相对 .agents/memory/MEMORY.md 所在目录解析
 # （audit.py 死链检查按链接所在文件自身目录解析相对路径）
 BUGFIX_LINK_PREFIX = "../../docs/problems/bugfix"
 
@@ -211,9 +211,9 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
     ok / rebuilt / stale / missing / no-markers / skip.
     """
     if not MEMORY_DIR.is_dir():
-        return "skip", "no .agent/memory/ directory (small project)"
+        return "skip", "no .agents/memory/ directory (small project)"
     if not MEMORY_INDEX.is_file():
-        return "missing", ".agent/memory/MEMORY.md not found"
+        return "missing", ".agents/memory/MEMORY.md not found"
     current = _read(MEMORY_INDEX)
     updated = _splice_index(current, build_index_section())
     if updated is None:
@@ -239,7 +239,7 @@ def _memory_last_update_ts(files: list[Path]) -> float:
     try:
         proc = subprocess.run(
             ["git", "log", "-1", "--format=%ct", "--",
-             ".agent/memory/", "docs/problems/bugfix/"],
+             ".agents/memory/", "docs/problems/bugfix/"],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -260,7 +260,7 @@ def _memory_last_update_ts(files: list[Path]) -> float:
 def memory_staleness() -> tuple[str, str]:
     """Returns (status, detail); status ∈ ok / stale / empty / skip."""
     if not MEMORY_DIR.is_dir():
-        return "skip", "no .agent/memory/ directory (small project)"
+        return "skip", "no .agents/memory/ directory (small project)"
     files = _memory_files()
     bugfix = _bugfix_files()
     if not files and not bugfix:

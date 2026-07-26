@@ -404,23 +404,23 @@ def _check_sync() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def _check_memory() -> list[dict[str, Any]]:
-    """Check .agent/memory/ structure health.
+    """Check .agents/memory/ structure health.
 
-    Small projects (no .agent/memory/ dir) are not an error — they skip.
+    Small projects (no .agents/memory/ dir) are not an error — they skip.
     For projects with the directory, we verify:
     - MEMORY.md exists and is non-empty
     - AGENTS.md contains the pointer and inline section
     - Links in MEMORY.md resolve to existing files
     """
     results: list[dict[str, Any]] = []
-    memory_dir = ROOT / ".agent" / "memory"
+    memory_dir = ROOT / ".agents" / "memory"
 
     # Small projects: memory dir absence is OK
     if not memory_dir.is_dir():
         results.append({
             "kind": "memory",
             "status": "skip",
-            "detail": "No .agent/memory/ directory (small project or not enabled)",
+            "detail": "No .agents/memory/ directory (small project or not enabled)",
         })
         return results
 
@@ -430,7 +430,7 @@ def _check_memory() -> list[dict[str, Any]]:
         results.append({
             "kind": "memory",
             "status": "missing",
-            "detail": ".agent/memory/MEMORY.md missing",
+            "detail": ".agents/memory/MEMORY.md missing",
         })
         return results
 
@@ -439,18 +439,18 @@ def _check_memory() -> list[dict[str, Any]]:
         results.append({
             "kind": "memory",
             "status": "empty",
-            "detail": ".agent/memory/MEMORY.md is empty",
+            "detail": ".agents/memory/MEMORY.md is empty",
         })
 
     # Check AGENTS.md contains memory pointer and inline section
     agents_md = ROOT / "AGENTS.md"
     if agents_md.is_file():
         content = _read(agents_md)
-        if ".agent/memory/MEMORY.md" not in content:
+        if ".agents/memory/MEMORY.md" not in content:
             results.append({
                 "kind": "memory",
                 "status": "unlinked",
-                "detail": "AGENTS.md missing pointer to .agent/memory/MEMORY.md",
+                "detail": "AGENTS.md missing pointer to .agents/memory/MEMORY.md",
             })
         if "## 项目记忆" not in content:
             results.append({
@@ -466,7 +466,7 @@ def _check_memory() -> list[dict[str, Any]]:
             results.append({
                 "kind": "memory",
                 "status": "dead_link",
-                "source": ".agent/memory/MEMORY.md",
+                "source": ".agents/memory/MEMORY.md",
                 "line": lineno,
                 "target": target,
             })
@@ -475,7 +475,7 @@ def _check_memory() -> list[dict[str, Any]]:
         results.append({
             "kind": "memory",
             "status": "ok",
-            "detail": ".agent/memory/ structure healthy",
+            "detail": ".agents/memory/ structure healthy",
         })
 
     return results
@@ -566,7 +566,7 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append("[SKIP   ] sync check (agent_links.py unavailable)")
         elif kind == "memory":
             if r["status"] == "skip":
-                lines_out.append("[SKIP   ] memory (no .agent/memory/ directory)")
+                lines_out.append("[SKIP   ] memory (no .agents/memory/ directory)")
             elif r["status"] == "ok":
                 if verbose:
                     lines_out.append("[OK    ] memory structure healthy")

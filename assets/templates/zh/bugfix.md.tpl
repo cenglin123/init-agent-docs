@@ -16,7 +16,7 @@ updated_at: [YYYY-MM-DD]
 ---
 
 <!-- ⓘ 本文件由 docs/problems/bugfix/ 目录承载，逐篇索引由 scripts/maintain.py 派生到
-     .agent/memory/MEMORY.md 索引段，无需手工登记到任何索引文件。
+     .agents/memory/MEMORY.md 索引段，无需手工登记到任何索引文件。
 
      frontmatter 字段说明：
      - status：investigating | mitigated | fixed | wontfix（解决状态）

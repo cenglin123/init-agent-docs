@@ -16,7 +16,7 @@
 - `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit/agent_links 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
-- `.agent/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
+- `.agents/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
 - `.githooks/`：可选 lint 质量门控，调用 `scripts/agent_links.py` 做同步兜底
 - `scripts/worktree_task.py` + `.githooks/reference-transaction`：可选的多 Agent worktree 运行时（SKILL.md 第 6.5 步；四动作 create/check/integrate/cleanup + canonical 分支快进保护），协作倾向项目才安装
 
@@ -54,7 +54,7 @@ init-agent-docs/
 目标项目/
 ├── AGENTS.md              # 行为规则 + 治理规则 + 内联记忆（硬约束）+ 导航
 ├── CLAUDE.md / GEMINI.md  # 同步副本
-├── .agent/memory/         # 跨会话记忆（硬约束内联在 AGENTS.md）
+├── .agents/memory/        # 跨会话记忆（硬约束内联在 AGENTS.md）
 │   ├── MEMORY.md          # 记忆索引（标记段由 maintain.py 自动重建，禁止手改）
 │   └── user/role.md       # 用户画像
 ├── docs/

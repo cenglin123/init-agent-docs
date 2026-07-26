@@ -32,7 +32,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
         self.root = Path(self._tmp.name)
         (self.root / "scripts").mkdir()
         shutil.copy(ASSET_SCRIPT, self.root / "scripts" / "maintain.py")
-        mem = self.root / ".agent" / "memory"
+        mem = self.root / ".agents" / "memory"
         (mem / "user").mkdir(parents=True)
         (mem / "feedback").mkdir()
         (mem / "MEMORY.md").write_text(MEMORY_MD, encoding="utf-8")
@@ -73,7 +73,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
     def test_memory_index_rebuild_and_idempotency(self) -> None:
         first = self.run_maintain("--memory-index")
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
-        content = (self.root / ".agent" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        content = (self.root / ".agents" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
         self.assertIn("禁止手工编辑", content)
         self.assertIn("### user", content)
         self.assertIn("### feedback", content)
@@ -87,7 +87,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
 
     def test_check_detects_stale_index(self) -> None:
         self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
-        index = self.root / ".agent" / "memory" / "MEMORY.md"
+        index = self.root / ".agents" / "memory" / "MEMORY.md"
         text = index.read_text(encoding="utf-8").replace(
             "[role.md](user/role.md)", "[role.md](user/role.md) — 手改"
         )
@@ -110,14 +110,14 @@ class MaintainPipelineTestCase(unittest.TestCase):
         self.assertIn("agent_links.py not found", result.stdout)
 
     def test_missing_memory_md_fails(self) -> None:
-        (self.root / ".agent" / "memory" / "MEMORY.md").unlink()
+        (self.root / ".agents" / "memory" / "MEMORY.md").unlink()
         result = self.run_maintain("--memory-index")
         self.assertEqual(result.returncode, 1)
         check = self.run_maintain("--check")
         self.assertEqual(check.returncode, 1)
 
     def test_no_markers_fails(self) -> None:
-        index = self.root / ".agent" / "memory" / "MEMORY.md"
+        index = self.root / ".agents" / "memory" / "MEMORY.md"
         index.write_text("# 项目记忆索引\n\n无标记段的旧版文件。\n", encoding="utf-8")
         result = self.run_maintain("--memory-index")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
@@ -128,7 +128,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
     def test_small_project_skip(self) -> None:
         import shutil as _shutil
 
-        _shutil.rmtree(self.root / ".agent")
+        _shutil.rmtree(self.root / ".agents")
         result = self.run_maintain("--memory-index")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("small project", result.stdout)
@@ -156,7 +156,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
 
         result = self.run_maintain("--memory-index")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        content = (self.root / ".agent" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        content = (self.root / ".agents" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
         self.assertIn("### bugfix（docs/problems/bugfix/）", content)
         self.assertIn(
             "[登录接口超时后前端重复提交](../../docs/problems/bugfix/login-timeout.md)"
@@ -180,7 +180,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
 
     def test_memory_entry_liveness_marker(self) -> None:
         """记忆条目索引行展示 liveness 活性标记；无 frontmatter 的旧记忆文件不追加（向后兼容）。"""
-        (self.root / ".agent" / "memory" / "feedback" / "20260101-prefer-lf.md").write_text(
+        (self.root / ".agents" / "memory" / "feedback" / "20260101-prefer-lf.md").write_text(
             "---\n"
             "liveness: active\n"
             "last_confirmed: \"\"\n"
@@ -190,7 +190,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
         )
         result = self.run_maintain("--memory-index")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        content = (self.root / ".agent" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        content = (self.root / ".agents" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
         feedback_line = next(
             line for line in content.splitlines() if "20260101-prefer-lf.md" in line
         )
@@ -247,7 +247,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
         )
         result = self.run_maintain("--memory-index")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        content = (self.root / ".agent" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
+        content = (self.root / ".agents" / "memory" / "MEMORY.md").read_text(encoding="utf-8")
         self.assertIn("[空标题回退](../../docs/problems/bugfix/empty-title.md)", content)
         self.assertNotIn("[status: fixed]", content)
 
@@ -275,7 +275,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
         git("add", ".")
         git("commit", "-m", "old memory", env=commit_env)
         # 模拟 fresh clone：所有记忆文件 mtime 刷成现在
-        for p in (self.root / ".agent" / "memory").rglob("*.md"):
+        for p in (self.root / ".agents" / "memory").rglob("*.md"):
             os.utime(p)
 
         result = self.run_maintain()
