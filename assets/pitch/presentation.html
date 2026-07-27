@@ -216,146 +216,189 @@
             <!-- Slide 1 -->
             <div class="slide title-slide active" data-title="开始">
                 <h1>init-agent-docs</h1>
-                <p>为项目构建“Agent 优先”的文档体系</p>
+                <p>把仓库变成 Agent 可持续协作的知识系统</p>
             </div>
 
             <!-- Slide 2 -->
-            <div class="slide" data-title="三大设计哲学">
-                <div class="slide-header"><h2>三大核心设计哲学</h2></div>
+            <div class="slide" data-title="核心原则">
+                <div class="slide-header"><h2>三条贯穿全系统的原则</h2></div>
                 <div class="slide-content">
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 30px; height: 100%;">
                         <div class="info-box" style="display: flex; flex-direction: column;">
                             <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">1. 给地图，不给百科</h3>
-                            <p style="font-size: 28px; line-height: 1.5;">AGENTS.md 在上下文中<span class="highlight">始终驻留</span>，每一行都在消耗注意力预算。<br><br>控制在 <strong>100 行</strong>以内，只放指针不放细节。</p>
+                            <p style="font-size: 27px; line-height: 1.5;">AGENTS.md 始终驻留在上下文，只承载规则、导航与完工清单。<br><br>建议控制在 <strong>200 行 / 400 词</strong>以内。</p>
                         </div>
                         <div class="info-box" style="display: flex; flex-direction: column;">
-                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">2. 渐进式披露</h3>
-                            <div style="font-size: 32px; text-align: center; flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
-                                <div>先给<span class="highlight">地图</span><br><span style="font-size:24px;color:var(--slate)">(AGENTS.md)</span></div>
-                                <div style="color: var(--navy); font-size: 50px; margin: 15px 0;">↓</div>
-                                <div>按需探索<span class="highlight">细节</span><br><span style="font-size:24px;color:var(--slate)">(docs/*.md)</span></div>
-                            </div>
+                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">2. 事实源有优先级</h3>
+                            <p style="font-size: 27px; line-height: 1.5;"><span class="highlight">可执行事实源优先</span>：CI、hook、task runner、manifest 与配置，高于 README 和旧文档。</p>
                         </div>
                         <div class="info-box" style="display: flex; flex-direction: column;">
-                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">3. 独立验证视角</h3>
-                            <p style="font-size: 28px; line-height: 1.5;">执行者刚写完代码立刻自检，天然带有<strong>确认偏误</strong>。<br><br>计划中必须给“复查”留位，优先使用<span class="highlight">新视角</span>验收。</p>
+                            <h3 style="font-size: 32px; margin-bottom: 20px; line-height: 1.3;">3. 验证需要新视角</h3>
+                            <p style="font-size: 27px; line-height: 1.5;">治理文档与高风险改动必须由独立视角复查；执行完成不等于验证完成。</p>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Slide 3 -->
-            <div class="slide" data-title="分层结构图解">
-                <div class="slide-header"><h2>信息分层结构</h2></div>
+            <div class="slide" data-title="分层知识系统">
+                <div class="slide-header"><h2>渐进式披露：从入口到经验</h2></div>
                 <div class="slide-content">
-                    <div class="layer-box core"><span>AGENTS.md</span><span class="layer-desc">行为规则 (驻留, ~100行)</span></div>
-                    <div class="layer-box"><span>docs/STRUCTURE.md</span><span class="layer-desc">文档总索引 (导航表)</span></div>
-                    <div class="layer-box"><span>docs/*.md</span><span class="layer-desc">深度文档 (API、部署、陷阱)</span></div>
-                    <div class="layer-box"><span>docs/plans/</span><span class="layer-desc">执行计划 (跨会话协议)</span></div>
+                    <div class="layer-box core"><span>AGENTS.md</span><span class="layer-desc">行为规则、导航、内联记忆（始终驻留）</span></div>
+                    <div class="layer-box"><span>docs/STRUCTURE.md</span><span class="layer-desc">文档总索引（一张导航表）</span></div>
+                    <div class="layer-box"><span>docs/*.md</span><span class="layer-desc">设计原因、部署约定、环境陷阱</span></div>
+                    <div class="layer-box"><span>docs/plans/</span><span class="layer-desc">跨会话与多 Agent 的交接协议</span></div>
+                    <div class="layer-box"><span>.agents/memory/MEMORY.md</span><span class="layer-desc">经验类知识的统一检索入口</span></div>
+                    <div class="layer-box"><span>docs/CHANGELOG.md</span><span class="layer-desc">脚本化维护的变更摘要</span></div>
                 </div>
             </div>
 
             <!-- Slide 4 -->
-            <div class="slide" data-title="文档维护原则">
-                <div class="slide-header"><h2>文档维护：记什么与不记什么</h2></div>
+            <div class="slide" data-title="文档边界">
+                <div class="slide-header"><h2>文档维护：记录原因，不复制事实</h2></div>
                 <div class="slide-content">
                     <div class="grid-2" style="height: 100%;">
                         <div class="info-box" style="display: flex; flex-direction: column;">
-                            <h3 style="font-size: 32px;">✅ 必须记录 (代码里读不出的)</h3>
-                            <ul style="margin-left: 30px; font-size: 28px; line-height: 1.5;">
-                                <li><strong>设计原因</strong> (Why 选用某技术)</li>
-                                <li><strong>协作约束</strong> (团队约定与规范)</li>
-                                <li><strong>环境陷阱</strong> (坑位经验与解法)</li>
-                                <li><strong>基础设施</strong> (部署与环境约定)</li>
+                            <h3 style="font-size: 32px;">应该记录</h3>
+                            <ul style="margin-left: 30px; font-size: 27px; line-height: 1.5;">
+                                <li><strong>设计原因</strong>：为什么这样选</li>
+                                <li><strong>协作约束</strong>：代码看不到的约定</li>
+                                <li><strong>环境陷阱</strong>：已验证的坑与解法</li>
+                                <li><strong>外部约定</strong>：部署与基础设施边界</li>
                             </ul>
                         </div>
                         <div class="info-box" style="border-color: var(--accent); background: rgba(225, 29, 72, 0.05); display: flex; flex-direction: column;">
-                            <h3 style="color: var(--accent); font-size: 32px;">❌ 绝对不记 (代码/Git 已有的)</h3>
-                            <ul style="margin-left: 30px; font-size: 28px; line-height: 1.5;">
-                                <li><strong>目录结构</strong> (ls 一下就知道了)</li>
-                                <li><strong>模块职责</strong> (读代码就知道了)</li>
-                                <li><strong>函数签名</strong> (IDE 里都能看到)</li>
-                                <li><strong>Git 历史</strong> (git log 即可查阅)</li>
+                            <h3 style="color: var(--accent); font-size: 32px;">通常不重复</h3>
+                            <ul style="margin-left: 30px; font-size: 27px; line-height: 1.5;">
+                                <li><strong>目录与签名</strong>：代码可直接读取</li>
+                                <li><strong>Git 历史</strong>：交给 git log / blame</li>
+                                <li><strong>派生索引</strong>：交给脚本重建</li>
+                                <li><strong>迁移考古</strong>：不污染当前信息空间</li>
                             </ul>
                         </div>
                     </div>
+                    <p style="font-size: 25px; margin-top: 24px;"><strong>Occam</strong> 防止治理系统自增殖；<strong>Bitter Lesson</strong> 反对封顶型先验，但保留防呆型机制。</p>
                 </div>
             </div>
 
             <!-- Slide 5 -->
-            <div class="slide" data-title="计划：交接协议">
-                <div class="slide-header"><h2>计划：跨窗口协议</h2></div>
+            <div class="slide" data-title="计划即交接协议">
+                <div class="slide-header"><h2>计划：跨上下文的可执行交接</h2></div>
                 <div class="slide-content">
-                    <div class="lead-text">计划是 Agent “失忆”后的救命稻草。</div>
-                    <ul style="font-size: 38px; margin-top: 20px;">
-                        <li><strong>现状</strong>：哪些阶段已完成？</li>
-                        <li><strong>目标</strong>：当前该做哪个阶段？</li>
-                        <li><strong>上下文</strong>：前人留下了什么问题？</li>
+                    <div class="lead-text">计划文件不是待办清单，而是“失忆”后的恢复协议。</div>
+                    <ul style="font-size: 34px; margin-top: 10px;">
+                        <li><strong>目标与阶段</strong>：当前该做什么、完成标准是什么</li>
+                        <li><strong>状态与责任</strong>：queue → claimed → in_progress → review → completed</li>
+                        <li><strong>交接摘要</strong>：已改文件、验证结果、偏离与遗留</li>
+                        <li><strong>合理粒度</strong>：经验上每阶段修改 5–10 个文件，并保持可运行</li>
                     </ul>
                 </div>
             </div>
 
             <!-- Slide 6 -->
-            <div class="slide" data-title="计划：颗粒度">
-                <div class="slide-header"><h2>计划：状态与颗粒度</h2></div>
+            <div class="slide" data-title="工作模式">
+                <div class="slide-header"><h2>按任务复杂度选择工作模式</h2></div>
                 <div class="slide-content">
-                    <div class="info-box">
-                        <h3>黄金法则</h3>
-                        <p style="margin-bottom: 20px;">一个阶段涉及 <span class="highlight">5-10 个文件</span> 的修改最合适。</p>
-                        <p><strong>状态流转：</strong><br>queue → claimed → in_progress → review → ✅ completed</p>
+                    <table style="font-size: 27px;">
+                        <tr><th>模式</th><th>适用场景</th><th>最低要求</th></tr>
+                        <tr><td><strong>直接执行</strong></td><td>小修改、低风险、单会话</td><td>AGENTS + docs/CURRENT.md</td></tr>
+                        <tr><td><strong>分阶段</strong></td><td>中等复杂度、可能跨会话</td><td>上述 + docs/plans/active/</td></tr>
+                        <tr><td><strong>协作模式</strong></td><td>高风险、多 Agent 并行</td><td>任务分配 + reviewer + worktree 隔离</td></tr>
+                    </table>
+                    <div class="info-box" style="margin-top: 30px; font-size: 27px;">
+                        协作倾向项目可选安装 <code>worktree_task.py</code>：create / check / integrate / cleanup 四动作，canonical 分支仅允许快进。
                     </div>
                 </div>
             </div>
 
             <!-- Slide 7 -->
-            <div class="slide" data-title="目标文件结构">
-                <div class="slide-header"><h2>目标文件结构</h2></div>
+            <div class="slide" data-title="初始化规模">
+                <div class="slide-header"><h2>小型 / 中型 / 大型：先裁剪，再生成</h2></div>
                 <div class="slide-content">
-                    <pre>
-├── AGENTS.md (主文件)
-├── CLAUDE.md / GEMINI.md (硬链接)
-├── docs/
-│   ├── STRUCTURE.md (总索引)
-│   ├── CHANGELOG.md (变更历史)
-└── docs/
-    ├── CURRENT.md (状态)
-    └── plans/ (执行计划)
-                    </pre>
+                    <table style="font-size: 25px;">
+                        <tr><th>规模</th><th>核心产物</th><th>计划与记忆</th></tr>
+                        <tr><td><strong>小型</strong></td><td>AGENTS + README + CURRENT + CHANGELOG</td><td>不建 plans，不建 memory</td></tr>
+                        <tr><td><strong>中型</strong></td><td>全套 docs/ + 维护脚本</td><td>plans + .agents/memory/</td></tr>
+                        <tr><td><strong>大型</strong></td><td>中型全套 + 模块级拆分</td><td>模块子计划 + 统一记忆入口</td></tr>
+                    </table>
+                    <div class="lead-text" style="margin-top: 32px; font-size: 31px;">规模必须由用户确认；默认从轻量开始，不为“完整感”预付复杂度。</div>
                 </div>
             </div>
 
             <!-- Slide 8 -->
-            <div class="slide" data-title="执行：模式选择">
-                <div class="slide-header"><h2>工作模式选择</h2></div>
+            <div class="slide" data-title="目标文件结构">
+                <div class="slide-header"><h2>中型项目的目标结构</h2></div>
                 <div class="slide-content">
-                    <table>
-                        <tr><th>模式</th><th>适用场景</th><th>最低文档</th></tr>
-                        <tr><td><strong>直接执行</strong></td><td>小修改/低风险</td><td>AGENTS + CURRENT</td></tr>
-                        <tr><td><strong>分阶段</strong></td><td>中等复杂度</td><td>上述 + plans</td></tr>
-                        <tr><td><strong>并行协作</strong></td><td>高风险/多 Agent</td><td>上述 + 分配表</td></tr>
-                    </table>
+                    <pre style="font-size: 20px; line-height: 1.22; padding: 22px;">目标项目/
+├── AGENTS.md
+├── CLAUDE.md / GEMINI.md        # copy 同步（默认）
+├── README.md
+├── .agents/memory/
+│   ├── MEMORY.md                # 统一经验索引
+│   └── user/role.md
+├── docs/
+│   ├── STRUCTURE.md / CHANGELOG.md / CURRENT.md
+│   ├── overview.md / deployment.md / audit-checklist.md
+│   ├── plans/{active,completed}/
+│   └── problems/bugfix/         # Bugfix 经验档案
+└── scripts/
+    ├── agent_links.py / changelog.py / audit.py
+    └── maintain.py              # 中型+统一维护入口</pre>
                 </div>
             </div>
 
             <!-- Slide 9 -->
-            <div class="slide" data-title="致命反模式摘要">
-                <div class="slide-header"><h2>必须避免的反模式 (1-6)</h2></div>
+            <div class="slide" data-title="硬约束工具化">
+                <div class="slide-header"><h2>软约束写文档，硬约束交给工具</h2></div>
                 <div class="slide-content">
                     <div class="grid-ap">
-                        <div class="ap-card"><h4>1. 巨型 AGENTS</h4><p>挤占窗口。解法：内容下沉到 <code>docs/</code>。</p></div>
-                        <div class="ap-card"><h4>2. 重复代码信息</h4><p>导致腐烂。解法：绝对不记 "What"。</p></div>
-                        <div class="ap-card"><h4>3. 缺少完工检查</h4><p>导致漂移。解法：机械化执行清单。</p></div>
-                        <div class="ap-card"><h4>4. 计划仅在对话</h4><p>压缩即丢。解法：必须落盘到计划文件。</p></div>
-                        <div class="ap-card"><h4>5. 执行即验证</h4><p>存在偏误。解法：增加独立复查视角。</p></div>
-                        <div class="ap-card"><h4>6. 写日志读全文</h4><p>浪费 Token。解法：使用 <code>scripts/changelog.py</code> 查看标题树和局部内容。</p></div>
+                        <div class="ap-card"><h4>操作前同步</h4><p><code>git fetch origin</code>，确认工作区、分支与 ahead/behind。</p></div>
+                        <div class="ap-card"><h4>三入口同步</h4><p><code>agent_links.py</code> 执行 copy 同步（默认），hook 防止内容分叉。</p></div>
+                        <div class="ap-card"><h4>日志轻量写入</h4><p><code>changelog.py</code> 提供 titles / show / recent / add，不读全文。</p></div>
+                        <div class="ap-card"><h4>机械审计</h4><p><code>audit.py</code> 检查死链、结构、漂移、出生档案与记忆完整性。</p></div>
+                        <div class="ap-card"><h4>统一维护</h4><p><code>scripts/maintain.py</code> 重建索引并串联 audit 与同步检查。</p></div>
+                        <div class="ap-card"><h4>独立复查</h4><p>治理文档按性质分级 review，规则变化必要时走 converge。</p></div>
                     </div>
                 </div>
             </div>
 
             <!-- Slide 10 -->
+            <div class="slide" data-title="记忆与 Bugfix">
+                <div class="slide-header"><h2>记忆系统：一个入口，持续维护</h2></div>
+                <div class="slide-content">
+                    <div class="lead-text">经验检索不落到统一入口，就等于对未来 Agent 不存在。</div>
+                    <div class="grid-2" style="height: 100%;">
+                        <div class="info-box">
+                            <h3>.agents/memory/MEMORY.md</h3>
+                            <p style="font-size: 26px; line-height: 1.5;">索引标记段由 <code>scripts/maintain.py</code> 自动重建；Agent 负责经验内容的取舍，不手工维护派生目录。</p>
+                        </div>
+                        <div class="info-box">
+                            <h3>docs/problems/bugfix/</h3>
+                            <p style="font-size: 26px; line-height: 1.5;">Bugfix 文档进入同一索引，并记录 liveness、last_confirmed、confirmed_count；命中并采用后再 touch。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 11 -->
+            <div class="slide" data-title="高频反模式">
+                <div class="slide-header"><h2>当前体系重点防止的六类漂移</h2></div>
+                <div class="slide-content">
+                    <div class="grid-ap">
+                        <div class="ap-card"><h4>巨型 AGENTS</h4><p>入口挤占上下文；把专题内容下沉到 docs/。</p></div>
+                        <div class="ap-card"><h4>文档复制代码事实</h4><p>同一事实出现多份，修改后必然腐烂。</p></div>
+                        <div class="ap-card"><h4>CURRENT 与 plans 空转</h4><p>按项目规模裁剪，不创建永远没人维护的空壳。</p></div>
+                        <div class="ap-card"><h4>共享工作树并行</h4><p>多个 owner 争用 index；协作时使用 worktree 隔离。</p></div>
+                        <div class="ap-card"><h4>手工维护派生索引</h4><p>让 maintain.py 重建 MEMORY 索引与 Bugfix 分区。</p></div>
+                        <div class="ap-card"><h4>实现完成即宣告完成</h4><p>保留 review 节点，以独立视角验证高风险改动。</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 12 -->
             <div class="slide title-slide" data-title="结语">
-                <h1 style="font-size: 80px;">仓库是唯一的记忆</h1>
-                <p style="margin-top: 40px; font-size: 42px;">文档是 Agent 跨越会话的唯一纽带。</p>
+                <h1 style="font-size: 72px;">仓库是协作的唯一事实源</h1>
+                <p style="margin-top: 40px; font-size: 38px;">让规则可见、知识可找、状态可交接、漂移可检测。</p>
             </div>
 
             <div class="progress-bar" id="progressBar"></div>

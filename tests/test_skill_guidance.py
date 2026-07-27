@@ -131,6 +131,32 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 self.assertNotIn(".agent/", text)
                 self.assertIn(".agents/memory", text)
 
+    def test_pitch_deck_tracks_current_project_contract(self) -> None:
+        pitch = read_repo_file("assets/pitch/presentation.html")
+
+        self.assert_contains_all(
+            pitch,
+            [
+                "200 行 / 400 词",
+                "可执行事实源优先",
+                "copy 同步（默认）",
+                "docs/STRUCTURE.md",
+                "docs/CHANGELOG.md",
+                ".agents/memory/MEMORY.md",
+                "docs/problems/bugfix/",
+                "scripts/maintain.py",
+                "worktree_task.py",
+                "Occam",
+                "Bitter Lesson",
+                "小型 / 中型 / 大型",
+                "git fetch origin",
+            ],
+        )
+        self.assertNotIn("100 行", pitch)
+        self.assertNotIn("~100行", pitch)
+        self.assertNotIn("CLAUDE.md / GEMINI.md (硬链接)", pitch)
+        self.assertNotIn("绝对不记", pitch)
+
     def test_bitter_lesson_boundary_terms_present(self) -> None:
         skill = read_repo_file("SKILL.md")
         self.assert_contains_all(
