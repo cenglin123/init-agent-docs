@@ -14,7 +14,7 @@
 - [ ] 死链：是文件被移动了？还是 AGENTS.md 指针过时？
 - [ ] STRUCTURE 索引偏差：docs/ 下多了/少了文件？更新索引或清理孤儿文件。
 - [ ] 同步断裂：运行 `python scripts/agent_links.py repair` 修复。
-- [ ] 行数警告：AGENTS.md 超过 200 行？如有内容可下沉到 docs/，执行下沉。
+- [ ] 行数警告：AGENTS.md 超过 250 行？如有内容可下沉到 docs/，执行下沉。
 - [ ] 依赖漂移：文档声明的技术栈与实际 manifest 不符？更新文档或确认为误报。
 - [ ] 出生档案：缺失则从 git log / 当前状态重建。
 - [ ] 记忆系统：`.agents/memory/MEMORY.md` 空壳或断链？AGENTS.md 内联记忆段缺失或过时？`python scripts/audit.py memory` 逐项复核。

@@ -42,7 +42,7 @@ AGENTS.md（及其同步副本 CLAUDE.md、GEMINI.md）是 Agent 上下文中**�
 
 **为什么需要三个文件名？** 不同 Agent 框架加载不同入口：Claude Code 加载 CLAUDE.md，Codex 加载 AGENTS.md，Gemini CLI 加载 GEMINI.md。通过脚本同步（copy 模式默认），让三个文件始终承载同一份内容，编辑 AGENTS.md 后运行 repair 即可同步到其他两个，避免内容漂移。
 
-**建议控制在 200 行 / 400 词以内。** 如果超过了，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。完工检查清单和 CHANGELOG 规则留在 AGENTS.md 里是有意为之——它们是最高频被违反的硬约束，下沉到按需读取的 docs/ 反而会被遗漏。
+**建议控制在 250 行以内。** 200 行是理想目标，实践中通用项目需要保留一定篇幅（项目概述、信息导航、行为规则、测试/安全、提交规范、文档原则、完工必检等 ~130 行骨架 + 120 行项目特异内容）。250 行是实际可执行上限——如果超过，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。CHANGELOG 规则留在 AGENTS.md 里是有意为之——它是最高频被违反的硬约束，下沉到按需读取的 docs/ 反而会被遗漏。
 
 ### 2. 渐进式披露（Progressive Disclosure）
 
@@ -51,7 +51,7 @@ Agent 从一个小而稳定的入口出发，按需深入查阅。这和给新�
 信息分层结构：
 
 ```
-AGENTS.md          → 行为规则 + 导航指针 + docs/ 文件治理规则（始终在上下文，~200 行 / 400 词）
+AGENTS.md          → 行为规则 + 导航指针（始终在上下文，≤ 250 行）
 docs/STRUCTURE.md       → 文档总索引（一张导航表，Agent 需要时读取）
 docs/*.md          → 各专题深度文档（Agent 按需读取特定文件）
 docs/plans/        → 执行计划（Agent 接到复杂任务时读取）
@@ -164,8 +164,8 @@ AGENTS.md 里的规则本质上是"告诉 Agent 应该怎么做"，Agent 可能�
 
 | 约束类型 | 定义 | 例子 | 可靠性 |
 |---|---|---|---|
-| **硬约束** | 用脚本、hook、验证等机制强制执行 | Git pre-commit hook 检查 AGENTS.md 同步 | ✅ 可靠 |
-| **软约束** | 依赖 Agent 记住并遵守的提醒 | 文件开头写提醒、完工检查清单 | ❌ 不可靠 |
+| **硬约束** | 用脚本、hook、验证等机制强制执行 | Git pre-commit hook 检查 AGENTS.md 同步；`check_all.py --quiet` 跑完工检查 | ✅ 可靠 |
+| **软约束** | 依赖 Agent 记住并遵守的提醒 | 文件开头写提醒、完工检查清单散文枚举 | ❌ 不可靠 |
 
 **设计新规则时**：
 - 优先考虑能否用代码强制（脚本、hook、自动化检查）
@@ -246,13 +246,14 @@ init-agent-docs/
     ├── templates/
     │   └── zh/                       # 中文模板集
     │       （AGENTS, MEMORY, user-role, STRUCTURE, CURRENT, overview, api, deployment,
-     │        pitfalls, plan, CHANGELOG, audit-checklist, README, bugfix — 共 14 个 .tpl 文件）
+     │        pitfalls, plan, CHANGELOG, audit-checklist, README, bugfix, frontmatter-schemas — 共 15 个 .tpl 文件）
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
     │   ├── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
     │   ├── maintain.py               # 文档体系维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
     │   ├── worktree_task.py          # 多 Agent worktree 四动作运行时（可选，第 6.5 步）
-    │   └── audit.py                  # 文档一致性机械检查（死链/漂移/结构完整性）
+    │   ├── audit.py                  # 文档一致性深度审计（死链/漂移/结构完整性，定期跑 ~15 项）
+    │   └── check_all.py              # 高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~5 项）
     ├── references/
     │   ├── workflow-patterns.md      # 执行计划工作流与跨上下文协作详细说明
     │   └── eval-baseline.md          # Skill 质量评估框架与测试用例
@@ -375,6 +376,7 @@ git log --oneline HEAD..origin/main
    cp assets/scripts/changelog.py scripts/
    cp assets/scripts/agent_links.py scripts/
    cp assets/scripts/audit.py scripts/
+   cp assets/scripts/check_all.py scripts/
    ```
 
    Windows / PowerShell 等价操作：
@@ -384,6 +386,7 @@ git log --oneline HEAD..origin/main
    Copy-Item assets\scripts\changelog.py scripts\
    Copy-Item assets\scripts\agent_links.py scripts\
    Copy-Item assets\scripts\audit.py scripts\
+   Copy-Item assets\scripts\check_all.py scripts\
    ```
 
 5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中，然后再执行 repair。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
@@ -461,6 +464,7 @@ python scripts/agent_links.py check  --mode=hardlink
 | `docs/pitfalls.md`（可选） | `pitfalls.md.tpl` |
 | `docs/audit-checklist.md` | `audit-checklist.md.tpl` |
 | `docs/CHANGELOG.md` | `CHANGELOG.md.tpl` |
+| `docs/frontmatter-schemas.md`（可选） | `frontmatter-schemas.md.tpl` |
 | `docs/problems/bugfix/_template.md` | `bugfix.md.tpl`（写入后视为模板说明，非 bugfix 文档本体） |
 
 然后建立计划目录：
@@ -747,9 +751,10 @@ python scripts/changelog.py add \
 5. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
 6. `docs/CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 5` 输出至少一条标题（说明第 5 步的 `add` 成功写入了初始化条目）
 7. `python scripts/audit.py check` 退出码为 0（或仅有预期的 `[MISS]` 出生档案项——如果出生档案还未写入的话）
+7b. `python scripts/check_all.py --quiet` 退出码为 0（小型项目加 `--small` 跳过记忆检查）
 8. 最终目标项目文件不得残留 HTML 指导注释或 `[方括号]` 占位符；这些只属于模板，不属于交付物
-9. `AGENTS.md` 行数不超过约 200 行、词数不超过约 400 词（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
-10. `AGENTS.md` 包含「### docs/ 文件的治理规则」子段（存在条件/合并条件/创建原则/删除原则/自免声明），且使用 Occam + Bitter Lesson 通用原则无枚举阈值
+9. `AGENTS.md` 行数不超过约 250 行（超出说明有内容该下沉到 docs/，或小型项目漏裁剪）
+10. `AGENTS.md` 的「文档维护原则」段包含指向 `docs/STRUCTURE.md`「文件治理」段的指针（治理规则已下沉到 STRUCTURE.md）
 
 **中型 / 大型项目额外项：**
 
@@ -799,7 +804,11 @@ python scripts/changelog.py add \
 
 ### 第 9 步：初始化审计能力
 
-这一步补上设计哲学第 6 条揭示的"渐进漂移"防线。审计分两层：`scripts/audit.py`（已在第 1 步复制）做机械检查，`docs/audit-checklist.md` 做 Agent 手动裁决。
+这一步补上设计哲学第 6 条揭示的"渐进漂移"防线。审计和日常检查分三层：
+
+- `scripts/check_all.py`：高频完工检查器（每次任务后跑，~5 项，静默）。已在第 1 步复制到目标项目。
+- `scripts/audit.py`：深度审计器（每 ~20 次任务或每月跑，~15 项，详实输出）。已在第 1 步复制。
+- `docs/audit-checklist.md`：Agent 手动裁决清单。
 
 1. 基于模板创建审计清单——**所有规模都要创建**：
 
@@ -859,7 +868,7 @@ python scripts/changelog.py add \
 | 中型单体应用 | 全部 | 根据需要省略 api.md 或 pitfalls.md |
 | 大型多模块项目 | 全部 + 按模块拆分 docs/ | 无 |
 
-对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 200 行 / 400 词）。但一旦项目开始增长，就应该及时拆分。
+对于小型项目，可以把 overview.md 的内容直接放在 AGENTS.md 的信息导航区域下方（只要 AGENTS.md 不超过 250 行）。但一旦项目开始增长，就应该及时拆分。
 
 ---
 
@@ -906,3 +915,5 @@ python scripts/changelog.py add \
 20. **凭当前上下文直接开干**：接到任务不查记忆系统就开始实现，重蹈已知教训、重复已否决的方案。解法：AGENTS.md「任务前记忆检索」硬约束——除非任务非常简单明确，先查 git log / CHANGELOG / `.agents/memory/MEMORY.md` 索引段再动手；bugfix 类任务另有触发词硬性前置（先查索引 bugfix 分区）。
 21. **bugfix 文档游离于经验索引外**：踩坑记录写了，但检索入口覆盖不到它——按规则检索的 Agent 永远查不到，文档等于不存在。解法：bugfix 索引进 `maintain.py` 派生段（MEMORY.md 索引段），检索规则写成统一入口式而非枚举式（枚举清单必然滞后于实际产物）。
 22. **手工逐篇登记 bugfix**：在 STRUCTURE.md 或索引文件里手工逐行登记 bugfix 文档——纯派生信息手工维护必然腐烂（与反模式 19 同因）。解法：STRUCTURE.md 只登记目录一行，逐篇索引由 `python scripts/maintain.py` 派生。
+23. **完工检查清单散文枚举**：AGENTS.md 中逐条列出"跑 ch 脚本、跑 y 脚本、确认 z 已更新"——agent 在任务结束时的认知负载高峰下不可能逐字执行。解法：`python scripts/check_all.py --quiet` 一条命令替代全部机械检查项（无输出=通过，FAIL 自带修复指引）；只保留无法脚本化的 2-3 条语义确认。
+24. **AGENTS.md 充当百科全书**：把所有 frontmatter schema、converge 流程步骤、hook 检查项翻译成人话逐条写在 AGENTS.md 里。解法：schema → `docs/frontmatter-schemas.md`；流程步骤→该流程的协议文档；hook 检查项→hook 脚本自身（AGENTS 只放无脚本兜底的规则）。指针代替散文。

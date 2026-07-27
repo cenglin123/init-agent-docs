@@ -41,8 +41,8 @@ class SkillGuidanceTestCase(unittest.TestCase):
         self.assert_contains_all(
             text,
             [
-                "最终生成 AGENTS.md 前逐条过滤",
-                "本 skill 创建的机制需要 Agent 记住",
+                "必须保持精简",
+                "只放行为规则和信息指针",
                 "候选项：只有目标仓库已有约束或用户确认时保留",
             ],
         )
@@ -77,12 +77,10 @@ class SkillGuidanceTestCase(unittest.TestCase):
             tpl,
             [
                 "任务前记忆检索",
-                "统一检索入口",
-                "触发词硬性前置",
+                "查经验系统",
+                "检索动作必须发生",
                 "Bugfix 沉淀",
                 "python scripts/maintain.py",
-                "<!-- memory-index:start/end -->",
-                "last_confirmed",
             ],
         )
 
@@ -189,8 +187,7 @@ class SkillGuidanceTestCase(unittest.TestCase):
             [
                 "多 Agent worktree 路由",
                 "python scripts/worktree_task.py create",
-                "needs-rebase",
-                "already-integrated",
+                "workflow-patterns.md",
             ],
         )
 

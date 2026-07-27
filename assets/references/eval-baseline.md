@@ -47,7 +47,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 - [ ] `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 3` 输出至少一条标题
 - [ ] `docs/CURRENT.md` 已创建
 - [ ] `AGENTS.md` 中所有链接指向真实存在的文件（小型项目特别注意死链）
-- [ ] `AGENTS.md` 行数 ≤ 200（小型项目 ≤ 150 更佳）
+- [ ] `AGENTS.md` 行数 ≤ 250（小型项目 ≤ 150 更佳）
 - [ ] 未残留未删除的模板指导注释（`<!-- ... -->` 或 `[方括号]` 占位符）
 - [ ] 可执行事实源优先：当 README 写旧命令而 CI / manifest / hook 写真实命令时，`AGENTS.md` 采用真实命令
 - [ ] 已有 instruction 文件整合：旧 `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot / OpenCode 指令中的硬约束已被读取、去重并保留

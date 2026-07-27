@@ -372,7 +372,7 @@ def _check_line_budget() -> list[dict[str, Any]]:
     text = _read(p)
     line_count = len(text.splitlines())
     word_count = len(text.split())
-    lines_ok = line_count <= 200
+    lines_ok = line_count <= 250
     words_ok = word_count <= 400
     if lines_ok and words_ok:
         status = "ok"
@@ -551,11 +551,11 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append("[MISS  ] AGENTS.md not found")
             elif r["status"] == "warn":
                 lines_out.append(
-                    f"[WARN   ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 200/400)"
+                    f"[WARN   ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 250/400)"
                 )
             else:
                 lines_out.append(
-                    f"[OK    ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 200/400)"
+                    f"[OK    ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 250/400)"
                 )
         elif kind == "sync":
             if r["status"] == "broken":
