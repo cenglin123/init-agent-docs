@@ -1,11 +1,13 @@
-# [计划标题]
-
-> 创建时间：[日期]
-> 状态：进行中
-> 模式：直接执行 | 分阶段 | 协作
-> 协调人：[@name] <!-- 没有可写 无。协调人负责分配任务、推动状态流转、汇总 review 结果、处理交接或冲突、重新拆解不合理的任务分配（如 Owner 上报粒度/依赖/方案问题），并在所有阶段完成后关闭计划。 -->
+---
+status: in_progress       # in_progress | done | cancelled
+mode: direct-execution    # direct-execution | phased | collaborative
+coordinator: ""           # 协调人（协作模式必填）；没有可写空字符串
+created_at: ""            # YYYY-MM-DD
+---
 
 <!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+
+# [计划标题]
 
 ## 任务分配表
 

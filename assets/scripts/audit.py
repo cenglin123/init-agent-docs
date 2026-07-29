@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -138,6 +139,91 @@ def _find_manifests() -> list[Path]:
     for g in MANIFEST_GLOBS:
         found.extend(ROOT.glob(g))
     return sorted(set(found))
+
+
+# ---------------------------------------------------------------------------
+# frontmatter
+# ---------------------------------------------------------------------------
+
+_FRONTMATTER_RE = re.compile(
+    r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL
+)
+
+
+# Blockquote metadata pattern: lines starting with "> key : value" in the first 5 lines.
+# Supports both ASCII colon (:) and full-width colon (：).
+_BLOCKQUOTE_META_RE = re.compile(r"^>\s*(\S[^:：]+?)\s*[:：]\s*(.+)$")
+
+
+def _parse_frontmatter(text: str) -> dict[str, Any]:
+    """Parse frontmatter from a plan file.
+
+    Tries two formats in order:
+    1. YAML frontmatter between --- delimiters (preferred, see plan.md.tpl).
+    2. Blockquote metadata lines ("> key: value") within first 10 lines (legacy
+       format from init-agent-docs < 2026-07-29).
+
+    Returns a plain dict with lowercase keys. This is intentionally NOT a full
+    YAML parser — it handles the subset used in plan files: key: value pairs.
+    Multi-line values and YAML lists are NOT supported.
+    """
+    fm: dict[str, Any] = {}
+
+    # Try format 1: YAML frontmatter (--- delimiters)
+    m = _FRONTMATTER_RE.match(text)
+    if m:
+        for line in m.group(1).splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if ":" not in stripped:
+                continue
+            key, _, val = stripped.partition(":")
+            # Strip inline YAML comments (e.g., "# in_progress | done | cancelled")
+            clean_val = val.strip().split(" #", 1)[0].rstrip()
+            fm[key.strip().lower()] = clean_val
+        # If frontmatter has status, return now. Otherwise fall through so
+        # blockquote metadata can supply the missing status field.
+        if "status" in fm:
+            return fm
+
+    # Try format 2: blockquote metadata within first 10 lines (legacy).
+    # 10 lines covers both standalone blockquote (lines 1-4) and the case
+    # where YAML frontmatter pushes content down (lines 4-7).
+    # Merges into fm — does not overwrite existing keys from format 1.
+    _KEY_MAP_CN: dict[str, str] = {
+        "状态": "status",
+        "创建时间": "created_at",
+        "模式": "mode",
+        "协调人": "coordinator",
+    }
+    for line in text.splitlines()[:10]:
+        bm = _BLOCKQUOTE_META_RE.match(line)
+        if bm:
+            raw_key, val = bm.group(1).strip(), bm.group(2).strip()
+            mapped = _KEY_MAP_CN.get(raw_key)
+            if not mapped:
+                continue
+            if mapped in fm:
+                continue  # format 1 already has this key, don't overwrite
+            if mapped == "status":
+                fm["status"] = _normalize_status(val)
+            else:
+                fm[mapped] = val
+
+    return fm
+
+
+_STATUS_MAP: dict[str, str] = {
+    "进行中": "in_progress",
+    "已完成": "done",
+    "已取消": "cancelled",
+}
+
+
+def _normalize_status(val: str) -> str:
+    """Normalize Chinese status values to machine-readable keys."""
+    return _STATUS_MAP.get(val, val)
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +462,7 @@ def _check_line_budget() -> list[dict[str, Any]]:
     words_ok = word_count <= 400
     if lines_ok and words_ok:
         status = "ok"
-    elif not lines_ok or not words_ok:
+    else:
         status = "warn"
     return [{"kind": "line_budget", "status": status, "lines": line_count, "words": word_count}]
 
@@ -482,6 +568,78 @@ def _check_memory() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# plans — check for stale plans in docs/plans/active/
+# ---------------------------------------------------------------------------
+
+_STALE_DAYS = 30  # plans older than this without modification are candidates
+
+
+def _check_plans() -> list[dict[str, Any]]:
+    """Check docs/plans/active/ for stale or unarchived plans.
+
+    Flags:
+    - STALE (status=stale): plan frontmatter has `status: done` or
+      `status: completed` — should be moved to docs/plans/completed/.
+    - LINGER (status=linger): plan is older than _STALE_DAYS without
+      recent modification — possible candidate for archival review.
+    """
+    results: list[dict[str, Any]] = []
+    plans_dir = ROOT / "docs" / "plans" / "active"
+    if not plans_dir.is_dir():
+        return results
+
+    now = datetime.now(timezone.utc).timestamp()
+
+    for f in sorted(plans_dir.glob("*.md")):
+        if f.name == ".gitkeep":
+            continue
+        rel = str(f.relative_to(ROOT)).replace("\\", "/")
+
+        text = _read(f)
+        fm = _parse_frontmatter(text)
+        status_val = fm.get("status", "")
+
+        # Check 1: frontmatter says done/completed → stale
+        if status_val in ("done", "completed", "cancelled"):
+            results.append({
+                "kind": "plans",
+                "status": "stale",
+                "file": rel,
+                "detail": f'Frontmatter status="{status_val}" but file still in active/'
+                          f' — move to docs/plans/completed/',
+            })
+            continue
+
+        # Check 2: file older than _STALE_DAYS → linger warning
+        try:
+            mtime = f.stat().st_mtime
+            age_days = (now - mtime) / 86400
+        except OSError:
+            age_days = 0.0
+
+        if age_days > _STALE_DAYS:
+            results.append({
+                "kind": "plans",
+                "status": "linger",
+                "file": rel,
+                "detail": f'File not modified in {int(age_days)} days'
+                          f' (threshold: {_STALE_DAYS}d)'
+                          f' — review and either archive or update frontmatter status',
+            })
+            continue
+
+        # All clear
+        results.append({
+            "kind": "plans",
+            "status": "ok",
+            "file": rel,
+            "detail": "",
+        })
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # aggregate
 # ---------------------------------------------------------------------------
 
@@ -494,6 +652,7 @@ def _run_all() -> list[dict[str, Any]]:
     results.extend(_check_line_budget())
     results.extend(_check_sync())
     results.extend(_check_memory())
+    results.extend(_check_plans())
     return results
 
 
@@ -515,6 +674,8 @@ _STATUS_GLYPHS: dict[str, str] = {
     "skip":        "SKIP",
     "empty":       "EMPTY",
     "unlinked":    "UNLINK",
+    "stale":       "STALE",
+    "linger":      "LINGER",
 }
 
 
@@ -576,6 +737,13 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 )
             else:
                 lines_out.append(f"[{glyph:<6}] memory: {r['detail']}")
+        elif kind == "plans":
+            if r["status"] == "stale":
+                lines_out.append(f"[STALE  ] {r['file']}: {r['detail']}")
+            elif r["status"] == "linger":
+                lines_out.append(f"[LINGER ] {r['file']}: {r['detail']}")
+            elif r["status"] == "ok" and verbose:
+                lines_out.append(f"[OK    ] {r['file']}")
     return "\n".join(lines_out)
 
 
@@ -625,6 +793,17 @@ def _cmd_drift(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _cmd_plans(args: argparse.Namespace) -> None:
+    results = _check_plans()
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        print(_format_text(results, verbose=args.verbose))
+    has_issues = any(r["status"] not in ("ok",) for r in results)
+    if has_issues:
+        raise SystemExit(1)
+
+
 def _cmd_memory(args: argparse.Namespace) -> None:
     results = _check_memory()
     if args.json:
@@ -670,6 +849,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_mem.add_argument("--verbose", action="store_true", help="Show OK entries")
     p_mem.set_defaults(func=_cmd_memory)
 
+    p_plans = sub.add_parser("plans", help="Check for stale/unarchived plans only")
+    p_plans.add_argument("--json", action="store_true", help="Output JSON")
+    p_plans.add_argument("--verbose", action="store_true", help="Show OK entries")
+    p_plans.set_defaults(func=_cmd_plans)
+
     return parser
 
 
@@ -685,7 +869,7 @@ def main(argv: list[str] | None = None) -> None:
 if __name__ == "__main__":
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
         except (AttributeError, ValueError):
             pass
     main(sys.argv[1:])

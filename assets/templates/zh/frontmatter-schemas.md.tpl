@@ -17,4 +17,19 @@ role: protagonist    # protagonist|antagonist|deuteragonist|supporting|minor
 ---
 ```
 
+## 计划（`docs/plans/active|completed/<计划名>.md`）
+
+```yaml
+---
+status: in_progress       # in_progress | done | cancelled
+mode: direct-execution    # direct-execution | phased | collaborative
+coordinator: ""           # 协调人；单 Agent 场景留空
+created_at: ""            # YYYY-MM-DD
+---
+```
+
+说明：
+- `status` 字段被 `scripts/audit.py plans` 检查使用：`status=done` 或 `status=cancelled` 时审计脚本会报告 STALE（应归档到 `completed/`）。
+- `liveness` 字段不在此处使用——计划文件完成后即归档，不需要活性追踪。
+
 <!-- 不需要 frontmatter schema 的项目跳过本文件，并删除 AGENTS.md 信息导航中对应行 -->
