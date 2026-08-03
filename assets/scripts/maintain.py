@@ -8,7 +8,9 @@
 2. 运行 audit.py check（死链 / 结构完整性 / 依赖漂移 / 记忆健康）
 3. 运行 agent_links.py check（AGENTS / CLAUDE / GEMINI 同步一致性）
 4. 记忆活性统计（30 天未更新预警，统计范围含 bugfix 文档）
-5. 近期上下文摘要（git log + CHANGELOG 标题树，辅助 agent 快速恢复脉络）
+5. 审计触发器（距上次审计裁决超过 30 天则 WARN 提醒；机械化的是"该审计了"，
+   不是"文档是否陈旧"——治理文档正确性是事件驱动的，mtime 对比只会产生假警报）
+6. 近期上下文摘要（git log + CHANGELOG 标题树，辅助 agent 快速恢复脉络）
 
 用法：
     python scripts/maintain.py                 # 完整维护：重建索引 + 全部检查 + 报告
@@ -39,6 +41,8 @@ BUGFIX_LINK_PREFIX = "../../docs/problems/bugfix"
 INDEX_START = "<!-- memory-index:start -->"
 INDEX_END = "<!-- memory-index:end -->"
 STALE_DAYS = 30
+AUDIT_CHECKLIST = ROOT / "docs" / "audit-checklist.md"
+AUDIT_STALE_DAYS = 30
 MAX_TITLE_LEN = 60
 GIT_LOG_LIMIT = 10
 
@@ -276,6 +280,38 @@ def memory_staleness() -> tuple[str, str]:
     return "ok", f"newest memory update {age.days}d ago ({total} entries, 含 {len(bugfix)} bugfix)"
 
 
+def audit_recency() -> tuple[str, str]:
+    """审计触发器：距上次审计裁决超过阈值则提醒（WARN，不阻塞）。
+
+    机械化的是"该做审计了"这个提醒，不是"文档是否陈旧"——治理文档的
+    正确性是事件驱动的（环境变了才需要改），mtime 对比会产生假警报并
+    诱发凑数编辑（Goodhart）。状态唯一来源是 audit-checklist.md 末尾
+    「审计记录」段的日期：裁决过就追加记录，"已判断 = 已销警"。
+
+    Returns (status, detail); status ∈ ok / warn / skip.
+    """
+    if not AUDIT_CHECKLIST.is_file():
+        return "skip", "no docs/audit-checklist.md"
+    text = _read(AUDIT_CHECKLIST)
+    marker = "## 审计记录"
+    section = text[text.find(marker):] if marker in text else text
+    dates = re.findall(r"\d{4}-\d{2}-\d{2}", section)
+    if not dates:
+        return (
+            "warn",
+            "审计记录段无任何日期——从未记录审计，请按 docs/audit-checklist.md 执行首次裁决",
+        )
+    last = max(datetime.strptime(d, "%Y-%m-%d") for d in dates)
+    age = (datetime.now() - last).days
+    if age > AUDIT_STALE_DAYS:
+        return (
+            "warn",
+            f"距上次审计 {age} 天（> {AUDIT_STALE_DAYS}）——请按 docs/audit-checklist.md "
+            "逐项裁决：过时就更新/删除，仍准确则只需在审计记录追加当日条目",
+        )
+    return "ok", f"last audit {age}d ago ({last.strftime('%Y-%m-%d')})"
+
+
 # ---------------------------------------------------------------------------
 # delegated checks (audit.py / agent_links.py)
 # ---------------------------------------------------------------------------
@@ -389,6 +425,9 @@ def run_full(*, check_only: bool) -> int:
     mem_status, mem_detail = memory_staleness()
     glyph_status = {"stale": "warn"}.get(mem_status, mem_status)
     print(_line(glyph_status, f"memory activity: {mem_detail}"))
+
+    rec_status, rec_detail = audit_recency()
+    print(_line(rec_status, f"audit recency: {rec_detail}"))
 
     if not check_only:
         git_lines = _git_recent()
