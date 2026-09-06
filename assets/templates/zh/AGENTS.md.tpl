@@ -103,9 +103,10 @@ Conventional Commit（`feat:` / `fix:` / `chore:`）。治理文档修改须含 
 
 1. **不重复**：同一信息只在最合适的位置出现一次
 2. **只记代码/正文里读不出来的东西**：设计原因、协作约束、环境陷阱
-3. **CHANGELOG**：用 `python scripts/changelog.py titles/show/add/recent`，不读全文
-4. **计划落盘**：跨模块/跨会话的任务在 `docs/plans/active/` 写计划，完成后移 `completed/`
-5. **定期审计**：每 ~20 次任务或每月，跑 `python scripts/audit.py check`（有记忆系统用 `python scripts/maintain.py`）
+3. **治理文档直接写最终态**：修改 AGENTS.md / STRUCTURE.md 等规则文件时不留「以前xx，现在xx」对比、日期标记或弃用标注——当前文本即权威；过程归 git log，制度变更归 CHANGELOG，两者已覆盖历史需求
+4. **CHANGELOG**：用 `python scripts/changelog.py titles/show/add/recent`，不读全文
+5. **计划落盘**：跨模块/跨会话的任务在 `docs/plans/active/` 写计划，完成后移 `completed/`
+6. **定期审计**：每 ~20 次任务或每月，跑 `python scripts/audit.py check`（有记忆系统用 `python scripts/maintain.py`）
 
 > docs/ 文件的治理规则（存在/合并/创建/删除条件）见 [docs/STRUCTURE.md](docs/STRUCTURE.md)「文件治理」段。
 
