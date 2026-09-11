@@ -282,24 +282,24 @@ init-agent-docs/
 
 ## 执行步骤
 
-### 前置检查：仓库一致性核对
+### 前置检查：先判定仓库模式，再核对一致性
 
-**开始任何操作前**，必须先核对当前仓库与远端（GitHub）版本的一致性。这是一条硬约束——不通过则不进入后续步骤。
+**开始任何操作前**，先通过根目录是否存在 `.git`（目录或 worktree 指针文件）判定当前仓库能力；不要为了检测 no-Git 目录而运行 Git 命令。第 0 步再由用户确认最终 profile。
 
-```bash
-git fetch origin
-git status --short
-git log --oneline HEAD..origin/main
-```
+- **no-Git profile 不运行任何 Git 命令**：直接检查当前文件、既有文档和 CHANGELOG；没有远端一致性可核对。
+- **Git profile**：只使用仓库实际配置的当前分支、远端和 upstream，不假定 `origin` 或 `main`。先读取配置，再按实际 upstream 比较：
 
-| 状态 | 处理 |
-|------|------|
-| 工作区干净、与 origin/main 同步 | 进入第 0 步 |
-| 有未提交修改 | 确认归属后 stash / commit / 清理 |
-| 本地落后于 origin/main | `git pull --rebase origin main` 合并后再操作 |
-| 本地有未推送 commit | 确认是否需要先 push |
+  ```bash
+  git status --short
+  git branch --show-current
+  git remote -v
+  git rev-parse --abbrev-ref --symbolic-full-name @{upstream}
+  git log --oneline HEAD..@{upstream}
+  ```
 
-**为什么这是硬约束**：在过时或分叉的基线上初始化文档体系，会导致生成的 AGENTS.md 基于旧代码结构、docs/ 指向不存在的文件、或与远端已有的文档产生冲突。机械检查的成本（几秒）远低于事后修复的成本。
+  未配置 upstream 时停止远端比较并向用户说明；不得自行拼接远端名或分支名。有未提交修改、本地落后或未推送提交时，先确认归属和处置方式，不自动 stash、commit、pull 或 push。
+
+**为什么 Git profile 要先核对**：在过时或分叉的基线上初始化文档体系，会导致生成的 AGENTS.md 基于旧代码结构、docs/ 指向不存在的文件、或与远端已有文档冲突。no-Git profile 没有该前置条件。
 
 ---
 
@@ -356,7 +356,33 @@ git log --oneline HEAD..origin/main
 - **不要在未得到用户同意前擅自决定**。如果用户说"先简单来"，就按小型执行；如果用户说"全套"，就按中型或大型执行。
 - 用户的拍板结果必须记录下来，作为后续步骤的输入依据。
 
-**把 intent 结果落盘。** 第 0 步收集的信息（包括用户确认的规模选择）不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案 + 用户确认的规模写入：
+**仓库能力与项目规模是独立的两个轴。** 用户还需确认仓库模式（Git / no-Git），记录到出生档案的 `repository_mode` 字段。现有 Git 仓库使用其配置的远端和当前分支；非 Git 目录不会自动执行 `git init`，只有在用户明确确认后才初始化。
+
+#### 四个 Profile 精确输出
+
+| Profile | 必须生成的输出 | Git 特有行为 | 明确省略 |
+|---------|--------------|------------|---------|
+| Small + Git | AGENTS.md/CLAUDE.md/GEMINI.md、root README.md、docs/CURRENT.md、docs/CHANGELOG.md、docs/audit-checklist.md、agent_links.py、changelog.py、audit.py、check_all.py | 可检查已有远端；仅在单独确认后安装 hooks | 不建 plans、memory、maintain、worktrees、hooks（默认） |
+| Small + no-Git | 同 Small + Git | **不得生成**：Git 命令、history/commit/hook/branch/remote 指引、worktree 相关内容；CURRENT + CHANGELOG 提供基于文件的 handoff/history | 同 Small + Git 加所有 Git-only 段落 |
+| Medium/Large + Git | 全套 docs/、plans/、memory/、maintain.py 等维护脚本；Large 加模块级拆分提示 | 检查已配置远端；hooks/worktrees 仅在已有确认后安装 | 不假定 `origin`、`main` 或自动 `git init` |
+| Medium/Large + no-Git | 全套 docs/、plans/、memory/、maintain.py 等维护脚本；Large 加模块级拆分提示 | maintain.py 在调用任何 Git 子进程前检测无仓库，回退到 mtime + CHANGELOG；不生成 hooks/worktrees/commit/history 指引 | 所有 Git-only 段落和资产 |
+
+出生档案位置：
+- Small 项目：`docs/initialization.md`，含 `size` 和 `repository_mode` 字段
+- Medium/Large 项目：`docs/plans/completed/initialization.md`，含 `size` 和 `repository_mode` 字段
+
+#### Small + no-Git 的显式省略
+
+Small + no-Git profile **不得生成**以下内容：
+- `docs/plans/` 目录或任何计划文件
+- `.agents/memory/` 目录或记忆系统文件
+- `docs/overview.md`
+- `.githooks/` 或任何 Git hook
+- worktree 相关指引或脚本
+- Git 命令、commit/history/branch/remote 指引
+- `scripts/maintain.py`（中型+项目专用）
+
+**把 intent 结果落盘。** 第 0 步收集的信息（包括用户确认的规模选择和仓库模式）不要只留在对话里——初始化完成后，它就是这份文档体系的"出生档案"。建议第 5 步结束时把 10 个维度的答案 + 用户确认的规模和仓库模式写入：
 
 - 中型 / 大型项目：`docs/plans/completed/initialization.md`（用 `plan.md.tpl` 作骨架）
 - 小型项目：`docs/initialization.md`（小型项目不建 plans 目录，直接放在 docs/ 下，用一份精简骨架即可——目标 / 规模 / 10 个维度的答案 / 完成时间）
@@ -376,7 +402,7 @@ git log --oneline HEAD..origin/main
    - "硬约束"一节：填入项目的构建产物路径、特殊约束
    - "测试要求"一节：按有无测试套件填
    - "安全与配置"一节：项目涉及密钥/认证/敏感数据时保留并填写，否则删除整节
-   - "提交规范"一节：按项目实际 commit 风格填写，PR 要求按需裁剪
+   - "提交规范"一节：仅 Git profile 按项目实际 commit 风格填写；no-Git profile 删除整节
    - 裁剪后在"信息导航"下方填写"省略声明"，声明哪些信息被有意省略（如"本文件未包含 API 约定——项目无 API 接口"）
    - 添加代码风格约定（语言 / 缩进 / 命名）
 4. 先把脚本资产复制到目标项目：
@@ -399,35 +425,35 @@ git log --oneline HEAD..origin/main
    Copy-Item assets\scripts\check_all.py scripts\
    ```
 
-5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中，然后再执行 repair。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
+5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中，然后再按目标 AGENTS.md「同步声明」执行精确命令。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
 
 6. 写入目标项目的 `AGENTS.md` 后，运行同步脚本，将 `AGENTS.md` 的内容复制到 `CLAUDE.md` 和 `GEMINI.md`，并验证三文件一致：
 
    ```bash
-   python scripts/agent_links.py repair
-   python scripts/agent_links.py check
+   python scripts/agent_links.py repair --mode copy --force
+   python scripts/agent_links.py check --mode copy
    ```
 
 7. 如果检查失败，先确认 `CLAUDE.md` / `GEMINI.md` 是否含有不同内容；确认可以用 `AGENTS.md` 覆盖后再修复：
 
    ```bash
-   python scripts/agent_links.py repair
-   # 内容不同且已人工确认时才使用：
-   python scripts/agent_links.py repair --force
+   # 以下以 copy 声明为例；hardlink 项目必须使用 AGENTS.md 中的 hardlink 命令。
+   python scripts/agent_links.py repair --mode copy --force
+   python scripts/agent_links.py check --mode copy
    ```
 
 **默认使用 copy 模式**：`repair` 默认以 copy 模式工作（`--mode=copy`），将 `AGENTS.md` 的内容复制到 `CLAUDE.md` 和 `GEMINI.md`，并用 MD5 校验一致性。copy 模式的优势是**不受编辑器原子写入影响**——部分编辑器保存时用"写临时文件 → 删原文件 → 重命名"，会创建新 inode 从而断开硬链接；copy 模式不存在这个问题。
 
 ```bash
-python scripts/agent_links.py repair          # 默认 copy 模式
-python scripts/agent_links.py check           # 默认接受 copy 或 hardlink 任一状态
+python scripts/agent_links.py repair --mode copy --force
+python scripts/agent_links.py check --mode copy
 ```
 
 **如文件系统支持且你明确需要 hardlink**：显式传 `--mode=hardlink` 锁定模式。但请注意，hardlink 在以下场景会断裂：编辑器原子写入、WSL 跨盘、ReFS/exFAT、部分 CI 容器。断裂后需要重新运行 `repair` 恢复。在 AGENTS.md 顶部写清当前项目用哪种模式，避免歧义。
 
 ```bash
-python scripts/agent_links.py repair --mode=hardlink
-python scripts/agent_links.py check  --mode=hardlink
+python scripts/agent_links.py repair --mode hardlink --force
+python scripts/agent_links.py check --mode hardlink
 ```
 
 ### 第 2 步：创建 docs/STRUCTURE.md 和 docs/ 目录
@@ -457,9 +483,9 @@ python scripts/agent_links.py check  --mode=hardlink
 - `## 项目记忆` 整段（含其下所有行和 HTML 注释）
 - `### Bugfix 沉淀` 整节
 
-只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录；「任务前记忆检索」中的第 2、3 条（读取 MEMORY.md 索引段、bugfix 触发词前置）同步删除，保留 git log / CHANGELOG 检索。「定期审计」条目删去 maintain.py 半句，仅保留 `python scripts/audit.py check`——小型项目不装 maintain.py，留着是死引用。完工检查清单「记忆自检」项同步整项替换为"小型项目，无记忆目录"标注（写出/读入两段均删）。
+只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录；「任务前记忆检索」中的第 2、3 条（读取 MEMORY.md 索引段、bugfix 触发词前置）同步删除。Git profile 可保留 Git history + CHANGELOG 检索，no-Git profile 只保留 CURRENT + CHANGELOG。"定期审计"条目删去 maintain.py 半句，仅保留 `python scripts/audit.py check`——小型项目不装 maintain.py，留着是死引用。完工检查清单「记忆自检」项同步整项替换为"小型项目，无记忆目录"标注（写出/读入两段均删）。
 
-裁剪后运行 `python scripts/agent_links.py repair` 把改动同步到 CLAUDE.md / GEMINI.md。
+裁剪后按目标 AGENTS.md「同步声明」中的精确 repair/check 命令同步并验证 CLAUDE.md / GEMINI.md。
 
 #### 中型项目
 按模板生成以下全套文件：
@@ -547,8 +573,8 @@ mkdir -p .agents/memory/user
 3. **去重与裁决**：如果一条信息在多份旧文档里都出现，只保留一份。区分两类冲突：
    - **信息归口冲突**：同一类信息应该放在哪里，以新文档结构为准（例如设计决策归 `docs/overview.md`，CHANGELOG 只记摘要）。
    - **事实内容冲突**：命令、入口、工具链顺序、测试方式、生成物路径等，以可执行来源为准，优先级为 CI / hook / task runner / manifest scripts / lockfile / config > README / prose docs > 模板默认文案。
-4. **删除旧文档**：迁移完成后 `git rm` 旧文档。不要加"已迁移至…"、"仅供历史追溯"等弃用标注——这些是**迁移考古**，属于文档内部的冗余历史信息。`git log` / `git blame` 是考古层的唯一合法归宿；迁移事件写入 CHANGELOG（下一步）即完成了历史记录。
-5. **记录迁移到 CHANGELOG**：用 `python scripts/changelog.py add ...` 把删除的文件列表和迁移去向作为一次独立变更记录。旧文档内容的考古查询走 `git log -- <旧路径>`。
+4. **删除旧文档**：迁移完成后删除旧文档。Git profile 使用 `git rm`，并以 Git history 追溯；no-Git profile 使用文件系统删除，不运行 Git 命令。两种 profile 都不要加"已迁移至…"、"仅供历史追溯"等弃用标注，迁移事件统一写入 CHANGELOG。
+5. **记录迁移到 CHANGELOG**：用 `python scripts/changelog.py add ...` 把删除的文件列表和迁移去向作为一次独立变更记录。Git profile 可从配置的历史入口追溯旧内容；no-Git profile 仅以 CHANGELOG 和现存文件为证据。
 
 ### 第 4 步：初始化首个计划文件（可选）
 
@@ -599,7 +625,7 @@ python scripts/changelog.py add \
 
 5. 更新 AGENTS.md「项目记忆」内联段：将已知的用户信息和项目上下文写入摘要中的 `- **用户**：` 和 `- **项目上下文**：` 行。不要留 `<!--  -->` 注释——这是最终交付物。
 
-6. 运行 `python scripts/agent_links.py repair` 同步 CLAUDE.md / GEMINI.md。
+6. 按目标 AGENTS.md「同步声明」中的精确 repair/check 命令同步并验证 CLAUDE.md / GEMINI.md。
 
 7. 确认 AGENTS.md 信息导航包含记忆指针行（`- 项目记忆索引：[.agents/memory/MEMORY.md]...`）。
 
@@ -616,13 +642,9 @@ python scripts/changelog.py add \
    python scripts/agent_links.py check
    ```
 
-2. **确认 git 仓库已初始化**。如果项目根目录没有 `.git/`，pre-commit hook 无法生效。此时先执行：
+2. **按 repository mode 分支**：no-Git profile 跳过整个 hook 步骤，不创建 `.git`、`.githooks` 或 pre-commit 配置。只有用户明确确认将 no-Git 目标转换为 Git 后才可运行 `git init`，随后重新确认 profile；不得把初始化 Git 当成质量门控的默认动作。
 
-   ```bash
-   git init
-   ```
-
-3. **配置 pre-commit hook（必须）**——核心目的是在每次提交前检查 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 三文件内容是否一致，防止 Agent 修改 AGENTS.md 后忘记同步。assets 下的 hook 已内建 fallback：优先调用 `agent_links.py`，不可用时用内联 MD5 检查（兼容 md5sum / md5），工具缺失时警告但不阻塞。
+3. **仅 Git profile 且用户已单独确认时配置 pre-commit hook**——核心目的是在每次提交前检查 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 三文件内容是否一致，防止 Agent 修改 AGENTS.md 后忘记同步。未确认安装 hook 时跳过本项，仍执行 `agent_links.py check`。assets 下的 hook 已内建 fallback：优先调用 `agent_links.py`，不可用时用内联 MD5 检查（兼容 md5sum / md5），工具缺失时警告但不阻塞。
 
    **二选一，不要叠加**——assets 下的技术栈 hook 内部已经包含 agent_links 一致性检查，再叠加 inline 的最小 hook 会让检查跑两次、输出混乱。
 
@@ -636,7 +658,7 @@ python scripts/changelog.py add \
    python scripts/agent_links.py check || {
        echo ""
        echo "AGENTS.md / CLAUDE.md / GEMINI.md 内容不一致。"
-       echo "正确流程：仅编辑 AGENTS.md，然后运行 python scripts/agent_links.py repair。"
+       echo "正确流程：仅编辑 AGENTS.md，然后按其中「同步声明」的精确命令修复并检查。"
        exit 1
    }
    EOF
@@ -703,7 +725,7 @@ python scripts/changelog.py add \
    echo "diverged" >> CLAUDE.md && git add CLAUDE.md
    git commit -m "test: hook reject" && echo "BUG: hook should have rejected" || echo "ok: hook rejected as expected"
    git restore --staged CLAUDE.md && git checkout -- CLAUDE.md
-   python scripts/agent_links.py repair
+   # 按 AGENTS.md「同步声明」中的精确 repair/check 命令恢复同步。
    ```
 
    `git reset --soft HEAD~1` 仅撤回 commit 不动工作区；如果该 commit 是仓库的第一次 commit，跳过这条命令（无 HEAD~1 可回退）。
@@ -735,7 +757,7 @@ python scripts/changelog.py add \
    git config worktree-task.canonicalRef refs/heads/<主分支名>
    ```
 
-4. 在 AGENTS.md 保留模板候选节「多 Agent worktree 路由」（默认偏好段之后），并运行 `python scripts/agent_links.py repair` 同步。
+4. 在 AGENTS.md 保留模板候选节「多 Agent worktree 路由」（默认偏好段之后），并按 AGENTS.md「同步声明」中的精确 repair/check 命令同步。
 
 5. 验证一次全生命周期（可选但推荐）：
 
@@ -793,6 +815,8 @@ python scripts/changelog.py add \
 这一步是对设计哲学第 5 条的兑现——**不要让"执行者自检"冒充"已验证"。**
 
 **为什么把它定为必做级**：AGENTS.md 是治理文档（按哲学第 5 条的定义——被 Agent 作为行为规则消费的文件），初始化时尚未经过任何独立视角检验。一旦规则模糊或导航指针断链，**所有后续会话都会带着病上路**——治理文档的初始创建与修改适用同一标准：必须由独立视角复查。
+
+**控制器边界**：Step 8 是当前选定的控制器下的单次质量检查交接，不是独立的顶层控制器。全局流程模式、预算门、角色转换和终端决策由当前选定的控制器（如 Converge）负责；如果未选定控制器，由用户直接协调。
 
 做法：
 

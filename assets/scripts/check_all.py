@@ -27,15 +27,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-
-def _git(*args: str) -> str:
-    return subprocess.run(
-        ["git", "-c", "core.quotepath=false", *args],
-        cwd=str(ROOT), capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
-    ).stdout.strip()
-
-
 def _has_file(rel: str) -> bool:
     return (ROOT / rel).is_file()
 
@@ -67,7 +58,7 @@ def _check_sync():
     ok, detail = _run("同步", ["scripts/agent_links.py", "check"])
     return ok, detail
 
-CHECKS.append(("同步", _check_sync, "python scripts/agent_links.py repair"))
+CHECKS.append(("同步", _check_sync, "按 AGENTS.md「同步声明」中的精确命令修复"))
 
 
 def _check_changelog():

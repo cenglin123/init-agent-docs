@@ -313,7 +313,7 @@
 
             <!-- Slide 7 -->
             <div class="slide" data-title="初始化规模">
-                <div class="slide-header"><h2>小型 / 中型 / 大型：先裁剪，再生成</h2></div>
+                <div class="slide-header"><h2>小型 / 中型 / 大型 × Git / no-Git</h2></div>
                 <div class="slide-content">
                     <table style="font-size: 25px;">
                         <tr><th>规模</th><th>核心产物</th><th>计划与记忆</th></tr>
@@ -321,7 +321,9 @@
                         <tr><td><strong>中型</strong></td><td>全套 docs/ + 维护脚本</td><td>plans + .agents/memory/</td></tr>
                         <tr><td><strong>大型</strong></td><td>中型全套 + 模块级拆分</td><td>模块子计划 + 统一记忆入口</td></tr>
                     </table>
-                    <div class="lead-text" style="margin-top: 32px; font-size: 31px;">规模必须由用户确认；默认从轻量开始，不为“完整感”预付复杂度。</div>
+                    <div class="lead-text" style="margin-top: 20px; font-size: 28px;">仓库能力（Git / no-Git）与规模独立。no-Git 项目不生成 hooks/worktrees/commit 指引，maintain.py 回退到文件时间。</div>
+                    <div class="lead-text" style="margin-top: 12px; font-size: 28px;">Coordinator / Owner / Reviewer 是当前选定的控制器下的领域交接角色，不是顶层控制器。</div>
+                    <div class="lead-text" style="margin-top: 12px; font-size: 25px;">规模和仓库模式必须由用户确认；默认从轻量开始，不为"完整感"预付复杂度。</div>
                 </div>
             </div>
 

@@ -1,6 +1,7 @@
 # AI 协作规范
 
-<!-- AGENTS.md 是主副本。编辑后运行：python scripts/agent_links.py repair -->
+<!-- AGENTS.md 是主副本。编辑后按下方「同步声明」的精确命令修复并检查。 -->
+<!-- agent-docs-sync-mode: copy -->
 > 本文件会被 AI 框架自动加载并始终驻留在上下文中，因此必须保持精简（≤ 250 行）。
 > 只放行为规则和信息指针，不放可从代码或其他文档获取的事实描述。
 
@@ -12,7 +13,8 @@
 
 `AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 内容必须保持一致。**只编辑 AGENTS.md**，另两个由脚本同步。
 
-- `python scripts/agent_links.py check` / `repair` / `repair --force`
+- `python scripts/agent_links.py check --mode copy`
+- `python scripts/agent_links.py repair --mode copy --force`
 - 模式：copy
 
 ## 信息导航
@@ -74,17 +76,19 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）必须先查索引段的 bug
 - **先读后改**：修改任何文件前先读取，理解现有逻辑再动手。
 - **Occam**：如无必要，勿增实体。
 - **Bitter Lesson**：通用方法优于硬编码先验。
-- **模式匹配**：单会话小任务用直接执行；跨模块/跨会话任务走「复杂任务闭环」：
-  1. `docs/plans/active/` 落盘计划 → 2. subagent 审计 → 3. 用户确认 → 4. 执行 → 5. subagent 验收
+- **模式匹配**：单会话小任务用直接执行；跨模块/跨会话任务走当前选定的控制器下的「复杂任务闭环」：
+  1. `docs/plans/active/` 落盘计划 → 2. 独立视角审查 → 3. 用户确认 → 4. 执行 → 5. 验收
 - **任务启动先读 CURRENT.md**。
 - **验证尽量换视角**：高风险改动优先由新上下文或 reviewer 视角复查。
 <!-- 补充项目特异偏好（代码风格、语言约定等） -->
 
+<!-- Git profile only -->
 ### 多 Agent worktree 路由（可选）
 
-<!-- 仅协作倾向项目。按 SKILL.md 第 6.5 步安装后保留；否则整节删除 -->
+<!-- 仅 Git profile 的协作倾向项目按 SKILL.md 第 6.5 步安装后保留；否则整节删除 -->
 - 普通写任务默认 `python scripts/worktree_task.py create` 获得独立 worktree。
-- 四动作：`create` / `check <id>` / `integrate <id>` / `cleanup <id>`。详细语义见 `assets/references/workflow-patterns.md`。
+- 四动作：`create` / `check <id>` / `integrate <id>` / `cleanup <id>`。详细语义见 `python scripts/worktree_task.py --help`。
+<!-- /Git profile only -->
 
 ## 测试要求
 
@@ -94,16 +98,18 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）必须先查索引段的 bug
 
 <!-- 可选。涉及密钥/认证/敏感数据时保留。 -->
 
+<!-- Git profile only -->
 ## 提交规范
 
 <!-- 候选项：按项目实际风格填写 -->
 Conventional Commit（`feat:` / `fix:` / `chore:`）。治理文档修改须含 `[governance]` 标记。完成一个阶段后主动提交。
+<!-- /Git profile only -->
 
 ## 文档维护原则
 
 1. **不重复**：同一信息只在最合适的位置出现一次
 2. **只记代码/正文里读不出来的东西**：设计原因、协作约束、环境陷阱
-3. **治理文档直接写最终态**：修改 AGENTS.md / STRUCTURE.md 等规则文件时不留「以前xx，现在xx」对比、日期标记或弃用标注——当前文本即权威；过程归 git log，制度变更归 CHANGELOG，两者已覆盖历史需求
+3. **治理文档直接写最终态**：修改 AGENTS.md / STRUCTURE.md 等规则文件时不留「以前xx，现在xx」对比、日期标记或弃用标注——当前文本即权威；过程性历史按当前 profile 的历史入口维护，制度变更归 CHANGELOG
 4. **CHANGELOG**：用 `python scripts/changelog.py titles/show/add/recent`，不读全文
 5. **计划落盘**：跨模块/跨会话的任务在 `docs/plans/active/` 写计划，完成后移 `completed/`
 6. **定期审计**：每 ~20 次任务或每月，跑 `python scripts/audit.py check`（有记忆系统用 `python scripts/maintain.py`）

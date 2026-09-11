@@ -25,6 +25,20 @@
 
 <!-- 下一步最具体、可执行的动作 -->
 
+<!-- Small profile only -->
+<!-- 小型项目：任务简单，不建 plans 目录，handoff 信息直接内联在此文件中。 -->
+
+## 交接记录
+
+<!-- 任务中断或交接时，简要记录当前状态、已完成内容、待办事项。
+     新会话或新 Agent 读取本文件即可恢复上下文。
+     Git profile: 也可参考 git log 查看最近提交。
+     no-Git profile: 本文件是主要的 handoff 载体。 -->
+
+<!-- /Small profile only -->
+
+<!-- Medium/Large profile only -->
 ## 关联计划
 
-<!-- 如有复杂计划，填写 docs/plans/active/xxx.md；没有可写 无 -->
+<!-- 复杂任务：填写 docs/plans/active/xxx.md；没有可写 无 -->
+<!-- /Medium/Large profile only -->

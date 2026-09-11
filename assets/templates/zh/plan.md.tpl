@@ -1,5 +1,5 @@
 ---
-status: in_progress       # in_progress | done | cancelled
+status: in_progress       # in_progress | done | cancelled（写入只用这三个值；legacy 读兼容：completed→done, proposed→in_progress）
 mode: direct-execution    # direct-execution | phased | collaborative
 coordinator: ""           # 协调人（协作模式必填）；没有可写空字符串
 created_at: ""            # YYYY-MM-DD

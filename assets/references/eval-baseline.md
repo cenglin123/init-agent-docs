@@ -5,23 +5,24 @@ purpose: 定义 init-agent-docs skill 的三层验证框架、测试数据与评
 
 ## 评估哲学
 
-Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否有显著增益**。因此评估必须包含：
+Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否有显著增益**。评估分三层：
 
-1. **功能正确性**（L1）：文件创建、脚本运行、同步一致性
-2. **触发精准度**（L2）：真实用户话术下的命中率与误触率
-3. **质量增益**（L3）：有 Skill vs 无 Skill 的产出质量对比
+1. **静态合同**（L1）：文件创建、脚本运行、同步一致性、profile 矩阵验证
+2. **合成树**（L1.5）：在合成目录结构上运行脚本，验证无 Git 时行为正确、无死链、无内部 assets/references/ 链接
+3. **行为评估**（L2/L3）：Agent 实际执行 skill 的产出质量（advisory，非确定性门槛）
 
 ---
 
 ## 测试项目矩阵
 
-准备 3 组典型项目作为 test bed：
+准备 3 组典型项目作为 test bed，覆盖四个 Profile 轴（Git/no-Git × Small/Medium）：
 
-| 项目代号 | 规模 | 特征 | 初始化预期选项 |
-|---------|------|------|-------------|
-| `eval-small` | 小型 | Python 单文件脚本（< 5 个核心文件），无现有文档 | 小型：AGENTS.md + docs/CHANGELOG.md + docs/CURRENT.md |
-| `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | 中型：全套 docs/ + docs/STRUCTURE.md + plans/ |
-| `eval-large` | 大型 | 多模块微服务（> 30 个文件），多语言混合，已有 DESIGN.md | 大型：中型全套 + 模块级拆分提示 + 迁移旧文档 |
+| 项目代号 | 规模 | 特征 | 初始化预期选项 | Profile |
+|---------|------|------|-------------|---------|
+| `eval-small` | 小型 | Python 单文件脚本（< 5 个核心文件），无现有文档 | 小型：AGENTS.md + docs/CHANGELOG.md + docs/CURRENT.md | Small + Git |
+| `eval-small-nogit` | 小型 | 同 eval-small，但不在 Git 仓库中 | 小型：同上，无 Git 指引 | Small + no-Git |
+| `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | 中型：全套 docs/ + docs/STRUCTURE.md + plans/ | Medium + Git |
+| `eval-medium-nogit` | 中型 | 同 eval-medium，但不在 Git 仓库中 | 中型：全套 docs/，maintain.py 回退到 mtime | Medium + no-Git |
 
 **新增事实源冲突夹具**：
 
@@ -71,7 +72,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 - [ ] `scripts/changelog.py titles` 正常输出
 - [ ] `scripts/changelog.py add --title "test" --body "test body"` 成功追加且格式正确
 - [ ] `scripts/agent_links.py check` 通过
-- [ ] `scripts/agent_links.py repair` 能修复人为断链
+- [ ] AGENTS.md「同步声明」中的精确 repair 命令能修复人为断链，随后精确 check 命令返回 0
 - [ ] pre-commit hook 能阻止不一致提交（手动破坏 CLAUDE.md 后尝试提交，应被拒绝）
 
 ---

@@ -23,6 +23,8 @@
 
 背后的设计哲学见 SKILL.md"设计哲学"一节。
 
+**领域角色与控制器边界**：Coordinator / Owner / Reviewer 是当前选定的控制器下的领域交接角色，不是顶层控制器。全局流程模式、预算门、角色转换和终端决策由当前选定的控制器（如 Converge）负责；如果未选定控制器，由用户直接协调。详见 `assets/references/workflow-patterns.md`。
+
 ## 目录结构
 
 ```
@@ -84,7 +86,7 @@ init-agent-docs/
 
 ## 已知限制
 
-1. **同步与文件系统**：`agent_links.py` 提供 copy 和 hardlink 两种同步模式。默认 `repair` 使用 copy 模式（最可靠，不受编辑器原子写入影响）；如文件系统支持且你明确需要 hardlink，可显式传 `--mode=hardlink`。在 AGENTS.md 顶部写清当前项目用哪种模式，避免歧义。
+1. **同步与文件系统**：`agent_links.py` 提供 copy 和 hardlink 两种同步模式。默认 `repair` 使用 copy 模式（最可靠，不受编辑器原子写入影响）；如文件系统支持且你明确需要 hardlink，可显式传 `--mode=hardlink`。生成的 AGENTS.md 同步声明段记录当前模式与精确命令，hook 和 checklist 的修复指引均指向该声明。
 2. **编辑器原子写入**：部分编辑器（VS Code 某些模式、部分 IDE）用"写临时文件 → 删原文件 → 重命名"保存。hardlink 模式下这会断开链接；copy 模式不受影响。如使用 hardlink，依赖 pre-commit hook 检测并重新运行 repair 来兜底。
 3. **模板仅一种语言**：当前只附带 zh/。其他语言需要手工复制 zh 目录并翻译；`scripts/changelog.py` 内置了对英文 CHANGELOG 标题的识别，所以即使模板只有中文，用户后续手写英文条目仍能正确归类。
 4. **pre-commit 片段没跑过所有平台**：Windows 原生 Git Bash 下 `xargs` 对空输入的处理偶有差异；如遇问题，用 `if [ -n "$STAGED" ]; then echo "$STAGED" | ...; fi` 兜住。

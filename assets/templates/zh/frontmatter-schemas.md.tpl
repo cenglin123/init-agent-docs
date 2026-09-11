@@ -30,6 +30,7 @@ created_at: ""            # YYYY-MM-DD
 
 说明：
 - `status` 字段被 `scripts/audit.py plans` 检查使用：`status=done` 或 `status=cancelled` 时审计脚本会报告 STALE（应归档到 `completed/`）。
+- 写入只用 `in_progress | done | cancelled`；legacy 读兼容：`completed` → `done`，`proposed` → `in_progress`。
 - `liveness` 字段不在此处使用——计划文件完成后即归档，不需要活性追踪。
 
 <!-- 不需要 frontmatter schema 的项目跳过本文件，并删除 AGENTS.md 信息导航中对应行 -->

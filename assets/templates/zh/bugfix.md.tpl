@@ -25,8 +25,19 @@ updated_at: [YYYY-MM-DD]
        也会随时间沉睡；状态变更由维护审计建议、人确认后手改，不由脚本自动改）
      - last_confirmed / confirmed_count：任务前检索命中本文档并实际遵循后，
        将 last_confirmed 更新为当日、confirmed_count +1（touch 规范，见 AGENTS.md
-       完工检查清单「记忆自检」项）。缺失时维护脚本以 git 最后提交时间兜底——
+       完工检查清单「记忆自检」项）。
+
+<!-- Git profile only -->
+       缺失时维护脚本以 git 最后提交时间兜底——
        git 修改 ≠ 确认有效，只补日期，不虚增 confirmed_count。
+       时间戳兜底命令：`git log -1 --format=%ai -- <文件路径>`
+<!-- /Git profile only -->
+<!-- no-Git profile only -->
+       缺失时维护脚本以文件系统修改时间兜底——
+       文件修改 ≠ 确认有效，只补日期，不虚增 confirmed_count。
+       时间戳兜底方式：文件系统的最后修改时间（stat / Get-Item）
+<!-- /no-Git profile only -->
+
      - tags / related_files：供检索命中；related_files 必须指向真实存在的文件
      - verification.level：manual | automated | none；为 automated 时必须补
        verification.kind（如 unit-test / regression-test）+ verification.path +
@@ -73,3 +84,18 @@ updated_at: [YYYY-MM-DD]
 ## 风险和后续
 
 <!-- 剩余风险、未覆盖的边界、需要补的测试或后续治理事项 -->
+
+## 变更历史
+
+<!-- Git profile only -->
+<!-- 记录关键提交，便于追溯。示例：
+- `abc1234` 2026-01-15: 初始修复
+- `def5678` 2026-01-16: 补充边界条件处理
+-->
+<!-- /Git profile only -->
+<!-- no-Git profile only -->
+<!-- 非 Git 项目：记录关键变更节点。示例：
+- 2026-01-15: 初始修复
+- 2026-01-16: 补充边界条件处理
+-->
+<!-- /no-Git profile only -->

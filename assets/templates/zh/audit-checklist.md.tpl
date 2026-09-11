@@ -13,10 +13,15 @@
 
 - [ ] 死链：是文件被移动了？还是 AGENTS.md 指针过时？
 - [ ] STRUCTURE 索引偏差：docs/ 下多了/少了文件？更新索引或清理孤儿文件。
-- [ ] 同步断裂：运行 `python scripts/agent_links.py repair` 修复。
+- [ ] 同步断裂：按 AGENTS.md「同步声明」中的精确命令修复。
 - [ ] 行数警告：AGENTS.md 超过 250 行？如有内容可下沉到 docs/，执行下沉。
 - [ ] 依赖漂移：文档声明的技术栈与实际 manifest 不符？更新文档或确认为误报。
-- [ ] 出生档案：缺失则从 git log / 当前状态重建。
+<!-- Git profile only -->
+- [ ] 出生档案：缺失则从 Git history / 当前状态重建。
+<!-- /Git profile only -->
+<!-- no-Git profile only -->
+- [ ] 出生档案：缺失则从 CHANGELOG / 当前文件状态重建。
+<!-- /no-Git profile only -->
 - [ ] 记忆系统：`.agents/memory/MEMORY.md` 空壳或断链？AGENTS.md 内联记忆段缺失或过时？`python scripts/audit.py memory` 逐项复核。
 
 ## 2. 关键设计决策仍成立？
@@ -24,7 +29,12 @@
 重新读取 `docs/overview.md` 中"关键设计决策"段，逐条验证：
 
 - [ ] 对每条决策中提到的技术栈，检查 manifest（`package.json` / `pyproject.toml` 等）中是否仍有对应依赖。若文档说"使用 SQLite"，但 manifest 中已无 sqlite 相关依赖 → 决策已过时，标注"已过时（YYYY-MM-DD）"并记录替代方案。
+<!-- Git profile only -->
 - [ ] 对每条决策中提到的约束条件（如"单机部署"、"数据量 < 10GB"），用 `git log --oneline --since="6 months ago"` 检查是否有相关的基础设施变更。若有重构/迁移类 commit → 约束可能已失效，需更新。
+<!-- /Git profile only -->
+<!-- no-Git profile only -->
+- [ ] 对每条决策中提到的约束条件，结合 CHANGELOG、CURRENT 和相关文件修改时间检查是否有基础设施变更；存在重构或迁移记录时重新验证约束。
+<!-- /no-Git profile only -->
 - [ ] 是否有新的重要决策未记录？浏览最近 CHANGELOG 中涉及架构/基础设施的变更，确认已反映到 `docs/overview.md`。
 
 ## 3. 环境与部署仍准确？
@@ -36,11 +46,16 @@
 ## 4. 未记录的重要变更
 
 - [ ] 浏览 CHANGELOG 最近 ~30 天：`python scripts/changelog.py recent --days 30`，是否有架构级变更未反映到 docs/？
+<!-- Git profile only -->
 - [ ] `git log --oneline --since="1 month ago"` 中是否有被遗漏的重大改动？
+<!-- /Git profile only -->
+<!-- no-Git profile only -->
+- [ ] CURRENT、CHANGELOG 和近一个月修改的关键文件中是否有被遗漏的重大改动？
+<!-- /no-Git profile only -->
 
 ## 5. 完工
 
-- [ ] 审计期间的修改已通过 `python scripts/agent_links.py check`
+- [ ] 审计期间的修改已通过 AGENTS.md「同步声明」中的检查命令
 - [ ] 审计结果写入 CHANGELOG：
   ```bash
   python scripts/changelog.py add \

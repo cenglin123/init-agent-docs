@@ -140,7 +140,7 @@ if ! check_agents_sync; then
     echo ""
     echo "正确的流程："
     echo "  1. 编辑 AGENTS.md（不要编辑 CLAUDE.md 或 GEMINI.md）"
-    echo "  2. 运行：python3 scripts/agent_links.py repair（或 python）"
+    echo "  2. 按 AGENTS.md「同步声明」中的精确命令运行修复"
     echo "  3. 重新 stage 并提交"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     exit 1

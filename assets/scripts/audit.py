@@ -46,12 +46,23 @@ _ROOT_DOC_FILES = [
 def _discover_doc_files() -> list[str]:
     """Discover all markdown files to check for dead links."""
     files = list(_ROOT_DOC_FILES)
+    # Root-level README files (README.md, README-tools.md, etc.)
+    for f in sorted(ROOT.glob("README*.md")):
+        rel = str(f.relative_to(ROOT)).replace("\\", "/")
+        if rel not in files:
+            files.append(rel)
+    # scripts/ README files
+    scripts_dir = ROOT / "scripts"
+    if scripts_dir.is_dir():
+        for f in sorted(scripts_dir.glob("README*.md")):
+            rel = str(f.relative_to(ROOT)).replace("\\", "/")
+            if rel not in files:
+                files.append(rel)
     docs_dir = ROOT / "docs"
     if docs_dir.is_dir():
         for f in sorted(docs_dir.rglob("*.md")):
             rel = str(f.relative_to(ROOT)).replace("\\", "/")
-            if rel.startswith("docs/plans/"):
-                continue
+            # Include plan files (active + completed) for dead link checking.
             files.append(rel)
     return files
 
@@ -181,7 +192,11 @@ def _parse_frontmatter(text: str) -> dict[str, Any]:
             key, _, val = stripped.partition(":")
             # Strip inline YAML comments (e.g., "# in_progress | done | cancelled")
             clean_val = val.strip().split(" #", 1)[0].rstrip()
-            fm[key.strip().lower()] = clean_val
+            k = key.strip().lower()
+            # Normalize status values (Chinese → canonical, legacy aliases → canonical)
+            if k == "status":
+                clean_val = _normalize_status(clean_val)
+            fm[k] = clean_val
         # If frontmatter has status, return now. Otherwise fall through so
         # blockquote metadata can supply the missing status field.
         if "status" in fm:
@@ -218,6 +233,9 @@ _STATUS_MAP: dict[str, str] = {
     "进行中": "in_progress",
     "已完成": "done",
     "已取消": "cancelled",
+    # Legacy English aliases
+    "completed": "done",
+    "proposed": "in_progress",
 }
 
 
@@ -429,17 +447,39 @@ def _drift_check() -> list[dict[str, Any]]:
 
 def _check_birth_record() -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
+    # Two valid locations depending on project size:
+    # - Small: docs/initialization.md
+    # - Medium/Large: docs/plans/completed/initialization.md
+    small_path = "docs/initialization.md"
+    medium_path = "docs/plans/completed/initialization.md"
     found = False
-    for candidate in [
-        "docs/plans/completed/initialization.md",
-        "docs/initialization.md",
-    ]:
+    for candidate in [small_path, medium_path]:
         if _exists(candidate):
-            results.append({
-                "kind": "birth_record",
-                "status": "found",
-                "path": candidate,
-            })
+            text = _read(ROOT / candidate)
+            fm = _parse_frontmatter(text)
+            size_val = fm.get("size", "")
+            # Small birth records belong in docs/, not in plans/completed/.
+            # Medium/Large birth records belong in plans/completed/.
+            if candidate == medium_path and size_val == "small":
+                results.append({
+                    "kind": "birth_record",
+                    "status": "invalid",
+                    "path": candidate,
+                    "detail": "small birth record in plans/completed/ (should be docs/initialization.md)",
+                })
+            elif candidate == small_path and size_val in ("medium", "large"):
+                results.append({
+                    "kind": "birth_record",
+                    "status": "invalid",
+                    "path": candidate,
+                    "detail": f"{size_val} birth record in docs/ (should be {medium_path})",
+                })
+            else:
+                results.append({
+                    "kind": "birth_record",
+                    "status": "found",
+                    "path": candidate,
+                })
             found = True
             break
     if not found:
@@ -575,66 +615,92 @@ _STALE_DAYS = 30  # plans older than this without modification are candidates
 
 
 def _check_plans() -> list[dict[str, Any]]:
-    """Check docs/plans/active/ for stale or unarchived plans.
+    """Check docs/plans/active/ and docs/plans/completed/ for misplaced or stale plans.
 
     Flags:
-    - STALE (status=stale): plan frontmatter has `status: done` or
-      `status: completed` — should be moved to docs/plans/completed/.
+    - STALE (status=stale): plan in active/ with done/completed/cancelled status
+      or legacy blockquote metadata format — should be moved or reformatted.
+    - MISPLACED (status=misplaced): plan in completed/ with in_progress status
+      — should be in active/.
     - LINGER (status=linger): plan is older than _STALE_DAYS without
       recent modification — possible candidate for archival review.
     """
     results: list[dict[str, Any]] = []
-    plans_dir = ROOT / "docs" / "plans" / "active"
-    if not plans_dir.is_dir():
+    plans_root = ROOT / "docs" / "plans"
+    if not plans_root.is_dir():
         return results
 
     now = datetime.now(timezone.utc).timestamp()
 
-    for f in sorted(plans_dir.glob("*.md")):
-        if f.name == ".gitkeep":
+    # Statuses valid in each directory.
+    _DIR_VALID: dict[str, set[str]] = {
+        "active": {"in_progress"},
+        "completed": {"done", "cancelled"},
+    }
+
+    for folder in ("active", "completed"):
+        folder_path = plans_root / folder
+        if not folder_path.is_dir():
             continue
-        rel = str(f.relative_to(ROOT)).replace("\\", "/")
+        valid_statuses = _DIR_VALID[folder]
 
-        text = _read(f)
-        fm = _parse_frontmatter(text)
-        status_val = fm.get("status", "")
+        for f in sorted(folder_path.glob("*.md")):
+            if f.name == ".gitkeep":
+                continue
+            rel = str(f.relative_to(ROOT)).replace("\\", "/")
+            text = _read(f)
+            fm = _parse_frontmatter(text)
+            status_val = fm.get("status", "")
 
-        # Check 1: frontmatter says done/completed → stale
-        if status_val in ("done", "completed", "cancelled"):
+            # Check 1: status not valid for this directory → misplaced or stale
+            if status_val and status_val not in valid_statuses:
+                target_dir = "completed/" if status_val in ("done", "cancelled") else "active/"
+                kind = "stale" if folder == "active" else "misplaced"
+                results.append({
+                    "kind": "plans",
+                    "status": kind,
+                    "file": rel,
+                    "detail": f'Frontmatter status="{status_val}" in {folder}/'
+                              f' — move to docs/plans/{target_dir}',
+                })
+                continue
+
+            # Check 2: legacy blockquote metadata format in active/ → stale
+            if folder == "active" and not _FRONTMATTER_RE.match(text):
+                if any(_BLOCKQUOTE_META_RE.match(line) for line in text.splitlines()[:10]):
+                    results.append({
+                        "kind": "plans",
+                        "status": "stale",
+                        "file": rel,
+                        "detail": "Legacy blockquote metadata format — migrate to YAML frontmatter",
+                    })
+                    continue
+
+            # Check 3: file older than _STALE_DAYS → linger warning
+            try:
+                mtime = f.stat().st_mtime
+                age_days = (now - mtime) / 86400
+            except OSError:
+                age_days = 0.0
+
+            if age_days > _STALE_DAYS:
+                results.append({
+                    "kind": "plans",
+                    "status": "linger",
+                    "file": rel,
+                    "detail": f'File not modified in {int(age_days)} days'
+                              f' (threshold: {_STALE_DAYS}d)'
+                              f' — review and either archive or update frontmatter status',
+                })
+                continue
+
+            # All clear
             results.append({
                 "kind": "plans",
-                "status": "stale",
+                "status": "ok",
                 "file": rel,
-                "detail": f'Frontmatter status="{status_val}" but file still in active/'
-                          f' — move to docs/plans/completed/',
+                "detail": "",
             })
-            continue
-
-        # Check 2: file older than _STALE_DAYS → linger warning
-        try:
-            mtime = f.stat().st_mtime
-            age_days = (now - mtime) / 86400
-        except OSError:
-            age_days = 0.0
-
-        if age_days > _STALE_DAYS:
-            results.append({
-                "kind": "plans",
-                "status": "linger",
-                "file": rel,
-                "detail": f'File not modified in {int(age_days)} days'
-                          f' (threshold: {_STALE_DAYS}d)'
-                          f' — review and either archive or update frontmatter status',
-            })
-            continue
-
-        # All clear
-        results.append({
-            "kind": "plans",
-            "status": "ok",
-            "file": rel,
-            "detail": "",
-        })
 
     return results
 
@@ -676,6 +742,8 @@ _STATUS_GLYPHS: dict[str, str] = {
     "unlinked":    "UNLINK",
     "stale":       "STALE",
     "linger":      "LINGER",
+    "misplaced":   "MISPLACED",
+    "invalid":     "INVALID",
 }
 
 
@@ -740,6 +808,8 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
         elif kind == "plans":
             if r["status"] == "stale":
                 lines_out.append(f"[STALE  ] {r['file']}: {r['detail']}")
+            elif r["status"] == "misplaced":
+                lines_out.append(f"[MISPL  ] {r['file']}: {r['detail']}")
             elif r["status"] == "linger":
                 lines_out.append(f"[LINGER ] {r['file']}: {r['detail']}")
             elif r["status"] == "ok" and verbose:

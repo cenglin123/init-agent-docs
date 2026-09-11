@@ -96,6 +96,50 @@ class AgentLinksTestCase(unittest.TestCase):
         result = self.run_script("check")
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_default_copy_breaks_equal_content_full_hardlink_group(self) -> None:
+        if not hardlinks_supported(self.tmp):
+            self.skipTest("filesystem does not support hardlinks")
+        self.assertEqual(self.run_script("repair", "--mode=hardlink").returncode, 0)
+        result = self.run_script("repair")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        keys = [(self.tmp / name).stat().st_ino for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md")]
+        self.assertEqual(len(set(keys)), 3, keys)
+        self.assertEqual(self.run_script("check", "--mode=copy").returncode, 0)
+
+    def test_copy_breaks_partial_hardlink_group(self) -> None:
+        if not hardlinks_supported(self.tmp):
+            self.skipTest("filesystem does not support hardlinks")
+        os.link(self.tmp / "AGENTS.md", self.tmp / "CLAUDE.md")
+        (self.tmp / "GEMINI.md").write_text("hello\n", encoding="utf-8")
+        self.assertNotEqual(self.run_script("check", "--mode=copy").returncode, 0)
+        result = self.run_script("repair", "--mode=copy")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        keys = [(self.tmp / name).stat().st_ino for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md")]
+        self.assertEqual(len(set(keys)), 3, keys)
+
+    def test_non_force_refuses_divergence_before_touching_other_targets(self) -> None:
+        self.assertEqual(self.run_script("repair", "--mode=hardlink").returncode, 0)
+        (self.tmp / "GEMINI.md").unlink()
+        (self.tmp / "GEMINI.md").write_text("review me\n", encoding="utf-8")
+        claude_inode = (self.tmp / "CLAUDE.md").stat().st_ino
+        result = self.run_script("repair", "--mode=copy")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.tmp / "CLAUDE.md").stat().st_ino, claude_inode)
+        self.assertEqual((self.tmp / "GEMINI.md").read_text(encoding="utf-8"), "review me\n")
+
+    def test_force_copy_overwrites_reviewed_targets(self) -> None:
+        (self.tmp / "CLAUDE.md").write_text("old\n", encoding="utf-8")
+        (self.tmp / "GEMINI.md").write_text("old\n", encoding="utf-8")
+        result = self.run_script("repair", "--mode=copy", "--force")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.run_script("check", "--mode=copy").returncode, 0)
+
+    def test_declared_mode_is_machine_readable(self) -> None:
+        (self.tmp / "AGENTS.md").write_text(
+            "<!-- agent-docs-sync-mode: copy -->\nhello\n", encoding="utf-8")
+        self.assertEqual(self.run_script("repair", "--mode=copy", "--force").returncode, 0)
+        self.assertEqual(self.run_script("check", "--mode=declared").returncode, 0)
+
     def test_check_rejects_diverged_content_in_copy_mode(self) -> None:
         self.run_script("repair", "--mode=copy")
         (self.tmp / "CLAUDE.md").write_text("diverged\n", encoding="utf-8")

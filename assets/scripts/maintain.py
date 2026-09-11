@@ -46,6 +46,15 @@ AUDIT_STALE_DAYS = 30
 MAX_TITLE_LEN = 60
 GIT_LOG_LIMIT = 10
 
+
+def _is_git_repo() -> bool:
+    """Detect whether ROOT is inside a Git repository without calling git."""
+    return (ROOT / ".git").exists() or any(
+        (ancestor / ".git").exists()
+        for ancestor in ROOT.parents
+        if ancestor != ancestor.parent  # stop at filesystem root
+    )
+
 _REBUILT_LINE_RE = re.compile(r"^> 最近重建：.*\n?", re.MULTILINE)
 
 
@@ -240,21 +249,22 @@ def _memory_last_update_ts(files: list[Path]) -> float:
     git 不保留 mtime（fresh clone / checkout 会把 mtime 刷成当前时间），
     因此优先取 git 最后提交时间；非 git 环境回退到文件 mtime。
     """
-    try:
-        proc = subprocess.run(
-            ["git", "log", "-1", "--format=%ct", "--",
-             ".agents/memory/", "docs/problems/bugfix/"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=15,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            return float(proc.stdout.strip())
-    except (OSError, subprocess.TimeoutExpired, ValueError):
-        pass
+    if _is_git_repo():
+        try:
+            proc = subprocess.run(
+                ["git", "log", "-1", "--format=%ct", "--",
+                 ".agents/memory/", "docs/problems/bugfix/"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                return float(proc.stdout.strip())
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            pass
     pool = files + _bugfix_files()
     if not pool:
         return 0.0
@@ -271,13 +281,14 @@ def memory_staleness() -> tuple[str, str]:
         return "empty", "no memory entries yet — 目录存在但从未沉淀记忆"
     age = datetime.now() - datetime.fromtimestamp(_memory_last_update_ts(files))
     total = len(files) + len(bugfix)
+    time_source = "文件时间" if not _is_git_repo() else "git"
     if age > timedelta(days=STALE_DAYS):
         return (
             "stale",
             f"memory untouched for {age.days} days (> {STALE_DAYS}) — "
             "沉淀新记忆或考虑裁剪记忆系统",
         )
-    return "ok", f"newest memory update {age.days}d ago ({total} entries, 含 {len(bugfix)} bugfix)"
+    return "ok", f"newest memory update {age.days}d ago ({total} entries, 含 {len(bugfix)} bugfix, {time_source})"
 
 
 def audit_recency() -> tuple[str, str]:
@@ -341,6 +352,8 @@ def _run_script(rel: str, *args: str) -> tuple[int, str] | None:
 # ---------------------------------------------------------------------------
 
 def _git_recent(limit: int = GIT_LOG_LIMIT) -> list[str]:
+    if not _is_git_repo():
+        return []
     try:
         proc = subprocess.run(
             ["git", "log", "--oneline", f"-{limit}"],

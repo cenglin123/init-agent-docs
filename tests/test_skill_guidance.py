@@ -1,6 +1,7 @@
 """Static regression checks for high-signal init-agent-docs guidance."""
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,39 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def read_repo_file(path: str) -> str:
     return (REPO_ROOT / path).read_text(encoding="utf-8")
+
+
+def project_repository_mode(text: str, mode: str) -> str:
+    """Apply the template's explicit Git/no-Git blocks, then remove guidance comments."""
+    lines: list[str] = []
+    active_mode: str | None = None
+    for line in text.splitlines():
+        marker = line.strip()
+        if marker == "<!-- Git profile only -->":
+            if active_mode is not None:
+                raise AssertionError("nested repository profile block")
+            active_mode = "git"
+            continue
+        if marker == "<!-- no-Git profile only -->":
+            if active_mode is not None:
+                raise AssertionError("nested repository profile block")
+            active_mode = "no-git"
+            continue
+        if marker == "<!-- /Git profile only -->":
+            if active_mode != "git":
+                raise AssertionError("unbalanced Git profile block")
+            active_mode = None
+            continue
+        if marker == "<!-- /no-Git profile only -->":
+            if active_mode != "no-git":
+                raise AssertionError("unbalanced no-Git profile block")
+            active_mode = None
+            continue
+        if active_mode is None or active_mode == mode:
+            lines.append(line)
+    if active_mode is not None:
+        raise AssertionError(f"unclosed {active_mode} profile block")
+    return re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.DOTALL)
 
 
 class SkillGuidanceTestCase(unittest.TestCase):
@@ -44,6 +78,10 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 "必须保持精简",
                 "只放行为规则和信息指针",
                 "候选项：只有目标仓库已有约束或用户确认时保留",
+                "agent-docs-sync-mode: copy",
+                "repair --mode copy --force",
+                "check --mode copy",
+                "当前选定的控制器",
             ],
         )
 
@@ -56,6 +94,11 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 "可执行事实源优先",
                 "已有 instruction 文件整合",
                 "README 写旧命令",
+                "Small + no-Git",
+                "Medium + Git",
+                "静态合同",
+                "合成树",
+                "行为评估",
             ],
         )
 
@@ -147,7 +190,8 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 "Occam",
                 "Bitter Lesson",
                 "小型 / 中型 / 大型",
-                "git fetch origin",
+                "Git / no-Git",
+                "当前选定的控制器",
             ],
         )
         self.assertNotIn("100 行", pitch)
@@ -186,8 +230,8 @@ class SkillGuidanceTestCase(unittest.TestCase):
             tpl,
             [
                 "多 Agent worktree 路由",
-                "python scripts/worktree_task.py create",
-                "workflow-patterns.md",
+                "python scripts/worktree_task.py --help",
+                "仅 Git profile",
             ],
         )
 
@@ -201,6 +245,96 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 "partial-state",
             ],
         )
+
+    def test_four_profile_contracts_and_birth_records_are_explicit(self) -> None:
+        skill = read_repo_file("SKILL.md")
+        for profile in ("Small + Git", "Small + no-Git", "Medium/Large + Git", "Medium/Large + no-Git"):
+            self.assertIn(profile, skill)
+        self.assertIn("docs/initialization.md", skill)
+        self.assertIn("docs/plans/completed/initialization.md", skill)
+        self.assertIn("repository_mode", skill)
+        self.assertIn("size", skill)
+        self.assertIn("不会自动执行 `git init`", skill)
+
+    def test_small_no_git_contract_has_explicit_omissions(self) -> None:
+        skill = read_repo_file("SKILL.md")
+        marker = "#### Small + no-Git"
+        self.assertIn(marker, skill)
+        section = skill.split(marker, 1)[1].split("#### ", 1)[0]
+        for term in ("docs/plans/", ".agents/memory/", "docs/overview.md", ".githooks/", "worktree"):
+            self.assertIn(term, section)
+        self.assertIn("不得生成", section)
+
+    def test_sync_remediation_is_mode_aware_everywhere(self) -> None:
+        paths = [
+            "SKILL.md",
+            "assets/hooks/pre-commit-generic.sh",
+            "assets/hooks/pre-commit-python.sh",
+            "assets/hooks/pre-commit-node.sh",
+            "assets/hooks/pre-commit-go.sh",
+            "assets/references/eval-baseline.md",
+            "assets/scripts/check_all.py",
+            "assets/templates/zh/AGENTS.md.tpl",
+            "assets/templates/zh/audit-checklist.md.tpl",
+            "README.md",
+        ]
+        bare_repair = re.compile(
+            r"(?:python3?\s+)?scripts/agent_links\.py repair(?!\s+--mode)")
+        for path in paths:
+            with self.subTest(path=path):
+                text = read_repo_file(path)
+                self.assertIn("同步声明", text)
+                self.assertIsNone(bare_repair.search(text))
+
+    def test_no_git_template_projection_contains_no_git_only_guidance(self) -> None:
+        paths = [
+            "assets/templates/zh/AGENTS.md.tpl",
+            "assets/templates/zh/README.md.tpl",
+            "assets/templates/zh/CURRENT.md.tpl",
+            "assets/templates/zh/audit-checklist.md.tpl",
+            "assets/templates/zh/STRUCTURE.md.tpl",
+            "assets/templates/zh/MEMORY.md.tpl",
+            "assets/templates/zh/bugfix.md.tpl",
+        ]
+        forbidden = re.compile(
+            r"(?i)(?:\bgit\s+(?:init|fetch|status|log|blame|commit|checkout|restore|"
+            r"reset|config|branch|pull|push|clone|worktree|add)\b|origin/main|\.githooks/|"
+            r"\bcommit\b|\bworktree\b)")
+        for path in paths:
+            with self.subTest(path=path):
+                rendered = project_repository_mode(read_repo_file(path), "no-git")
+                self.assertIsNone(forbidden.search(rendered), rendered)
+
+    def test_skill_preflight_and_hooks_respect_repository_mode(self) -> None:
+        skill = read_repo_file("SKILL.md")
+        preflight = skill.split("### 前置检查：", 1)[1].split("### 第 0 步：", 1)[0]
+        self.assertNotIn("origin/main", preflight)
+        self.assertIn("no-Git profile 不运行任何 Git 命令", preflight)
+        self.assertIn("只有用户明确确认将 no-Git 目标转换为 Git 后", skill)
+        self.assertIn("no-Git profile 跳过整个 hook 步骤", skill)
+
+    def test_generated_templates_do_not_link_to_skill_internal_assets(self) -> None:
+        for path in (REPO_ROOT / "assets" / "templates" / "zh").glob("*.tpl"):
+            with self.subTest(path=path.name):
+                self.assertNotIn("assets/references/", path.read_text(encoding="utf-8"))
+
+    def test_plan_templates_write_canonical_file_status_only(self) -> None:
+        plan = read_repo_file("assets/templates/zh/plan.md.tpl")
+        schema = read_repo_file("assets/templates/zh/frontmatter-schemas.md.tpl")
+        for text in (plan, schema):
+            self.assertIn("in_progress | done | cancelled", text)
+            self.assertIn("legacy", text.lower())
+
+    def test_pitch_deck_has_balanced_div_tags(self) -> None:
+        """Structural assertion: every <div must have a matching </div> in presentation.html."""
+        pitch = read_repo_file("assets/pitch/presentation.html")
+        opens = pitch.count("<div")
+        closes = pitch.count("</div>")
+        self.assertEqual(opens, closes,
+                         f"Unbalanced div tags: {opens} opens vs {closes} closes")
+
+    def test_bespoke_controller_absent(self) -> None:
+        self.assertFalse((REPO_ROOT / "scripts" / "converge_orchestrator.py").exists())
 
     def test_worktree_task_asset_implements_four_actions(self) -> None:
         text = read_repo_file("assets/scripts/worktree_task.py")

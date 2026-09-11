@@ -47,6 +47,12 @@ def link_key(path: Path) -> tuple[int, int] | None:
     return stat.st_dev, stat.st_ino
 
 
+def _is_hardlinked(a: Path, b: Path) -> bool:
+    """True when two files share the same inode."""
+    ka, kb = link_key(a), link_key(b)
+    return ka is not None and ka == kb
+
+
 def file_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -83,12 +89,34 @@ def is_content_equal() -> bool:
     return len(hashes) == 1
 
 
+def is_independent_copy_group() -> bool:
+    """True when all three files have equal content AND distinct inodes."""
+    if not is_content_equal():
+        return False
+    keys = [link_key(p) for p in LINK_PATHS]
+    return len(set(keys)) == len(LINK_PATHS)
+
+
 def detect_mode() -> str:
     if is_hardlink_group():
         return "hardlink"
-    if is_content_equal():
+    if is_independent_copy_group():
         return "copy"
     return "broken"
+
+
+def _read_declared_mode() -> str | None:
+    """Read sync mode from AGENTS.md HTML comment: <!-- agent-docs-sync-mode: X -->."""
+    agents = path_for("AGENTS.md")
+    if not agents.is_file():
+        return None
+    import re
+    m = re.search(r"<!--\s*agent-docs-sync-mode:\s*(\w+)\s*-->", _read_text(agents))
+    return m.group(1) if m else None
+
+
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
 
 def command_check(args: argparse.Namespace) -> None:
@@ -99,16 +127,23 @@ def command_check(args: argparse.Namespace) -> None:
         raise SystemExit(f"missing file(s): {', '.join(missing)}")
 
     actual = detect_mode()
-    if args.mode == "auto":
+    req = args.mode
+    if req == "declared":
+        req = _read_declared_mode()
+        if req is None:
+            raise SystemExit(
+                "no agent-docs-sync-mode declaration found in AGENTS.md"
+            )
+    if req == "auto":
         if actual == "broken":
             raise SystemExit(
                 "AGENTS.md / CLAUDE.md / GEMINI.md group is broken: "
                 "neither all-hardlinked nor content-equal"
             )
     else:
-        if actual != args.mode:
+        if actual != req:
             raise SystemExit(
-                f"expected mode={args.mode} but detected mode={actual}"
+                f"expected mode={req} but detected mode={actual}"
             )
     print(f"link group ok (mode={actual})")
 
@@ -121,15 +156,10 @@ def repair_target(source: Path, target: Path, mode: str, force: bool) -> None:
         except FileNotFoundError:
             pass
     elif mode == "copy":
-        if target.exists() and file_md5(target) == file_md5(source):
-            return
-
-    if target.exists() and not force:
-        if file_md5(target) != file_md5(source):
-            raise SystemExit(
-                f"{target.name} content differs from {source.name}; "
-                f"rerun with --force only after review"
-            )
+        # In copy mode, break hardlinks even when content already matches.
+        if target.exists() and not _is_hardlinked(source, target):
+            if file_md5(target) == file_md5(source):
+                return
 
     if target.exists():
         target.unlink()
@@ -171,9 +201,17 @@ def command_repair(args: argparse.Namespace) -> None:
 
     mode = args.mode
     if mode == "auto":
-        # Auto-pick: keep current mode if intact, else default to copy.
-        current = detect_mode()
-        mode = "hardlink" if current == "hardlink" else "copy"
+        # Default to copy — hardlink only when explicitly requested.
+        mode = "copy"
+
+    # Divergence preflight: refuse before touching ANY target unless --force.
+    if not args.force:
+        for target in targets:
+            if target.exists() and file_md5(target) != file_md5(source):
+                raise SystemExit(
+                    f"{target.name} content differs from {source.name}; "
+                    f"rerun with --force only after review"
+                )
 
     for target in targets:
         repair_target(source, target, mode, args.force)
@@ -212,9 +250,9 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--verbose", action="store_true")
     check.add_argument(
         "--mode",
-        choices=("auto", "hardlink", "copy"),
+        choices=("auto", "hardlink", "copy", "declared"),
         default="auto",
-        help="Enforce a specific mode; default 'auto' accepts either.",
+        help="Enforce a specific mode; 'declared' reads from AGENTS.md comment; default 'auto' accepts either.",
     )
     check.set_defaults(func=command_check)
 

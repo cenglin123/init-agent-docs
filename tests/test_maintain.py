@@ -57,6 +57,18 @@ class MaintainPipelineTestCase(unittest.TestCase):
             timeout=60,
         )
 
+    def install_failing_git_sentinel(self) -> Path:
+        bin_dir = self.root / "sentinel-bin"
+        bin_dir.mkdir()
+        if os.name == "nt":
+            sentinel = bin_dir / "git.cmd"
+            sentinel.write_text("@echo sentinel-git-invoked 1>&2\r\n@exit /b 97\r\n", encoding="utf-8")
+        else:
+            sentinel = bin_dir / "git"
+            sentinel.write_text("#!/bin/sh\necho sentinel-git-invoked >&2\nexit 97\n", encoding="utf-8")
+            sentinel.chmod(0o755)
+        return bin_dir
+
     def run_audit(self, *args: str) -> subprocess.CompletedProcess[str]:
         env = dict(os.environ, PYTHONUTF8="1")
         return subprocess.run(
@@ -281,6 +293,24 @@ class MaintainPipelineTestCase(unittest.TestCase):
         result = self.run_maintain()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("memory untouched", result.stdout)
+
+    def test_no_git_project_never_invokes_git_for_memory_or_recent_context(self) -> None:
+        bin_dir = self.install_failing_git_sentinel()
+        env = dict(os.environ, PYTHONUTF8="1", PATH=str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+        result = subprocess.run(
+            [sys.executable, str(self.root / "scripts" / "maintain.py")],
+            cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("sentinel-git-invoked", result.stdout + result.stderr)
+        self.assertIn("文件时间", result.stdout)
+
+    def test_delegated_audit_failure_propagates(self) -> None:
+        (self.root / "scripts" / "audit.py").write_text(
+            "raise SystemExit(7)\n", encoding="utf-8")
+        result = self.run_maintain()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("audit.py check (exit 7)", result.stdout)
 
 
 if __name__ == "__main__":

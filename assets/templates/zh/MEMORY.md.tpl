@@ -32,9 +32,35 @@
 
 记忆文件（`user/`、`project/`、`feedback/` 等）的 frontmatter 约定与 bugfix 文档一致：`liveness: active | dormant | archived`、`last_confirmed`、`confirmed_count`。新建记忆文件时带上这三个字段；touch 时更新后两个。
 
-任务前检索命中某条记忆条目或 bugfix 文档并**实际遵循**后，在完工清单「记忆自检」项更新其 frontmatter：`last_confirmed` 更新为当日、`confirmed_count` +1。未实际遵循不 touch。字段缺失时维护统计以 git 最后提交时间兜底——git 修改 ≠ 确认有效，只补日期，不虚增计数。口径以 AGENTS.md 完工检查清单「记忆自检」项为准。
+任务前检索命中某条记忆条目或 bugfix 文档并**实际遵循**后，在完工清单「记忆自检」项更新其 frontmatter：`last_confirmed` 更新为当日、`confirmed_count` +1。未实际遵循不 touch。
+
+<!-- Git profile only -->
+字段缺失时维护统计以 git 最后提交时间兜底——git 修改 ≠ 确认有效，只补日期，不虚增计数。口径以 AGENTS.md 完工检查清单「记忆自检」项为准。
+
+**时间戳来源**：
+- 首选：frontmatter 中的 `last_confirmed` 字段（agent 显式写入）
+- 兜底：`git log -1 --format=%ai -- <文件路径>`（最后提交时间）
+- 注意：git 提交时间 ≠ 确认有效，仅用于补全缺失的日期字段
+<!-- /Git profile only -->
+
+<!-- no-Git profile only -->
+字段缺失时维护统计以文件系统修改时间兜底——文件修改 ≠ 确认有效，只补日期，不虚增计数。口径以 AGENTS.md 完工检查清单「记忆自检」项为准。
+
+**时间戳来源**：
+- 首选：frontmatter 中的 `last_confirmed` 字段（agent 显式写入）
+- 兜底：文件系统的最后修改时间（`stat` 或 `Get-Item` 获取）
+- 注意：文件修改时间精度有限（可能因复制、同步等操作改变），仅用于补全缺失的日期字段
+
+<!-- /no-Git profile only -->
 
 ### 维护分工
 
 - **Agent 负责**：经验的沉淀（写入 / 更新记忆文件与 bugfix 文档）与检索（任务前读索引）；更新记忆后同步 AGENTS.md「项目记忆」内联摘要
-- **脚本负责**：MEMORY.md 索引段由 `python scripts/maintain.py` 每次维护自动重建；`.agents/memory/` 持续 30 天无更新 → 维护报告提示"记忆目录空转"
+- **脚本负责**：MEMORY.md 索引段由 `python scripts/maintain.py` 每次维护自动重建；
+
+<!-- Git profile only -->
+`.agents/memory/` 持续 30 天无更新 → 维护报告提示"记忆目录空转"（基于 git 提交时间）
+<!-- /Git profile only -->
+<!-- no-Git profile only -->
+`.agents/memory/` 持续 30 天无更新 → 维护报告提示"记忆目录空转"（基于文件修改时间）
+<!-- /no-Git profile only -->

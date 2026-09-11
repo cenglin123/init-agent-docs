@@ -17,6 +17,7 @@
 
 ### 安装与运行
 
+<!-- Git profile only -->
 <!-- 从项目的 package.json / pyproject.toml / Makefile / CI 等提取精确命令。示例： -->
 
 ```bash
@@ -30,6 +31,22 @@ cd [项目目录]
 # 启动开发服务器
 [启动命令，如 npm run dev / python -m uvicorn main:app --reload]
 ```
+<!-- /Git profile only -->
+
+<!-- no-Git profile only -->
+<!-- 非 Git 项目：无克隆步骤，从解压/下载后的目录开始。示例： -->
+
+```bash
+# 进入项目目录
+cd [项目目录]
+
+# 安装依赖
+[依赖安装命令，如 pip install -e ".[dev]" / npm install / go mod download]
+
+# 启动开发服务器
+[启动命令，如 npm run dev / python -m uvicorn main:app --reload]
+```
+<!-- /no-Git profile only -->
 
 ### 测试
 
@@ -54,22 +71,29 @@ cd [项目目录]
 └── scripts/       # 工具脚本
 ```
 
+<!-- Medium/Large profile only -->
 <!-- 如有架构文档，指向它： -->
 详细的架构说明见 [docs/overview.md](docs/overview.md)。
 
 ## 文档
 
+<!-- 根据项目实际情况和 profile 裁剪：没有 API 删 api.md 行，没有部署删 deployment.md 行。
+     Small profile 不建 STRUCTURE.md/overview.md/deployment.md/pitfalls.md，删除对应行。 -->
+
 | 文档 | 说明 |
 |------|------|
+<!-- Medium/Large profile only -->
+| [docs/STRUCTURE.md](docs/STRUCTURE.md) | 文档总索引 |
 | [docs/overview.md](docs/overview.md) | 系统架构与设计决策 |
 | [docs/api.md](docs/api.md) | API 约定（如有） |
 | [docs/deployment.md](docs/deployment.md) | 部署与环境配置 |
+<!-- /Medium/Large profile only -->
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 变更记录 |
-
-<!-- 根据项目实际情况裁剪：没有 API 删 api.md 行，没有部署删 deployment.md 行。 -->
+| [docs/CURRENT.md](docs/CURRENT.md) | 当前任务状态 |
 
 ## 贡献
 
+<!-- Git profile only -->
 <!-- 根据项目实际约定填写。示例： -->
 
 1. Fork 本仓库
@@ -82,6 +106,18 @@ cd [项目目录]
 
 <!-- 如项目有更详细的贡献指南，指向它： -->
 <!-- 详见 [CONTRIBUTING.md](CONTRIBUTING.md)。 -->
+<!-- /Git profile only -->
+
+<!-- no-Git profile only -->
+<!-- 非 Git 项目：无分支/PR 流程，改为文件级协作。示例： -->
+
+1. 复制项目目录作为工作副本
+2. 在工作副本中进行修改
+3. 完成后将修改的文件替换回主目录
+4. 在 [docs/CHANGELOG.md](docs/CHANGELOG.md) 中记录变更
+
+**修改规范**：在 CHANGELOG 中说明修改内容和原因。
+<!-- /no-Git profile only -->
 
 ## AI Agent 协作
 
