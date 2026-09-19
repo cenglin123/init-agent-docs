@@ -2,12 +2,12 @@
 name: init-agent-docs
 description: >
   Initialize or migrate an agent-first doc system for AI collaboration.
-  Creates synchronized AGENTS.md/CLAUDE.md/GEMINI.md, docs/STRUCTURE.md, docs/ hierarchy
+  Creates AGENTS.md as the single entry point, docs/STRUCTURE.md, docs/ hierarchy
   with progressive disclosure, plan-as-handoff, and scripted CHANGELOG.
-  Triggers when: setting up agent docs, scaffolding CLAUDE.md, building AI collaboration
+  Triggers when: setting up agent docs, scaffolding AGENTS.md, building AI collaboration
   guidelines, migrating README/ARCHITECTURE to agent-friendly format.
   User phrases: "帮我初始化项目的 AI 协作文档", "给仓库搭一套 Agent 文档体系",
-  "把现有文档整理成 AI 能协作的格式", "set up CLAUDE.md", "initialize agent-first docs".
+  "把现有文档整理成 AI 能协作的格式", "set up AGENTS.md", "initialize agent-first docs".
 ---
 
 # Init Agent Docs
@@ -28,7 +28,7 @@ description: >
 
 > "Give Agents a map, not a 1,000-page instruction manual."
 
-AGENTS.md（及其同步副本 CLAUDE.md、GEMINI.md）是 Agent 上下文中**始终驻留**的文件。这意味着它的每一行都在消耗 Agent 的注意力预算。一个 500 行的 AGENTS.md 会挤占任务描述、代码和文档的空间，导致 Agent "什么都看到了但什么都没注意"。
+AGENTS.md 是 Agent 上下文中**始终驻留**的文件。这意味着它的每一行都在消耗 Agent 的注意力预算。一个 500 行的 AGENTS.md 会挤占任务描述、代码和文档的空间，导致 Agent "什么都看到了但什么都没注意"。
 
 **AGENTS.md 的职责边界：**
 
@@ -40,7 +40,7 @@ AGENTS.md（及其同步副本 CLAUDE.md、GEMINI.md）是 Agent 上下文中**�
 | 完工检查清单 | 部署步骤详情 |
 | 文档维护规则 | 设计决策的详细论述 |
 
-**为什么需要三个文件名？** 不同 Agent 框架加载不同入口：Claude Code 加载 CLAUDE.md，Codex 加载 AGENTS.md，Gemini CLI 加载 GEMINI.md。通过脚本同步（copy 模式默认），让三个文件始终承载同一份内容，编辑 AGENTS.md 后运行 repair 即可同步到其他两个，避免内容漂移。
+**为什么只有 AGENTS.md 一个入口？** Agent 框架的入口约定已经收敛：AGENTS.md 由 OpenAI Codex 提出，Claude Code 等主流框架已兼容，Gemini CLI 也朝同一约定演进。单一入口即可覆盖主流框架，不需要为每个框架另备文件名再用脚本同步副本——那份内容只是同一事实的多个拷贝，除了制造一致性维护成本（同步脚本、hook 比对、审计同步项）没有任何信息增量。个别仍只认自有入口文件名的工具（如部分编辑器插件），由用户在工具内自行桥接，不属于本 skill 职责。
 
 **建议控制在 250 行以内。** 200 行是理想目标，实践中通用项目需要保留一定篇幅（项目概述、信息导航、行为规则、测试/安全、提交规范、文档原则、完工必检等 ~130 行骨架 + 120 行项目特异内容）。250 行是实际可执行上限——如果超过，说明有些内容应该下沉到 docs/ 中，AGENTS.md 只留指针。CHANGELOG 规则留在 AGENTS.md 里是有意为之——它是最高频被违反的硬约束，下沉到按需读取的 docs/ 反而会被遗漏。
 
@@ -99,7 +99,7 @@ docs/CHANGELOG.md       → 变更记录（Agent 需要了解近期改动时读�
 因此文档体系里应显式给"验证"留位置。**分级判据是文件性质，不是改动行数**——治理文档改 2 行的连锁影响可能远超业务代码改 200 行：
 
 - **治理文档**：无论改动规模，必须由独立视角复查。**分级判据是文件性质，不是改动行数**——治理文档改 2 行的连锁影响可能远超业务代码改 200 行。理由是确认偏误对此类文件最为致命：执行者在同一上下文里刚写完规则，天然看不到其中的歧义和盲区，而一条模糊规则在后续几十次会话中被错误解读的连锁成本远超一轮 converge spawn 的开销。
-  - **判定范围**：AGENTS.md、CLAUDE.md、GEMINI.md、SKILL.md、预提交 hook、审计脚本，以及任何被 Agent 作为行为规则消费的文件。识别辅助：若文件被 AGENTS.md 引用为规则执行工具（如 pre-commit hook、audit.py），或被框架自动加载（如 `.claude/settings.json` 中的 hooks），即属于治理文档。
+  - **判定范围**：AGENTS.md、SKILL.md、预提交 hook、审计脚本，以及任何被 Agent 作为行为规则消费的文件。识别辅助：若文件被 AGENTS.md 引用为规则执行工具（如 pre-commit hook、audit.py），或被框架自动加载（如 `.claude/settings.json` 中的 hooks），即属于治理文档。
   - **独占性**：治理文档层是独占判定——一个改动只要触及治理文档，就按本层规则处理，不叠加或降级到下层（高风险/中等风险/低风险）。若同一任务同时触及治理文档和业务文件，仅治理文档部分按本层复查，业务文件部分按原有分级独立判断——两个部分可分别走不同的审查流程。
   - **ultraverge vs 标准 converge**：
     - **ultraverge**（≥3 Reviewer）：涉及新增、删除或重定义**准则段**。准则段是文档中规定行为规则、禁止事项或判断标准的段落——区别于导航表、信息指针和示例性说明。判定以段落的首要功能为准：约束速查表（禁止/替代）的首要功能是规则，属于准则段；纯导航指针（如"文档总索引：[docs/STRUCTURE.md]"）不属于。若一段落同时含规则和指针，以主导功能判定。
@@ -122,7 +122,7 @@ Agent 没有长期记忆（Claude Code 的 memory 系统除外，但那更适合
 
 但完工检查清单解决的是"本次任务改了代码、是否同步了文档"——它防的是**即时遗忘**。另一种更隐蔽的腐化是**渐进漂移**：六个月后文档声称"使用 SQLite"，实际已被悄然迁移到 PostgreSQL，而中间没有任何一次任务显式触发过"改数据库"这一步。这种漂移无法靠完工清单发现，因为它不是某一次任务的遗漏，而是无数次微调的累积。
 
-为此本 SKILL 内置了两层防线：**`scripts/audit.py`** 做机械检查（死链、STRUCTURE 索引完整性、依赖声明漂移、出生档案存在性、AGENTS.md 行数、同步一致性），**`docs/audit-checklist.md`** 做 Agent 手动裁决（设计决策仍成立？环境仍准确？未记录的变更？）。审计机制详见执行步骤第 9 步。
+为此本 SKILL 内置了两层防线：**`scripts/audit.py`** 做机械检查（死链、STRUCTURE 索引完整性、依赖声明漂移、出生档案存在性、AGENTS.md 行数、记忆结构健康），**`docs/audit-checklist.md`** 做 Agent 手动裁决（设计决策仍成立？环境仍准确？未记录的变更？）。审计机制详见执行步骤第 9 步。
 
 ### 7. CHANGELOG 是高频写入的文件，必须脚本化操作
 
@@ -139,20 +139,20 @@ CHANGELOG 会随项目推进不断增长，可能达到几百甚至上千行。�
 - **Occam's Razor**：如无必要，勿增实体。新增文件、脚本、字段、规则或流程前，必须能说清它解决的具体问题；如果只是让体系看起来完整，应拒绝。
 - **Bitter Lesson**（源自 Rich Sutton，2019）：通用方法优于硬编码先验。长期来看，利用通用能力（模型理解、语义检索、结构化工具）比嵌入人类知识（关键词规则、任务模式枚举、提前分类）更有效。短期看，硬编码规则能让 Agent 快速上手；但长期看，它们会制造维护负担、抑制灵活性，最终成为演进障碍。优先设计能随计算/数据增长而自动扩展的元方法，而非预设具体场景的静态规则。
 
-**两者的边界同样重要**：Occam 不反对必要复杂性，Bitter Lesson 也不反对结构性先验。同步脚本（agent_links.py）、CHANGELOG 脚本、计划文件这些结构之所以成立，是因为它们承载了可验证、重复发生、会消耗上下文的机械动作；相反，为每种未来任务预设规则表，就应先被这两条原则拦住。
+**两者的边界同样重要**：Occam 不反对必要复杂性，Bitter Lesson 也不反对结构性先验。机械检查脚本（audit.py / check_all.py）、CHANGELOG 脚本、计划文件这些结构之所以成立，是因为它们承载了可验证、重复发生、会消耗上下文的机械动作；相反，为每种未来任务预设规则表，就应先被这两条原则拦住。
 
 具体的判别样例：
 
 | 应保留的结构性先验 | 应避免的硬编码先验 |
 |---|---|
-| `agent_links.py` + copy 同步：承载"三文件同步"这个可验证、重复、会消耗上下文的动作 | 任务类型枚举表（"如果是 bug 修复就读 X，如果是新功能就读 Y"） |
+| `check_all.py` + 完工清单：把"每次任务收尾的机械检查"这个可验证、重复、会消耗上下文的动作下沉到一条命令 | 任务类型枚举表（"如果是 bug 修复就读 X，如果是新功能就读 Y"） |
 | `changelog.py titles/show/add/recent`：把"读全文"这个高频耗 token 动作下沉到工具 | CHANGELOG 条目的关键词分类规则（"必须以 fix:/feat: 开头并归到 X 类"） |
 | 计划文件 + 状态机（queue/in_progress/review/completed）：承载跨上下文交接 | 给每种业务领域预先写好的"专属计划模板" |
 | 完工检查清单：把易遗忘的硬约束机械化 | 用关键词匹配判断"任务是否需要复查" |
 
 判别原则：先验如果能随项目演进自然扩展（脚本可加 flag、计划状态机可加新状态），且替代的是**确定会发生的、可机械化的**动作，就保留；先验如果是把"未来可能遇到的情况"提前枚举出来，就让它由 Agent 在具体上下文中判断，不要预编码。
 
-**Bitter Lesson 的精确边界——封顶型先验 vs 防呆型机制**：Bitter Lesson 反对的是封顶型先验（任务知识、局部最优启发式——注入后系统上限停在设计者水平，随模型变强而减值），不反对防呆型机制（契约校验、过程监督、预算门控——防御机械失误而非代偿模型判断；推理错误随模型变强减少，机械失误随任务量缩放——后者是本框架的工程外推，非 Sutton 原文结论——此类机制不过时）。流程先验（如脚本化调度）合法的三分判据：①机制不执行任务本身；②不收窄模型可达的解空间——必须留逃生舱且真实可用；③对契约违反 fail-closed（拦机械错误），对判断分歧 fail-open（不否决自己不理解的判断）。脚本防御的是失误，不是无能。本节判别样例表中的“结构性先验”，其承载可验证机械动作的部分（如同步脚本、CHANGELOG 脚本）即属防呆型机制；承载跨上下文交接的部分（如计划状态机）是结构性先验的另一子类。
+**Bitter Lesson 的精确边界——封顶型先验 vs 防呆型机制**：Bitter Lesson 反对的是封顶型先验（任务知识、局部最优启发式——注入后系统上限停在设计者水平，随模型变强而减值），不反对防呆型机制（契约校验、过程监督、预算门控——防御机械失误而非代偿模型判断；推理错误随模型变强减少，机械失误随任务量缩放——后者是本框架的工程外推，非 Sutton 原文结论——此类机制不过时）。流程先验（如脚本化调度）合法的三分判据：①机制不执行任务本身；②不收窄模型可达的解空间——必须留逃生舱且真实可用；③对契约违反 fail-closed（拦机械错误），对判断分歧 fail-open（不否决自己不理解的判断）。脚本防御的是失误，不是无能。本节判别样例表中的“结构性先验”，其承载可验证机械动作的部分（如机械检查脚本、CHANGELOG 脚本）即属防呆型机制；承载跨上下文交接的部分（如计划状态机）是结构性先验的另一子类。
 
 ### 9. 软约束靠文档，硬约束靠工具
 
@@ -164,7 +164,7 @@ AGENTS.md 里的规则本质上是"告诉 Agent 应该怎么做"，Agent 可能�
 
 | 约束类型 | 定义 | 例子 | 可靠性 |
 |---|---|---|---|
-| **硬约束** | 用脚本、hook、验证等机制强制执行 | Git pre-commit hook 检查 AGENTS.md 同步；`check_all.py --quiet` 跑完工检查 | ✅ 可靠 |
+| **硬约束** | 用脚本、hook、验证等机制强制执行 | Git pre-commit hook 检查记忆目录结构；`check_all.py --quiet` 跑完工检查 | ✅ 可靠 |
 | **软约束** | 依赖 Agent 记住并遵守的提醒 | 文件开头写提醒、完工检查清单散文枚举 | ❌ 不可靠 |
 
 **设计新规则时**：
@@ -172,15 +172,14 @@ AGENTS.md 里的规则本质上是"告诉 Agent 应该怎么做"，Agent 可能�
 - 如果无法强制，在规则中明确声明为"必须"，并给出可验证的检查方法
 - 避免"建议"、"提醒"等软约束措辞——这些在会话切换后会丢失
 
-**AGENTS.md 同步的强制维护**：
+**记忆结构的强制维护**：
 
-AGENTS.md、CLAUDE.md、GEMINI.md 必须保持内容一致（因为不同 Agent 框架加载不同入口文件）。常见错误：
+`.agents/memory/` 目录存在时，MEMORY.md 必须存在且非空、AGENTS.md 必须含指向它的指针。常见错误：
 
-1. Agent 修改了 AGENTS.md，但忘记运行 `scripts/agent_links.py` 同步
-2. Agent 直接修改了 CLAUDE.md 或 GEMINI.md（这是错误的）
-3. 同步文件因编辑器原子写入行为而断开
+1. 记忆文件被误删或清空，记忆系统静默失效
+2. AGENTS.md 重构时丢掉了记忆指针，检索入口断链
 
-**唯一正解：Git pre-commit hook 调用 `scripts/agent_links.py check`，断链/不一致时拒绝提交。** 具体落地见"执行步骤"第 6 步。脚本一处实现，hook 一行调用，不要在 hook 里再写一份独立的比对逻辑（避免双份维护成本和"工具缺失静默放行"的洞）。
+**落地方式：pre-commit hook 检查目录结构（存在即必须非空），`audit.py memory` / `check_all.py` 检查完整性和指针存在性。** 具体见"执行步骤"第 6 步与第 9 步。一处实现，多处调用，不要在 hook 和脚本里各写一份独立判定逻辑（避免双份维护成本）。
 
 ### 10. 跨会话记忆——硬约束保证可见，软约束扩展容量
 
@@ -199,7 +198,7 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 
 ### 11. 治理文档只有规范态——正文不承载历史
 
-治理文档（AGENTS.md 及同步副本、STRUCTURE.md、本 SKILL、hook 与审计脚本等一切被 Agent 作为行为规则消费的文件）修改时**直接改写为最终态**：不写「以前xx，现在xx」式前后对比，不留「(日期 新增)」版本标记，不保留弃用标注。理由：
+治理文档（AGENTS.md、STRUCTURE.md、本 SKILL、hook 与审计脚本等一切被 Agent 作为行为规则消费的文件）修改时**直接改写为最终态**：不写「以前xx，现在xx」式前后对比，不留「(日期 新增)」版本标记，不保留弃用标注。理由：
 
 - **读者是冷启动的 Agent，只消费「现在是什么」**：修改痕迹服务于写作者的记忆，对按当前规则行动的读者是噪声；标着「新增」的规则暗示尚在观察期，稀释权威性——当前文本即权威，法典再版不附修正案标注。
 - **历史已有专属归宿，正文重复即污染**：过程归 git log（逐字节精确），制度层变更归 CHANGELOG，评审决策归 converge 产物。正文里的内联对比是这些归宿的残缺副本，且必然与它们失同步，制造多个互相矛盾的历史版本。
@@ -215,16 +214,13 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 
 ```
 目标项目/
-├── AGENTS.md              # 主文件（行为规则 + 导航，Agent 面向）
-├── CLAUDE.md              # → AGENTS.md 的同步副本
-├── GEMINI.md              # → AGENTS.md 的同步副本
+├── AGENTS.md              # 唯一入口（行为规则 + 导航，Agent 面向）
 ├── README.md              # 人类面向入口（项目概述、快速开始、贡献指南）
 ├── scripts/
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
-│   ├── agent_links.py     # AGENTS/CLAUDE/GEMINI 同步检查与修复
 │   ├── maintain.py        # （中型+）文档体系维护管线：记忆索引重建 + 审计 + 活性报告
 │   ├── worktree_task.py   # （可选）多 Agent worktree 四动作运行时（第 6.5 步）
-│   └── audit.py            # 文档一致性机械检查（死链/漂移/结构）
+│   └── audit.py           # 文档一致性机械检查（死链/漂移/结构）
 ├── .githooks/             # （可选）质量门控
 │   ├── pre-commit
 │   └── reference-transaction  # （可选）canonical 分支快进保护（第 6.5 步）
@@ -259,11 +255,10 @@ init-agent-docs/
      │        pitfalls, plan, CHANGELOG, audit-checklist, README, bugfix, frontmatter-schemas — 共 15 个 .tpl 文件）
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
-    │   ├── agent_links.py            # AGENTS/CLAUDE/GEMINI 同步检查与修复
     │   ├── maintain.py               # 文档体系维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
     │   ├── worktree_task.py          # 多 Agent worktree 四动作运行时（可选，第 6.5 步）
     │   ├── audit.py                  # 文档一致性深度审计（死链/漂移/结构完整性，定期跑 ~15 项）
-    │   └── check_all.py              # 高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~5 项）
+    │   └── check_all.py              # 高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
     ├── references/
     │   ├── workflow-patterns.md      # 执行计划工作流与跨上下文协作详细说明
     │   └── eval-baseline.md          # Skill 质量评估框架与测试用例
@@ -324,7 +319,7 @@ init-agent-docs/
 2. **技术栈是什么？**（语言、框架、前后端分离？这影响代码风格约定和 pre-commit 片段选择）
 3. **有哪些硬约束？**（密钥管理、构建产物路径、特殊部署方式、合规要求）
 4. **当前有没有已存在的文档？** 需要迁移还是从零开始？如果已有文档，哪些内容值得保留？（决定是否要走第 3 步的迁移流程）
-5. **项目使用哪些 AI Agent？**（Claude Code、Codex、Gemini CLI、Cursor 等——这决定需要哪些同步文件名）
+5. **项目在用哪些 AI Agent / 有哪些遗留 instruction 文件？**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md` 等——这决定迁移时要整合和清退哪些旧入口文件；AGENTS.md 是唯一入口，不再生成任何同步副本）
 6. **项目的构建产物在哪里？**（dist/、build/、data/、node_modules/ 等——这些路径需要写入硬约束）
 7. **项目有没有自动化测试？** 测试命令是什么？这决定了测试要求部分怎么写。
 8. **这个项目的默认协作倾向是什么？**（通常是单 Agent 顺序推进，还是经常多 Agent / 多窗口并行？这是默认倾向，不是对每个任务的一刀切规定。若确认多 Agent 并行倾向，初始化时应向用户提议安装多 Agent worktree 运行时——见第 6.5 步）
@@ -362,7 +357,7 @@ init-agent-docs/
 
 | Profile | 必须生成的输出 | Git 特有行为 | 明确省略 |
 |---------|--------------|------------|---------|
-| Small + Git | AGENTS.md/CLAUDE.md/GEMINI.md、root README.md、docs/CURRENT.md、docs/CHANGELOG.md、docs/audit-checklist.md、agent_links.py、changelog.py、audit.py、check_all.py | 可检查已有远端；仅在单独确认后安装 hooks | 不建 plans、memory、maintain、worktrees、hooks（默认） |
+| Small + Git | AGENTS.md、root README.md、docs/CURRENT.md、docs/CHANGELOG.md、docs/audit-checklist.md、changelog.py、audit.py、check_all.py | 可检查已有远端；仅在单独确认后安装 hooks | 不建 plans、memory、maintain、worktrees、hooks（默认） |
 | Small + no-Git | 同 Small + Git | **不得生成**：Git 命令、history/commit/hook/branch/remote 指引、worktree 相关内容；CURRENT + CHANGELOG 提供基于文件的 handoff/history | 同 Small + Git 加所有 Git-only 段落 |
 | Medium/Large + Git | 全套 docs/、plans/、memory/、maintain.py 等维护脚本；Large 加模块级拆分提示 | 检查已配置远端；hooks/worktrees 仅在已有确认后安装 | 不假定 `origin`、`main` 或自动 `git init` |
 | Medium/Large + no-Git | 全套 docs/、plans/、memory/、maintain.py 等维护脚本；Large 加模块级拆分提示 | maintain.py 在调用任何 Git 子进程前检测无仓库，回退到 mtime + CHANGELOG；不生成 hooks/worktrees/commit/history 指引 | 所有 Git-only 段落和资产 |
@@ -391,7 +386,7 @@ Small + no-Git profile **不得生成**以下内容：
 
 ---
 
-### 第 1 步：创建 AGENTS.md 及同步副本
+### 第 1 步：创建 AGENTS.md
 
 1. 读 `assets/templates/zh/AGENTS.md.tpl`（当前 skill 仅附带中文模板）。
 2. 基于模板生成目标项目的 `AGENTS.md`。模板里：
@@ -410,7 +405,6 @@ Small + no-Git profile **不得生成**以下内容：
    ```bash
    mkdir -p scripts
    cp assets/scripts/changelog.py scripts/
-   cp assets/scripts/agent_links.py scripts/
    cp assets/scripts/audit.py scripts/
    cp assets/scripts/check_all.py scripts/
    ```
@@ -420,41 +414,17 @@ Small + no-Git profile **不得生成**以下内容：
    ```powershell
    New-Item -ItemType Directory -Force scripts
    Copy-Item assets\scripts\changelog.py scripts\
-   Copy-Item assets\scripts\agent_links.py scripts\
    Copy-Item assets\scripts\audit.py scripts\
    Copy-Item assets\scripts\check_all.py scripts\
    ```
 
-5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中，然后再按目标 AGENTS.md「同步声明」执行精确命令。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
+5. **如目标项目已有任一 instruction 文件**（`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`.cursor/rules/**`、`.cursorrules`、`.github/copilot-instructions.md`、repo-local `opencode.json` / `opencode.jsonc` / `.opencode/opencode.json` 等），**先读取它们的内容**，提取新 AGENTS.md 尚未覆盖的硬约束、精确命令、工具链顺序、测试/单包验证方式、monorepo 边界、Agent 行为限制和禁止事项，整合到新生成的 AGENTS.md 中。不要未经阅读就直接覆盖——旧文件中往往包含用户已经验证过的项目画像和运行方式。若存在冲突，按第 0 步的"可执行事实源优先"规则裁决，并把重要取舍记录到出生档案。
+6. **单一入口，不留副本**：整合完成后**删除旧的 `CLAUDE.md` / `GEMINI.md` 等入口副本文件**——Git profile 用 `git rm`，no-Git profile 用文件系统删除。内容已并入 AGENTS.md，保留副本只会制造两处维护和漂移；删除事件与整合去向记入 CHANGELOG（第 5 步）。不需要（也不存在）任何同步脚本——AGENTS.md 本身就是唯一入口。
 
-6. 写入目标项目的 `AGENTS.md` 后，运行同步脚本，将 `AGENTS.md` 的内容复制到 `CLAUDE.md` 和 `GEMINI.md`，并验证三文件一致：
-
-   ```bash
-   python scripts/agent_links.py repair --mode copy --force
-   python scripts/agent_links.py check --mode copy
-   ```
-
-7. 如果检查失败，先确认 `CLAUDE.md` / `GEMINI.md` 是否含有不同内容；确认可以用 `AGENTS.md` 覆盖后再修复：
-
-   ```bash
-   # 以下以 copy 声明为例；hardlink 项目必须使用 AGENTS.md 中的 hardlink 命令。
-   python scripts/agent_links.py repair --mode copy --force
-   python scripts/agent_links.py check --mode copy
-   ```
-
-**默认使用 copy 模式**：`repair` 默认以 copy 模式工作（`--mode=copy`），将 `AGENTS.md` 的内容复制到 `CLAUDE.md` 和 `GEMINI.md`，并用 MD5 校验一致性。copy 模式的优势是**不受编辑器原子写入影响**——部分编辑器保存时用"写临时文件 → 删原文件 → 重命名"，会创建新 inode 从而断开硬链接；copy 模式不存在这个问题。
-
-```bash
-python scripts/agent_links.py repair --mode copy --force
-python scripts/agent_links.py check --mode copy
-```
-
-**如文件系统支持且你明确需要 hardlink**：显式传 `--mode=hardlink` 锁定模式。但请注意，hardlink 在以下场景会断裂：编辑器原子写入、WSL 跨盘、ReFS/exFAT、部分 CI 容器。断裂后需要重新运行 `repair` 恢复。在 AGENTS.md 顶部写清当前项目用哪种模式，避免歧义。
-
-```bash
-python scripts/agent_links.py repair --mode hardlink --force
-python scripts/agent_links.py check --mode hardlink
-```
+7. **清退遗留同步机制（迁移场景必做）**：目标项目若残留旧体系产物，逐一清退，并与上一条的删除作为同一次变更记入 CHANGELOG：
+   - 孤儿同步脚本 `scripts/agent_links.py`：直接删除——同步已由单一入口消除，残留会让后续 Agent 误以为机制仍存在；
+   - 旧 hook 内嵌的同步检查：`.githooks/pre-commit` 或 `.pre-commit-config.yaml` 中对同步脚本的调用段必须移除（技术栈 hook 可按第 6 步路径 A 重装干净版本）——脚本已删而 hook 仍调用会卡死提交路径；迁移场景下本项必做，不适用第 6 步的"按需"豁免；
+   - 清退完整性由 `docs/audit-checklist.md`「机械检查结果复核」段的"残留同步机制"项兜底核对。
 
 ### 第 2 步：创建 docs/STRUCTURE.md 和 docs/ 目录
 
@@ -484,8 +454,6 @@ python scripts/agent_links.py check --mode hardlink
 - `### Bugfix 沉淀` 整节
 
 只保留 `当前任务状态：docs/CURRENT.md` 和 `变更记录：docs/CHANGELOG.md` 两条。同时删除 AGENTS.md 中"文档维护原则"里关于 `docs/overview.md` / `docs/api.md` / `docs/deployment.md` / `docs/pitfalls.md` / `docs/plans/active/` 的所有指针段（小型项目不存在这些文件）。Compact 哨兵第 2 步（读取 MEMORY.md）也删除——小型项目无记忆目录；「任务前记忆检索」中的第 2、3 条（读取 MEMORY.md 索引段、bugfix 触发词前置）同步删除。Git profile 可保留 Git history + CHANGELOG 检索，no-Git profile 只保留 CURRENT + CHANGELOG。"定期审计"条目删去 maintain.py 半句，仅保留 `python scripts/audit.py check`——小型项目不装 maintain.py，留着是死引用。完工检查清单「记忆自检」项同步整项替换为"小型项目，无记忆目录"标注（写出/读入两段均删）。
-
-裁剪后按目标 AGENTS.md「同步声明」中的精确 repair/check 命令同步并验证 CLAUDE.md / GEMINI.md。
 
 #### 中型项目
 按模板生成以下全套文件：
@@ -598,7 +566,7 @@ mkdir -p .agents/memory/user
 ```bash
 python scripts/changelog.py add \
   --title "初始化文档体系" \
-  --body "建立 agent-first 文档结构：AGENTS.md（含同步副本 CLAUDE.md / GEMINI.md）+ docs/STRUCTURE.md + docs/ 层级；配置 scripts/changelog.py 与 scripts/agent_links.py，脚本化维护日志和同步副本；迁移/整合旧文档（如适用）：见 docs/plans/completed/initialization.md"
+  --body "建立 agent-first 文档结构：AGENTS.md（唯一入口）+ docs/STRUCTURE.md + docs/ 层级；配置 scripts/changelog.py 脚本化维护日志；迁移/整合旧文档与遗留入口副本（如适用）：见 docs/plans/completed/initialization.md"
 ```
 
 ### 第 5.5 步：初始化记忆系统（中型+项目）
@@ -621,60 +589,36 @@ python scripts/changelog.py add \
    python scripts/maintain.py --memory-index
    ```
 
-   maintain.py 是文档体系的自动化维护入口：重建 MEMORY.md 索引标记段（`<!-- memory-index:start/end -->`，段内禁止手改；索引覆盖记忆条目与 `docs/problems/bugfix/` 文档）+ 调用 audit.py / agent_links.py 机械检查 + 记忆活性统计 + 审计触发器（距上次审计 >30 天 WARN）+ 近期脉络摘要。日常维护一条命令 `python scripts/maintain.py`；`--check` 为只读校验（索引过期或检查失败时退出码非 0，可挂 CI）。**MEMORY.md 索引是纯派生信息，由脚本维护；agent 只负责经验的沉淀与检索。**
+   maintain.py 是文档体系的自动化维护入口：重建 MEMORY.md 索引标记段（`<!-- memory-index:start/end -->`，段内禁止手改；索引覆盖记忆条目与 `docs/problems/bugfix/` 文档）+ 调用 audit.py 机械检查 + 记忆活性统计 + 审计触发器（距上次审计 >30 天 WARN）+ 近期脉络摘要。日常维护一条命令 `python scripts/maintain.py`；`--check` 为只读校验（索引过期或检查失败时退出码非 0，可挂 CI）。**MEMORY.md 索引是纯派生信息，由脚本维护；agent 只负责经验的沉淀与检索。**
 
 5. 更新 AGENTS.md「项目记忆」内联段：将已知的用户信息和项目上下文写入摘要中的 `- **用户**：` 和 `- **项目上下文**：` 行。不要留 `<!--  -->` 注释——这是最终交付物。
 
-6. 按目标 AGENTS.md「同步声明」中的精确 repair/check 命令同步并验证 CLAUDE.md / GEMINI.md。
-
-7. 确认 AGENTS.md 信息导航包含记忆指针行（`- 项目记忆索引：[.agents/memory/MEMORY.md]...`）。
+6. 确认 AGENTS.md 信息导航包含记忆指针行（`- 项目记忆索引：[.agents/memory/MEMORY.md]...`）。
 
 > **设计理由**：AGENTS.md 内联段是硬约束——始终在 Agent 上下文；外置 `.agents/memory/` 是扩展容量。两者互补，缺一不可。详见设计哲学第 10 条。
 
 ### 第 6 步：初始化质量门控
 
-**强烈推荐执行，不要因为"只是文档"就跳过**——能用工具强制的规则就不要只靠文档（设计哲学第 9 条）。
+**按需执行**：质量门控的价值在 lint / format 强制、记忆结构兜底和治理文档修改提醒；项目没有任何 lint 需求且未启用记忆系统时，可以整步跳过（Occam——不要为安装而安装）。
 
 1. 确认脚本已经复制到项目：
 
    ```bash
    python scripts/changelog.py titles --limit 3
-   python scripts/agent_links.py check
    ```
 
 2. **按 repository mode 分支**：no-Git profile 跳过整个 hook 步骤，不创建 `.git`、`.githooks` 或 pre-commit 配置。只有用户明确确认将 no-Git 目标转换为 Git 后才可运行 `git init`，随后重新确认 profile；不得把初始化 Git 当成质量门控的默认动作。
 
-3. **仅 Git profile 且用户已单独确认时配置 pre-commit hook**——核心目的是在每次提交前检查 `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 三文件内容是否一致，防止 Agent 修改 AGENTS.md 后忘记同步。未确认安装 hook 时跳过本项，仍执行 `agent_links.py check`。assets 下的 hook 已内建 fallback：优先调用 `agent_links.py`，不可用时用内联 MD5 检查（兼容 md5sum / md5），工具缺失时警告但不阻塞。
+3. **仅 Git profile 且用户已单独确认时配置 pre-commit hook**——hook 承担三类机械检查：项目栈的 lint / format（技术栈 hook 内置）、记忆目录结构兜底（`.agents/memory/` 存在时 MEMORY.md 必须存在且非空）、治理文档修改提醒（WARN，提示走独立视角复查，不阻塞提交）。未确认安装 hook 时跳过本项。
 
-   **二选一，不要叠加**——assets 下的技术栈 hook 内部已经包含 agent_links 一致性检查，再叠加 inline 的最小 hook 会让检查跑两次、输出混乱。
+   **二选一，不要叠加**——两条路径都设置 hook 入口，叠加会跑两次、输出混乱。
 
-   **路径 A：项目没有特殊 lint 需求 → 直接用 inline 最小 hook**
-
-   ```bash
-   mkdir -p .githooks
-   cat > .githooks/pre-commit << 'EOF'
-   #!/usr/bin/env bash
-   set -e
-   python scripts/agent_links.py check || {
-       echo ""
-       echo "AGENTS.md / CLAUDE.md / GEMINI.md 内容不一致。"
-       echo "正确流程：仅编辑 AGENTS.md，然后按其中「同步声明」的精确命令修复并检查。"
-       exit 1
-   }
-   EOF
-   chmod +x .githooks/pre-commit
-   git config core.hooksPath .githooks
-   ```
-
-   **路径 B：项目需要 lint / format 检查 → 直接复制对应技术栈 hook**
-
-   `assets/hooks/pre-commit-*.sh` 已经在内部调用了 `scripts/agent_links.py check`，所以不要再叠加路径 A 的 inline 版本。
+   **路径 A：项目需要 lint / format 检查 → 直接复制对应技术栈 hook**
 
    - Python 项目 → `assets/hooks/pre-commit-python.sh`
    - Node/TS 项目 → `assets/hooks/pre-commit-node.sh`
    - Go 项目 → `assets/hooks/pre-commit-go.sh`
    - 混合 / 特殊栈 → `assets/hooks/pre-commit-generic.sh`（自行补 lint 命令）
-   - 已在用 pre-commit 框架 → `assets/hooks/pre-commit-config.yaml` 贴到项目根的 `.pre-commit-config.yaml`
 
    ```bash
    mkdir -p .githooks
@@ -691,11 +635,9 @@ python scripts/changelog.py add \
    git config core.hooksPath .githooks
    ```
 
-   `agent_links.py check` 在以下情况返回非 0：三文件之一缺失、不属于同一个 inode、或内容已分叉。Python 解释器缺失时也会自然失败——比 bash 内联用 `md5sum` 然后在工具缺失时 `exit 0` 安全。
+   **Windows 注意**：hook 是 bash 脚本，需要 git bash 解释（绝大多数 Windows 安装 Git for Windows 时已自带）。如果项目要求纯 PowerShell 路径，改用路径 B 的 `pre-commit` 框架方案（跨平台）。
 
-   **Windows 注意**：hook 是 bash 脚本，需要 git bash 解释（绝大多数 Windows 安装 Git for Windows 时已自带）。如果项目要求纯 PowerShell 路径，改用下面的 `pre-commit` 框架方案（跨平台）。
-
-   **路径 C：使用 `pre-commit` 框架（推荐给跨平台 / 多语言混合项目）**
+   **路径 B：使用 `pre-commit` 框架（推荐给跨平台 / 多语言混合项目）**
 
    `pre-commit` 是一个跨平台的 hook 管理工具，能在 Windows / Linux / macOS 上一致地执行 Python 写的 hook，且自动处理 git hook 安装、版本固定、虚拟环境隔离。安装即用：
 
@@ -713,7 +655,7 @@ python scripts/changelog.py add \
    pre-commit install
    ```
 
-   `assets/hooks/pre-commit-config.yaml` 已经包含 `agent_links.py check` 这一条 local hook（始终启用），其他语言 lint 段落以注释形式给出，按项目实际栈解开注释即可。这条路径与路径 A / B 互斥——选了它就不要再用 `git config core.hooksPath .githooks`，`pre-commit install` 会接管 `.git/hooks/pre-commit`。
+   `assets/hooks/pre-commit-config.yaml` 内置通用检查（trailing-whitespace 等），语言 lint 段落以注释形式给出，按项目实际栈解开注释即可；记忆结构兜底与治理提醒在框架路径下需按需自行补写 local hook。这条路径与路径 A 互斥——选了它就不要再用 `git config core.hooksPath .githooks`，`pre-commit install` 会接管 `.git/hooks/pre-commit`。
 
 4. 本地触发一次确认能通过（可选——CI 矩阵已覆盖这些用例，跳过也行）：
 
@@ -721,11 +663,10 @@ python scripts/changelog.py add \
    # 期望：直接提交一次空改动应通过
    git commit --allow-empty -m "test: hook pass" && git reset --soft HEAD~1
 
-   # 期望：人为破坏 CLAUDE.md 后提交应被拒绝
-   echo "diverged" >> CLAUDE.md && git add CLAUDE.md
+   # 期望（路径 A 且已启用记忆系统时）：人为移走记忆索引后提交应被拒绝
+   mv .agents/memory/MEMORY.md .agents/memory/MEMORY.md.bak && git add -A
    git commit -m "test: hook reject" && echo "BUG: hook should have rejected" || echo "ok: hook rejected as expected"
-   git restore --staged CLAUDE.md && git checkout -- CLAUDE.md
-   # 按 AGENTS.md「同步声明」中的精确 repair/check 命令恢复同步。
+   mv .agents/memory/MEMORY.md.bak .agents/memory/MEMORY.md && git restore --staged .agents/memory
    ```
 
    `git reset --soft HEAD~1` 仅撤回 commit 不动工作区；如果该 commit 是仓库的第一次 commit，跳过这条命令（无 HEAD~1 可回退）。
@@ -749,7 +690,7 @@ python scripts/changelog.py add \
    chmod +x .githooks/reference-transaction
    ```
 
-   前提是第 6 步已配置 `core.hooksPath = .githooks`。使用 pre-commit 框架（路径 C）的项目：hook 不经过框架，仍按上面方式放入 `.githooks/` 并设 `core.hooksPath`，或改写为 local hook 加入 `.pre-commit-config.yaml`（`hook_types: [reference-transaction]`）。
+   前提是第 6 步已配置 `core.hooksPath = .githooks`。使用 pre-commit 框架（路径 B）的项目：hook 不经过框架，仍按上面方式放入 `.githooks/` 并设 `core.hooksPath`，或改写为 local hook 加入 `.pre-commit-config.yaml`（`hook_types: [reference-transaction]`）。
 
 3. 主分支不是 `main` / `master` 时显式声明（helper 与 hook 共用这个配置；默认解析顺序 config → main → master → 当前分支）：
 
@@ -757,7 +698,7 @@ python scripts/changelog.py add \
    git config worktree-task.canonicalRef refs/heads/<主分支名>
    ```
 
-4. 在 AGENTS.md 保留模板候选节「多 Agent worktree 路由」（默认偏好段之后），并按 AGENTS.md「同步声明」中的精确 repair/check 命令同步。
+4. 在 AGENTS.md 保留模板候选节「多 Agent worktree 路由」（默认偏好段之后）。
 
 5. 验证一次全生命周期（可选但推荐）：
 
@@ -777,7 +718,7 @@ python scripts/changelog.py add \
 **通用项（所有规模都要过）：**
 
 1. 所有应创建的文件已创建且路径正确（按第 0 步用户确认的规模判断"应创建"的范围，不要按全套查）
-2. `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步一致：`python scripts/agent_links.py check` 返回 0
+2. `AGENTS.md` 是唯一入口：不存在 `CLAUDE.md` / `GEMINI.md` 残留副本（迁移场景已按第 1 步整合并删除）
 3. `AGENTS.md` 中的所有链接指向真实存在的文件——**这一条对小型项目最关键**：默认模板的信息导航包含 docs/STRUCTURE.md / overview.md / api.md / deployment.md / pitfalls.md / docs/plans/ 全部指针，小型项目必须按第 2 步要求裁剪掉
 4. `README.md` 已创建（从模板生成或迁移保留），且内容不含占位符
 5. `docs/CURRENT.md` 已创建，并在 `AGENTS.md` 的信息导航中可访问
@@ -840,7 +781,7 @@ python scripts/changelog.py add \
 
 这一步补上设计哲学第 6 条揭示的"渐进漂移"防线。审计和日常检查分三层：
 
-- `scripts/check_all.py`：高频完工检查器（每次任务后跑，~5 项，静默）。已在第 1 步复制到目标项目。
+- `scripts/check_all.py`：高频完工检查器（每次任务后跑，~4 项，静默）。已在第 1 步复制到目标项目。
 - `scripts/audit.py`：深度审计器（每 ~20 次任务或每月跑，~15 项，详实输出）。已在第 1 步复制。
 - `docs/audit-checklist.md`：Agent 手动裁决清单。
 
@@ -924,13 +865,13 @@ python scripts/changelog.py add \
 
 8. **文档只增不删**：过时文档比没有文档更危险——Agent 会信以为真。解法：定期审视文档，删除或更新过时内容。
 
-9. **信息散落多处**：同一个事实在三个文件里各写一遍，改了一处忘了其他。解法："不重复"原则，同一信息只在最合适的位置出现一次。
+9. **信息散落多处**：同一个事实在多个文件里各写一遍，改了一处忘了其他。解法："不重复"原则，同一信息只在最合适的位置出现一次。
 
 10. **每次写日志都读全文**：CHANGELOG 可能很长，读全文浪费上下文且容易在错误位置插入。解法：用 `scripts/changelog.py titles/show/add/recent` 做标题树查看、局部读取、追加和近期浏览，不读全文。
 
 11. **CURRENT.md 与 plans 空转**：为所有项目无脑创建全套 docs/ 层级和 plans 目录，结果 CURRENT.md 永远写着"无"，plans/active/ 只有一个 .gitkeep。Agent 从不读取和更新，文档体系沦为摆设。解法：初始化时按项目规模裁剪——小型项目只保留 AGENTS.md + README.md + docs/CHANGELOG.md + CURRENT.md；在 AGENTS.md 中写明"任务启动先读 CURRENT.md"和"什么情况下才建计划"的触发条件。
 
-12. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是 AGENTS.md 同步——见哲学第 9 条与第 6 步）。
+12. **全靠软约束**：所有规则都写在 AGENTS.md 里，没有机械化验证。Agent 在长上下文中容易遗忘或违反。解法：能用 hook/lint/CI 强制的规则，编码为工具（典型例子是完工机械检查与记忆结构兜底——见哲学第 9 条与第 6 步）。
 
 13. **关键原则只存在于对话中**：某次对话中确认了"硬约束优先"，但没有写入 AGENTS.md。新对话开始时 Agent 完全不知道这个原则的存在。解法：重要原则必须写入文档（AGENTS.md 的准则段），这样每次新对话都会自动加载。
 

@@ -78,9 +78,7 @@ class SkillGuidanceTestCase(unittest.TestCase):
                 "必须保持精简",
                 "只放行为规则和信息指针",
                 "候选项：只有目标仓库已有约束或用户确认时保留",
-                "agent-docs-sync-mode: copy",
-                "repair --mode copy --force",
-                "check --mode copy",
+                "AGENTS.md 是唯一入口",
                 "当前选定的控制器",
             ],
         )
@@ -180,7 +178,7 @@ class SkillGuidanceTestCase(unittest.TestCase):
             [
                 "200 行 / 400 词",
                 "可执行事实源优先",
-                "copy 同步（默认）",
+                "唯一入口",
                 "docs/STRUCTURE.md",
                 "docs/CHANGELOG.md",
                 ".agents/memory/MEMORY.md",
@@ -197,6 +195,7 @@ class SkillGuidanceTestCase(unittest.TestCase):
         self.assertNotIn("100 行", pitch)
         self.assertNotIn("~100行", pitch)
         self.assertNotIn("CLAUDE.md / GEMINI.md (硬链接)", pitch)
+        self.assertNotIn("agent_links", pitch)
         self.assertNotIn("绝对不记", pitch)
 
     def test_bitter_lesson_boundary_terms_present(self) -> None:
@@ -265,26 +264,54 @@ class SkillGuidanceTestCase(unittest.TestCase):
             self.assertIn(term, section)
         self.assertIn("不得生成", section)
 
-    def test_sync_remediation_is_mode_aware_everywhere(self) -> None:
-        paths = [
-            "SKILL.md",
+    def test_single_entry_no_legacy_sync_machinery(self) -> None:
+        """单一入口合同：交付面不得再引用已移除的三文件同步机制。"""
+        no_agent_links_paths = [
             "assets/hooks/pre-commit-generic.sh",
             "assets/hooks/pre-commit-python.sh",
             "assets/hooks/pre-commit-node.sh",
             "assets/hooks/pre-commit-go.sh",
+            "assets/hooks/pre-commit-config.yaml",
             "assets/references/eval-baseline.md",
             "assets/scripts/check_all.py",
+            "assets/scripts/maintain.py",
+            "assets/scripts/audit.py",
             "assets/templates/zh/AGENTS.md.tpl",
-            "assets/templates/zh/audit-checklist.md.tpl",
-            "README.md",
+            "assets/templates/zh/README.md.tpl",
         ]
-        bare_repair = re.compile(
-            r"(?:python3?\s+)?scripts/agent_links\.py repair(?!\s+--mode)")
-        for path in paths:
+        for path in no_agent_links_paths:
             with self.subTest(path=path):
                 text = read_repo_file(path)
-                self.assertIn("同步声明", text)
-                self.assertIsNone(bare_repair.search(text))
+                self.assertNotIn("agent_links", text)
+                self.assertNotIn("同步声明", text)
+                self.assertFalse(
+                    (REPO_ROOT / "assets" / "scripts" / "agent_links.py").exists()
+                )
+        # 入口模板与 hook 不再出现 CLAUDE.md / GEMINI.md（SKILL.md / eval-baseline
+        # 中的出现属合法迁移语境：读取旧 instruction 文件并删除副本）。
+        no_legacy_entry_paths = [
+            "assets/templates/zh/AGENTS.md.tpl",
+            "assets/templates/zh/README.md.tpl",
+            "assets/scripts/check_all.py",
+            "assets/scripts/maintain.py",
+            "assets/hooks/pre-commit-config.yaml",
+        ]
+        for path in no_legacy_entry_paths:
+            with self.subTest(path=path):
+                text = read_repo_file(path)
+                self.assertNotIn("CLAUDE.md", text)
+                self.assertNotIn("GEMINI.md", text)
+
+        # 迁移清退语境豁免：SKILL.md 与 audit-checklist 模板允许且仅允许在
+        # 「清退遗留同步机制」条目中点名旧产物各一次（可 grep、可执行）。
+        skill_text = read_repo_file("SKILL.md")
+        self.assertEqual(len(re.findall(r"agent_links", skill_text)), 1)
+        self.assertNotIn("同步声明", skill_text)
+        checklist_tpl = read_repo_file("assets/templates/zh/audit-checklist.md.tpl")
+        for name in ("agent_links", "CLAUDE.md", "GEMINI.md"):
+            with self.subTest(name=name):
+                self.assertEqual(len(re.findall(re.escape(name), checklist_tpl)), 1)
+        self.assertNotIn("同步声明", checklist_tpl)
 
     def test_no_git_template_projection_contains_no_git_only_guidance(self) -> None:
         paths = [

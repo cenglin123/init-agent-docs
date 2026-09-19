@@ -121,7 +121,7 @@ cd [项目目录]
 
 ## AI Agent 协作
 
-本仓库配置了面向 AI Agent 的文档体系。如果你是 AI Agent，请加载 [AGENTS.md](AGENTS.md)（或 [CLAUDE.md](CLAUDE.md) / [GEMINI.md](GEMINI.md)）获取行为规则和信息导航。
+本仓库配置了面向 AI Agent 的文档体系。如果你是 AI Agent，请加载 [AGENTS.md](AGENTS.md)（唯一入口）获取行为规则和信息导航。
 
 ## 许可证
 

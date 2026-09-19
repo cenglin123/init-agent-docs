@@ -6,10 +6,10 @@
 1. --quiet 模式下，无输出 = 全部通过（不消耗 agent 注意力）
 2. 每条 FAIL 自带修复指引（agent 不需要记忆"失败后做什么"）
 3. CHECKS 列表是检查项的单一权威源——AGENTS.md 只引用本脚本，不枚举覆盖范围
-4. 只检查"本次任务是否遗漏了必做项"（~5项），不属于深度审计；深度审计交给 audit.py
+4. 只检查"本次任务是否遗漏了必做项"（~4项），不属于深度审计；深度审计交给 audit.py
 
 与 audit.py 的分工：
-    check_all.py  → 高频完工检查（每次任务后跑，静默，~5 项）
+    check_all.py  → 高频完工检查（每次任务后跑，静默，~4 项）
     audit.py      → 深度定期审计（每 ~20 次任务或每月跑，详实输出，~15 项）
 
 用法：
@@ -52,13 +52,6 @@ def _run(name: str, cmd: list[str]) -> tuple[bool, str]:
 # 检查项：每个条目为 (名称, 判定函数, 修复指引)
 # 判定函数返回 (ok: bool, detail: str)
 CHECKS: list[tuple[str, callable, str]] = []
-
-
-def _check_sync():
-    ok, detail = _run("同步", ["scripts/agent_links.py", "check"])
-    return ok, detail
-
-CHECKS.append(("同步", _check_sync, "按 AGENTS.md「同步声明」中的精确命令修复"))
 
 
 def _check_changelog():

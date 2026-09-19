@@ -1,21 +1,12 @@
 # AI 协作规范
 
-<!-- AGENTS.md 是主副本。编辑后按下方「同步声明」的精确命令修复并检查。 -->
-<!-- agent-docs-sync-mode: copy -->
+<!-- AGENTS.md 是唯一入口，被各类 Agent 框架加载；不存在也不需要同步副本。 -->
 > 本文件会被 AI 框架自动加载并始终驻留在上下文中，因此必须保持精简（≤ 250 行）。
 > 只放行为规则和信息指针，不放可从代码或其他文档获取的事实描述。
 
 ## 项目概述
 
 <!-- 1–2 句话 -->
-
-## 同步声明
-
-`AGENTS.md`、`CLAUDE.md`、`GEMINI.md` 内容必须保持一致。**只编辑 AGENTS.md**，另两个由脚本同步。
-
-- `python scripts/agent_links.py check --mode copy`
-- `python scripts/agent_links.py repair --mode copy --force`
-- 模式：copy
 
 ## 信息导航
 

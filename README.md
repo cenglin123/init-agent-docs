@@ -6,19 +6,18 @@
 
 为一个代码仓库初始化"面向 AI agent 协作"的文档体系：
 
-- `AGENTS.md`（同步到 `CLAUDE.md` / `GEMINI.md`）：行为规则 + 信息导航 + docs/ 文件治理规则（Agent 面向）
+- `AGENTS.md`：唯一入口——行为规则 + 信息导航 + docs/ 文件治理规则（Agent 面向；框架入口约定已收敛到 AGENTS.md，不再生成 CLAUDE.md / GEMINI.md 副本）
 - `README.md`：项目概述、快速开始、贡献指南（人类面向；从模板生成或迁移保留）
 - `docs/STRUCTURE.md`：架构文档总索引
 - `docs/CHANGELOG.md`：倒序变更记录
 - `scripts/changelog.py`：CHANGELOG 标题树、近期条目、局部读取和追加
-- `scripts/agent_links.py`：`AGENTS.md` / `CLAUDE.md` / `GEMINI.md` 同步检查与修复
-- `scripts/audit.py`：文档一致性深度审计（死链 / 结构完整性 / 依赖漂移，定期跑 ~15 项）
-- `scripts/check_all.py`：高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~5 项）
-- `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit/agent_links 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
+- `scripts/audit.py`：文档一致性深度审计（死链 / 结构完整性 / 依赖漂移 / 记忆结构，定期跑 ~15 项）
+- `scripts/check_all.py`：高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
+- `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist,frontmatter-schemas}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agents/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
-- `.githooks/`：可选 lint 质量门控，调用 `scripts/agent_links.py` 做同步兜底
+- `.githooks/`：可选 lint 质量门控（内置记忆结构兜底与治理文档修改提醒）
 - `scripts/worktree_task.py` + `.githooks/reference-transaction`：可选的多 Agent worktree 运行时（SKILL.md 第 6.5 步；四动作 create/check/integrate/cleanup + canonical 分支快进保护），协作倾向项目才安装
 
 背后的设计哲学见 SKILL.md"设计哲学"一节。
@@ -36,7 +35,6 @@ init-agent-docs/
     │   └── zh/                           # 中文模板集（15 个 .tpl）
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
-    │   ├── agent_links.py                # 同步检查与修复
     │   ├── maintain.py                   # 维护管线：记忆+bugfix 索引重建 + 审计 + 活性报告（中型+）
     │   ├── worktree_task.py              # 多 Agent worktree 四动作运行时（可选）
     │   ├── audit.py                      # 深度审计（定期）
@@ -56,8 +54,7 @@ init-agent-docs/
 
 ```
 目标项目/
-├── AGENTS.md              # 行为规则 + 治理规则 + 内联记忆（硬约束）+ 导航
-├── CLAUDE.md / GEMINI.md  # 同步副本
+├── AGENTS.md              # 唯一入口：行为规则 + 治理规则 + 内联记忆（硬约束）+ 导航
 ├── .agents/memory/        # 跨会话记忆（硬约束内联在 AGENTS.md）
 │   ├── MEMORY.md          # 记忆索引（标记段由 maintain.py 自动重建，禁止手改）
 │   └── user/role.md       # 用户画像
@@ -69,10 +66,9 @@ init-agent-docs/
 │   └── ...
 └── scripts/
     ├── changelog.py
-    ├── agent_links.py
     ├── maintain.py
     ├── audit.py
-    ├── check_all.py
+    └── check_all.py
 ```
 
 ## 模板占位符约定
@@ -86,10 +82,9 @@ init-agent-docs/
 
 ## 已知限制
 
-1. **同步与文件系统**：`agent_links.py` 提供 copy 和 hardlink 两种同步模式。默认 `repair` 使用 copy 模式（最可靠，不受编辑器原子写入影响）；如文件系统支持且你明确需要 hardlink，可显式传 `--mode=hardlink`。生成的 AGENTS.md 同步声明段记录当前模式与精确命令，hook 和 checklist 的修复指引均指向该声明。
-2. **编辑器原子写入**：部分编辑器（VS Code 某些模式、部分 IDE）用"写临时文件 → 删原文件 → 重命名"保存。hardlink 模式下这会断开链接；copy 模式不受影响。如使用 hardlink，依赖 pre-commit hook 检测并重新运行 repair 来兜底。
-3. **模板仅一种语言**：当前只附带 zh/。其他语言需要手工复制 zh 目录并翻译；`scripts/changelog.py` 内置了对英文 CHANGELOG 标题的识别，所以即使模板只有中文，用户后续手写英文条目仍能正确归类。
-4. **pre-commit 片段没跑过所有平台**：Windows 原生 Git Bash 下 `xargs` 对空输入的处理偶有差异；如遇问题，用 `if [ -n "$STAGED" ]; then echo "$STAGED" | ...; fi` 兜住。
+1. **遗留三文件项目**：旧版本初始化的项目若仍有 `CLAUDE.md` / `GEMINI.md` 同步副本和 `scripts/agent_links.py`，重新执行本 skill 时会整合内容进 AGENTS.md 并删除副本与同步脚本；旧 hook 中的同步检查一并移除。
+2. **模板仅一种语言**：当前只附带 zh/。其他语言需要手工复制 zh 目录并翻译；`scripts/changelog.py` 内置了对英文 CHANGELOG 标题的识别，所以即使模板只有中文，用户后续手写英文条目仍能正确归类。
+3. **pre-commit 片段没跑过所有平台**：Windows 原生 Git Bash 下 `xargs` 对空输入的处理偶有差异；如遇问题，用 `if [ -n "$STAGED" ]; then echo "$STAGED" | ...; fi` 兜住。
 
 ## 维护约定
 
@@ -131,7 +126,6 @@ git branch --show-current
 - 如果新增一个模板文件，记得在 zh/ 下添加，并在 SKILL.md 的"目标文件结构"一节补说明。
 - 维护 CHANGELOG 相关规则时，优先改 `assets/scripts/changelog.py` 的能力和 AGENTS 模板中的调用说明，不要把手工插入流程重新塞回模板。
 - 维护 MEMORY.md 索引相关规则时，优先改 `assets/scripts/maintain.py` 的重建逻辑；索引标记段（`<!-- memory-index:start/end -->`）是脚本领地，模板里不要要求 agent 手工维护索引。
-- 维护同步规则时，优先改 `assets/scripts/agent_links.py` 和 hook 调用，不要要求 Agent 记平台差异命令。
 - 维护方法论时，只保留跨项目可迁移、能解决真实问题的原则（如 Occam / Bitter Lesson），不要复制不必要的治理形式或组织隐喻。
 - 哲学条款尽量保留，增改需要在 SKILL.md 顶部说清"为什么"——本 skill 的价值一半以上在于设计哲学的阐释，纯模板替换价值有限。
 - `assets/pitch/presentation.html` 是宣讲 deck，和执行流程无关，但核心方法论变化时应同步更新。

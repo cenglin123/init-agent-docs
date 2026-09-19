@@ -7,7 +7,7 @@ purpose: 定义 init-agent-docs skill 的三层验证框架、测试数据与评
 
 Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否有显著增益**。评估分三层：
 
-1. **静态合同**（L1）：文件创建、脚本运行、同步一致性、profile 矩阵验证
+1. **静态合同**（L1）：文件创建、脚本运行、机械检查通过、profile 矩阵验证
 2. **合成树**（L1.5）：在合成目录结构上运行脚本，验证无 Git 时行为正确、无死链、无内部 assets/references/ 链接
 3. **行为评估**（L2/L3）：Agent 实际执行 skill 的产出质量（advisory，非确定性门槛）
 
@@ -44,7 +44,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 ### 通用项（所有规模）
 
 - [ ] `AGENTS.md` 已创建且非空
-- [ ] `CLAUDE.md` / `GEMINI.md` 与 `AGENTS.md` 同步一致：`python scripts/agent_links.py check` 返回 0
+- [ ] `AGENTS.md` 是唯一入口：无 `CLAUDE.md` / `GEMINI.md` 残留副本（迁移场景已整合删除）
 - [ ] `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 3` 输出至少一条标题
 - [ ] `docs/CURRENT.md` 已创建
 - [ ] `AGENTS.md` 中所有链接指向真实存在的文件（小型项目特别注意死链）
@@ -71,9 +71,8 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 - [ ] `scripts/changelog.py titles` 正常输出
 - [ ] `scripts/changelog.py add --title "test" --body "test body"` 成功追加且格式正确
-- [ ] `scripts/agent_links.py check` 通过
-- [ ] AGENTS.md「同步声明」中的精确 repair 命令能修复人为断链，随后精确 check 命令返回 0
-- [ ] pre-commit hook 能阻止不一致提交（手动破坏 CLAUDE.md 后尝试提交，应被拒绝）
+- [ ] 迁移场景：旧入口副本（`CLAUDE.md` / `GEMINI.md` 等）内容已并入 AGENTS.md 且副本已删除
+- [ ] 已安装 pre-commit hook 时，人为破坏记忆结构（移走 MEMORY.md）后提交应被拒绝
 
 ---
 
@@ -157,7 +156,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 |------|---------|---------|
 | 信息密度低（混入可推导信息） | AGENTS.md 模板 | 收紧模板中的"不要放什么"清单，增加反模式提示 |
 | 导航不清晰 | AGENTS.md 模板"信息导航"段 | 增加具体示例，或调整指针顺序 |
-| 硬约束无工具支撑 | 执行步骤第 6 步 | 强化 pre-commit hook 的必做要求，增加 CI 矩阵 |
+| 硬约束无工具支撑 | 执行步骤第 6 步 | 为硬约束补配 hook / CI / 检查脚本，使其可机械验证 |
 | 渐进披露不合理 | SKILL.md 设计哲学第 2 条 | 调整 AGENTS.md 行数上限建议，或增加 docs/STRUCTURE.md 的强制要求 |
 | 维护机制缺失 | 执行步骤第 5 步 | 强化"出生档案"和 CHANGELOG 脚本的必做要求 |
 | 事实源裁决错误 | SKILL.md 第 0 / 第 3 步 | 强化可执行事实源优先规则，补充 README 写旧命令的夹具 |

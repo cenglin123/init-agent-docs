@@ -119,7 +119,7 @@ class MaintainPipelineTestCase(unittest.TestCase):
         result = self.run_maintain()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("audit.py not found", result.stdout)
-        self.assertIn("agent_links.py not found", result.stdout)
+        self.assertNotIn("agent_links", result.stdout)
 
     def test_missing_memory_md_fails(self) -> None:
         (self.root / ".agents" / "memory" / "MEMORY.md").unlink()

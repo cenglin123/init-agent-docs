@@ -20,8 +20,8 @@ INITIAL_CHANGELOG = """# CHANGELOG
 
 ### 初始化文档体系
 
-- 创建 agent-first 文档结构：AGENTS.md（含硬链接）+ docs/STRUCTURE.md + docs/ 层级
-- 配置 scripts/changelog.py 与 scripts/agent_links.py，脚本化维护日志和硬链接
+- 创建 agent-first 文档结构：AGENTS.md（唯一入口）+ docs/STRUCTURE.md + docs/ 层级
+- 配置 scripts/changelog.py，脚本化维护日志
 """
 
 
@@ -57,7 +57,7 @@ class ChangelogTestCase(unittest.TestCase):
         self.assertIn("初始化文档体系", result.stdout)
 
     def test_show_by_match(self) -> None:
-        result = self.run_script("show", "--match", "硬链接")
+        result = self.run_script("show", "--match", "唯一入口")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("初始化文档体系", result.stdout)
 

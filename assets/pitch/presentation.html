@@ -332,8 +332,7 @@
                 <div class="slide-header"><h2>中型项目的目标结构</h2></div>
                 <div class="slide-content">
                     <pre style="font-size: 20px; line-height: 1.22; padding: 22px;">目标项目/
-├── AGENTS.md
-├── CLAUDE.md / GEMINI.md        # copy 同步（默认）
+├── AGENTS.md                      # 唯一入口（框架约定已收敛）
 ├── README.md
 ├── .agents/memory/
 │   ├── MEMORY.md                # 统一经验索引
@@ -344,7 +343,7 @@
 │   ├── plans/{active,completed}/
 │   └── problems/bugfix/         # Bugfix 经验档案
 └── scripts/
-    ├── agent_links.py / changelog.py / audit.py
+    ├── changelog.py / audit.py / check_all.py
     └── maintain.py              # 中型+统一维护入口</pre>
                 </div>
             </div>
@@ -355,10 +354,10 @@
                 <div class="slide-content">
                     <div class="grid-ap">
                         <div class="ap-card"><h4>操作前同步</h4><p><code>git fetch origin</code>，确认工作区、分支与 ahead/behind。</p></div>
-                        <div class="ap-card"><h4>三入口同步</h4><p><code>agent_links.py</code> 执行 copy 同步（默认），hook 防止内容分叉。</p></div>
+                        <div class="ap-card"><h4>唯一入口</h4><p><code>AGENTS.md</code> 单一入口覆盖各 Agent 框架，无副本即无漂移。</p></div>
                         <div class="ap-card"><h4>日志轻量写入</h4><p><code>changelog.py</code> 提供 titles / show / recent / add，不读全文。</p></div>
                         <div class="ap-card"><h4>机械审计</h4><p><code>audit.py</code> 检查死链、结构、漂移、出生档案与记忆完整性。</p></div>
-                        <div class="ap-card"><h4>统一维护</h4><p><code>scripts/maintain.py</code> 重建索引并串联 audit 与同步检查。</p></div>
+                        <div class="ap-card"><h4>统一维护</h4><p><code>scripts/maintain.py</code> 重建索引并串联 audit 检查。</p></div>
                         <div class="ap-card"><h4>独立复查</h4><p>治理文档按性质分级 review，规则变化必要时走 converge。</p></div>
                     </div>
                 </div>
