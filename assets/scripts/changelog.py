@@ -10,7 +10,9 @@ from pathlib import Path
 # Convention: this script lives at <project_root>/scripts/changelog.py, so
 # parents[1] is the project root. CHANGELOG.md lives under docs/.
 # Override with --changelog if you need a different location (also used in tests).
-ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPTS_DIR.parent.parent if SCRIPTS_DIR.parent.name == '.meta' else SCRIPTS_DIR.parent
+SCRIPTS_REL = '.meta/scripts' if SCRIPTS_DIR.parent.name == '.meta' else 'scripts'
 CHANGELOG = ROOT / "docs" / "CHANGELOG.md"
 
 DATE_HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[：:](.*))?\s*$")

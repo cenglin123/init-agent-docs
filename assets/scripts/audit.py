@@ -18,9 +18,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
-# Convention: this script lives at <project_root>/scripts/audit.py.
-ROOT = Path(__file__).resolve().parents[1]
+# Supports <project_root>/scripts/ and <project_root>/.meta/scripts/.
+SCRIPTS_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPTS_DIR.parent.parent if SCRIPTS_DIR.parent.name == '.meta' else SCRIPTS_DIR.parent
+SCRIPTS_REL = '.meta/scripts' if SCRIPTS_DIR.parent.name == '.meta' else 'scripts'
 
 MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 FENCED_BLOCK_RE = re.compile(r"```[\s\S]*?```", re.MULTILINE)
@@ -51,7 +54,7 @@ def _discover_doc_files() -> list[str]:
         if rel not in files:
             files.append(rel)
     # scripts/ README files
-    scripts_dir = ROOT / "scripts"
+    scripts_dir = SCRIPTS_DIR
     if scripts_dir.is_dir():
         for f in sorted(scripts_dir.glob("README*.md")):
             rel = str(f.relative_to(ROOT)).replace("\\", "/")
@@ -139,6 +142,7 @@ def _resolve(target: str, source_dir: Path) -> Path:
     Per CommonMark spec, all paths are relative to the containing file except
     those starting with '/'. Absolute paths (/) are resolved against ROOT.
     """
+    target = unquote(target)
     if target.startswith("/"):
         return (ROOT / target.lstrip("/")).resolve()
     return (source_dir / target).resolve()
@@ -520,14 +524,15 @@ def _check_memory() -> list[dict[str, Any]]:
     - Links in MEMORY.md resolve to existing files
     """
     results: list[dict[str, Any]] = []
-    memory_dir = ROOT / ".agents" / "memory"
+    memory_rel = ".meta/memory" if SCRIPTS_DIR.parent.name == ".meta" or (ROOT / ".meta" / "memory").is_dir() else ".agents/memory"
+    memory_dir = ROOT / memory_rel
 
     # Small projects: memory dir absence is OK
     if not memory_dir.is_dir():
         results.append({
             "kind": "memory",
-            "status": "skip",
-            "detail": "No .agents/memory/ directory (small project or not enabled)",
+            "status": "missing" if memory_rel == ".meta/memory" else "skip",
+            "detail": f"No {memory_rel}/ directory",
         })
         return results
 
@@ -537,7 +542,7 @@ def _check_memory() -> list[dict[str, Any]]:
         results.append({
             "kind": "memory",
             "status": "missing",
-            "detail": ".agents/memory/MEMORY.md missing",
+            "detail": f"{memory_rel}/MEMORY.md missing",
         })
         return results
 
@@ -546,18 +551,18 @@ def _check_memory() -> list[dict[str, Any]]:
         results.append({
             "kind": "memory",
             "status": "empty",
-            "detail": ".agents/memory/MEMORY.md is empty",
+            "detail": f"{memory_rel}/MEMORY.md is empty",
         })
 
     # Check AGENTS.md contains memory pointer and inline section
     agents_md = ROOT / "AGENTS.md"
     if agents_md.is_file():
         content = _read(agents_md)
-        if ".agents/memory/MEMORY.md" not in content:
+        if f"{memory_rel}/MEMORY.md" not in content:
             results.append({
                 "kind": "memory",
                 "status": "unlinked",
-                "detail": "AGENTS.md missing pointer to .agents/memory/MEMORY.md",
+                "detail": f"AGENTS.md missing pointer to {memory_rel}/MEMORY.md",
             })
         if "## 项目记忆" not in content:
             results.append({
@@ -573,7 +578,7 @@ def _check_memory() -> list[dict[str, Any]]:
             results.append({
                 "kind": "memory",
                 "status": "dead_link",
-                "source": ".agents/memory/MEMORY.md",
+                "source": f"{memory_rel}/MEMORY.md",
                 "line": lineno,
                 "target": target,
             })
@@ -582,7 +587,7 @@ def _check_memory() -> list[dict[str, Any]]:
         results.append({
             "kind": "memory",
             "status": "ok",
-            "detail": ".agents/memory/ structure healthy",
+            "detail": f"{memory_rel}/ structure healthy",
         })
 
     return results
@@ -766,7 +771,7 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 )
         elif kind == "memory":
             if r["status"] == "skip":
-                lines_out.append("[SKIP   ] memory (no .agents/memory/ directory)")
+                lines_out.append(f"[SKIP   ] memory ({r['detail']})")
             elif r["status"] == "ok":
                 if verbose:
                     lines_out.append("[OK    ] memory structure healthy")

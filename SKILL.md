@@ -22,6 +22,10 @@ description: >
 
 ---
 
+## 知识库叠加时的路径契约
+
+普通代码项目仍使用 `scripts/` 与 `.agents/memory/`。若用户随后叠加 init-kb-harness，按该技能的路径迁移流程统一到 `.meta/scripts/` 与 `.meta/memory/`：本技能四个文档脚本支持两个布局，`maintain.py` 在知识库中重命名为 `docs_maintain.py`，由知识库主 `maintain.py` 调用 `--check` 保留审计与 30 天提醒；记忆索引委托同目录 `memory_index.py`，不会写第二份派生索引。已有知识库重触发本技能时沿用该布局，不能重新创建根 `scripts/` 或 `.agents/memory/`；步骤、模板、hook 中的目标路径按此契约替换，源 `assets/` 路径不变。
+
 ## 设计哲学
 
 ### 1. AGENTS.md 是目录，不是百科全书

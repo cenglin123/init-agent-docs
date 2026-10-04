@@ -25,7 +25,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPTS_DIR.parent.parent if SCRIPTS_DIR.parent.name == '.meta' else SCRIPTS_DIR.parent
+SCRIPTS_REL = '.meta/scripts' if SCRIPTS_DIR.parent.name == '.meta' else 'scripts'
 
 def _has_file(rel: str) -> bool:
     return (ROOT / rel).is_file()
@@ -57,13 +59,13 @@ CHECKS: list[tuple[str, callable, str]] = []
 def _check_changelog():
     if not _has_file("docs/CHANGELOG.md"):
         return False, "docs/CHANGELOG.md 不存在"
-    ok, detail = _run("CHANGELOG", ["scripts/changelog.py", "titles", "--limit", "1"])
+    ok, detail = _run("CHANGELOG", [f"{SCRIPTS_REL}/changelog.py", "titles", "--limit", "1"])
     if not ok or not detail.strip():
-        return False, detail or "CHANGELOG 无条目——本次任务如有值得记录的内容，用 scripts/changelog.py add 追加"
+        return False, detail or f"CHANGELOG 无条目——本次任务如有值得记录的内容，用 {SCRIPTS_REL}/changelog.py add 追加"
     return True, detail
 
 CHECKS.append(("CHANGELOG", _check_changelog,
-              "python scripts/changelog.py add --title \"...\" --body \"...\""))
+              f"python {SCRIPTS_REL}/changelog.py add --title \"...\" --body \"...\""))
 
 
 def _check_line_budget():
@@ -78,13 +80,15 @@ CHECKS.append(("行数", _check_line_budget,
 
 def _check_memory_touch():
     """检查记忆系统最近是否有写入（中型+项目）。"""
-    mem_dir = ROOT / ".agents" / "memory"
+    mem_dir = ROOT / (".meta" if SCRIPTS_DIR.parent.name == ".meta" or (ROOT / ".meta" / "memory").is_dir() else ".agents") / "memory"
     if not mem_dir.is_dir():
+        if SCRIPTS_DIR.parent.name == ".meta":
+            return False, ".meta/memory/ 不存在——知识库记忆系统缺失"
         return True, ""  # 小型项目，无记忆系统
     # 检查 MEMORY.md 最近修改时间
     mem_file = mem_dir / "MEMORY.md"
     if not mem_file.is_file():
-        return False, ".agents/memory/MEMORY.md 不存在——中型+项目需要记忆系统"
+        return False, f"{mem_dir.relative_to(ROOT).as_posix()}/MEMORY.md 不存在——中型+项目需要记忆系统"
     stat = mem_file.stat()
     mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
     age_days = (datetime.now(timezone.utc) - mtime).days
@@ -93,13 +97,13 @@ def _check_memory_touch():
     return True, f"MEMORY.md {age_days} 天前更新"
 
 CHECKS.append(("记忆", _check_memory_touch,
-              "本次对话如有值得沉淀的记忆 → 更新 .agents/memory/ 并同步 AGENTS '项目记忆' 摘要"))
+              "本次对话如有值得沉淀的记忆 → 更新当前记忆目录并同步 AGENTS '项目记忆' 摘要"))
 
 
 def _check_dead_links():
-    if not _has_file("scripts/audit.py"):
+    if not _has_file(f"{SCRIPTS_REL}/audit.py"):
         return True, ""
-    ok, detail = _run("死链", ["scripts/audit.py", "dead-links"])
+    ok, detail = _run("死链", [f"{SCRIPTS_REL}/audit.py", "dead-links"])
     return ok, detail
 
 CHECKS.append(("死链", _check_dead_links,

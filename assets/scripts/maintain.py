@@ -28,12 +28,15 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Convention: this script lives at <project_root>/scripts/maintain.py.
-ROOT = Path(__file__).resolve().parents[1]
-MEMORY_DIR = ROOT / ".agents" / "memory"
+# Supports <project_root>/scripts/ and <project_root>/.meta/scripts/.
+SCRIPTS_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPTS_DIR.parent.parent if SCRIPTS_DIR.parent.name == '.meta' else SCRIPTS_DIR.parent
+SCRIPTS_REL = '.meta/scripts' if SCRIPTS_DIR.parent.name == '.meta' else 'scripts'
+MEMORY_REL = ".meta/memory" if SCRIPTS_DIR.parent.name == ".meta" or (ROOT / ".meta" / "memory").is_dir() else ".agents/memory"
+MEMORY_DIR = ROOT / MEMORY_REL
 MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
 BUGFIX_DIR = ROOT / "docs" / "problems" / "bugfix"
-# 索引段中 bugfix 条目的链接前缀：相对 .agents/memory/MEMORY.md 所在目录解析
+# 索引段中 bugfix 条目的链接前缀：相对当前 memory/MEMORY.md 所在目录解析
 # （audit.py 死链检查按链接所在文件自身目录解析相对路径）
 BUGFIX_LINK_PREFIX = "../../docs/problems/bugfix"
 
@@ -151,7 +154,7 @@ def build_index_section() -> str:
     files = _memory_files()
     bugfix = _bugfix_files()
     lines = [
-        "> 本段由 `python scripts/maintain.py` 自动重建，禁止手工编辑。",
+        f"> 本段由 `python {SCRIPTS_REL}/{Path(__file__).name}` 自动重建，禁止手工编辑。",
         f"> 最近重建：{datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
     ]
@@ -222,10 +225,20 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
     Returns (status, detail); status ∈
     ok / rebuilt / stale / missing / no-markers / skip.
     """
+    # A knowledge base has exactly one index writer: memory_index.py.
+    indexer = SCRIPTS_DIR / "memory_index.py"
+    if MEMORY_REL == ".meta/memory":
+        if not MEMORY_INDEX.is_file() or not indexer.is_file():
+            return "missing", ".meta/memory/MEMORY.md or memory_index.py missing"
+        result = _run_script(f"{SCRIPTS_REL}/memory_index.py", *(["--check"] if check_only else []))
+        if result is None:
+            return "missing", "knowledge-base memory_index.py not available"
+        rc, out = result
+        return ("ok" if rc == 0 else ("stale" if check_only else "missing")), out or "knowledge-base memory index"
     if not MEMORY_DIR.is_dir():
         return "skip", "no .agents/memory/ directory (small project)"
     if not MEMORY_INDEX.is_file():
-        return "missing", ".agents/memory/MEMORY.md not found"
+        return "missing", f"{MEMORY_REL}/MEMORY.md not found"
     current = _read(MEMORY_INDEX)
     updated = _splice_index(current, build_index_section())
     if updated is None:
@@ -233,7 +246,7 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
     if _normalize(updated) == _normalize(current):
         return "ok", "memory index up to date"
     if check_only:
-        return "stale", "memory index out of date — run: python scripts/maintain.py --memory-index"
+        return "stale", f"memory index out of date — run: python {SCRIPTS_REL}/{Path(__file__).name} --memory-index"
     MEMORY_INDEX.write_text(updated, encoding="utf-8", newline="\n")
     return "rebuilt", "memory index rebuilt"
 
@@ -252,7 +265,7 @@ def _memory_last_update_ts(files: list[Path]) -> float:
         try:
             proc = subprocess.run(
                 ["git", "log", "-1", "--format=%ct", "--",
-                 ".agents/memory/", "docs/problems/bugfix/"],
+                 MEMORY_REL + "/", "docs/problems/bugfix/"],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
@@ -371,7 +384,7 @@ def _git_recent(limit: int = GIT_LOG_LIMIT) -> list[str]:
 
 
 def _changelog_recent() -> str | None:
-    result = _run_script("scripts/changelog.py", "recent", "--days", "30")
+    result = _run_script(f"{SCRIPTS_REL}/changelog.py", "recent", "--days", "30")
     if result is None:
         return None
     rc, out = result
@@ -410,7 +423,7 @@ def run_full(*, check_only: bool) -> int:
     if idx_status in ("missing", "no-markers") or (check_only and idx_status == "stale"):
         failures += 1
 
-    audit = _run_script("scripts/audit.py", "check")
+    audit = _run_script(f"{SCRIPTS_REL}/audit.py", "check")
     if audit is None:
         print(_line("skip", "audit.py not found"))
     else:
