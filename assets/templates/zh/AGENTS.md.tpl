@@ -77,8 +77,9 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）必须先查索引段的 bug
 ### 多 Agent worktree 路由（可选）
 
 <!-- 仅 Git profile 的协作倾向项目按 SKILL.md 第 6.5 步安装后保留；否则整节删除 -->
-- 普通写任务默认 `python scripts/worktree_task.py create` 获得独立 worktree。
-- 四动作：`create` / `check <id>` / `integrate <id>` / `cleanup <id>`。详细语义见 `python scripts/worktree_task.py --help`。
+- 普通写任务用 `python scripts/worktree_task.py create --name <显示名> --owner <标识>` 获得独立 worktree；显示名只输入一次，续办凭 ID、owner、generation 执行 `resume`，不按时间抢占。
+- 写前登记 `intent` 的目标、非目标、自由范围并 `review` 全部未关闭任务；路径重叠仅作提示。相关双方确认同一协议、重新 review 后 `admit`，再主动 `check <id> --write`。范围变化重新入场；未登记旧任务视为 unknown。
+- worktree 仅隔离未提交内容与 index，不消除合入、语义或外部系统冲突。此入口是协作软约束，不能拦截直接文件写入或手动 Git；owner/override 声明不是身份认证或外部授权。`integrate`、`close`、`cleanup` 的清理与审计边界见 `python scripts/worktree_task.py --help` 和本项目协作说明。
 <!-- /Git profile only -->
 
 ## 测试要求

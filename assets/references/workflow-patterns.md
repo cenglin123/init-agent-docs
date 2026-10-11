@@ -73,7 +73,7 @@ Agent 的上下文窗口是有限的。一个复杂任务（如"重构认证系�
 
 2. **并行执行**：
    - 不同 owner 在各自的窗口中领取任务（状态从 `queue` 改为 `in_progress`）
-   - **（推荐）使用 worktree 机制为每个 owner 创建独立工作环境**（已安装 `scripts/worktree_task.py` 时一律走四动作），避免多 Agent 共享工作树产生冲突，详见下方"工具支持：Git Worktree 与 worktree_task 四动作"
+   - **（推荐）使用 worktree 机制为每个 owner 创建独立工作环境**（已安装 `scripts/worktree_task.py` 时走其领取与入场流程），隔离共享工作树中的未提交文件和 index；合入和语义冲突仍须协调，详见下方「工具支持」
    - 各自推进、验证、提交代码
    - 完成后更新计划：状态改为 `review`，填写完成记录
 
@@ -97,7 +97,7 @@ Agent 的上下文窗口是有限的。一个复杂任务（如"重构认证系�
 
 ---
 
-### 工具支持：Git Worktree 与 worktree_task 四动作
+### 工具支持：Git Worktree 与 worktree_task 协作入口
 
 在多 Agent 并行协作时，**必须隔离不同 owner 的工作环境**——共享同一工作树意味着未提交修改互相可见、index 竞争、半成品互相污染。
 
@@ -105,20 +105,24 @@ Agent 的上下文窗口是有限的。一个复杂任务（如"重构认证系�
 
 Git worktree 允许你在同一个仓库的不同目录下检出不同的分支，这些工作目录共享同一个 `.git` 仓库，但各自有独立的工作区和 index。
 
-**为什么需要隔离机制而不只是口头约定？**
+**隔离边界**：worktree 仅隔离未提交文件和 index；合入冲突、跨文件语义冲突与外部系统状态仍需 Agent 协调。`worktree_task.py` 是跨 Agent 宿主共享 Git common-dir 登记的自愿协作入口，不会拦截直接写文件、手动 Git 操作、未调用它的旧工具或另一份 clone。owner 是协作声明，不是身份认证；review digest 证明快照一致，不证明语义判断正确。canonical 快进保护 hook 可单独选装，不是入场协调的必要条件。
 
-多个 Agent 同时修改同一个工作树会产生冲突和混乱。推荐 worktree 是软约束——Agent 忘了切就重新暴露竞态。机制化（helper 默认路由 + canonical 分支保护 hook）把隔离变成硬约束：进入 create 后工作树和 index 物理分离；canonical 分支的历史由 hook 机械保护。
+#### 工作树与任务入场
 
-#### 机制化：worktree_task 四动作
+本 skill 附带 `assets/scripts/worktree_task.py`（安装步骤见 SKILL.md 第 6.5 步）。`create --name <显示名> --owner <标识>` 只输入一次显示名，派生稳定的 ID、`task/<id>-<slug>` 分支和 `wt-<id>-<slug>` 目录；同名新建仍是不同任务，续办用 `resume <id> --owner ... --generation ...`，不按时间抢占。`register` 可将已存在的 linked worktree 显式登记。未登记的 `task/*` 工作树和无 intent 的旧记录在 review 中是 unknown，不视为已协调。
 
-本 skill 附带 `assets/scripts/worktree_task.py`（安装步骤见 SKILL.md 第 6.5 步）。它是四动作 Git wrapper，不保存任务状态——Git branch / worktree registration / history 是唯一事实源：
+`intent` 登记目标、非目标、自由文本范围；字面仓库相对 `--path` 只提示机械重叠，`--depends-on <peer-id>@<完整提交 SHA>` 只承认已提交代码依赖。`review` 展示所有未关闭任务及范围版本，并返回 digest。明确路径重叠、依赖、未知范围或 Agent 主动声明的语义关联需协调；相关双方在各自当前 revision 上 `coordinate` 同一份协议文本，再各自重新 `review`、`admit`。失联时可记录限定 pair、边界、理由和负责人声明的 override；CLI 无法核验该声明的真实授权。自己的范围或相关 peer 范围/结论变化会使 admission 失效，无关 peer 变化只提示刷新。范围由 Agent 判断，不用 path 命中机械否决并行。
+
+`check <id> --write --owner ... --generation ...` 是动笔前主动调用的软门禁；普通 `check`、`list`、`review`、`resume` 不写登记或创建锁。所有状态变更和整合共用 Git common-dir 原子锁，锁无超时自动接管；残留锁须核对任务和 Git 状态后由项目负责人按本地流程人工恢复，不能仅凭时间或 PID 删除。登记保留在 common-dir，不进入提交。Git worktree registration、branch、commit 仍是文件与历史事实源；登记只承载协作状态。
+
+原有四动作及其调用方式继续可用：
 
 | 动作 | 行为 |
 |------|------|
-| `create` | 从当前 canonical 分支创建 `task/<id>` 分支与独立 linked worktree；每次调用生成新不透明 ID（同语义重复派单也得不同身份） |
-| `check <id>` | 只读报告 branch / registration / clean / ahead-behind / 是否已是 canonical 祖先 |
-| `integrate <id>` | 取得 per-repo 共享锁，校验 canonical 主工作树（git-dir == common-dir 且 symbolic-ref == canonical 分支）与 task 身份，复核 ref 未漂移后 `merge --ff-only` |
-| `cleanup <id>` | 仅在 tip 已是 canonical 祖先、worktree clean、身份完全匹配时移除 worktree + 删分支；半缺失 fail closed |
+| `create` | 无 `--name/--owner` 时创建旧式 opaque ID 工作树，需显式登记/处置才可视为已协调 |
+| `check <id>` | 只读报告 branch / registration / clean / ahead-behind / 是否已是 canonical 祖先；`--write` 另检查入场状态 |
+| `integrate <id>` | 取得 Git common-dir 共享锁，校验 canonical 与 task 身份、复核 ref 未漂移后 `merge --ff-only` |
+| `cleanup <id>` | 拒绝未合入、不干净、含未跟踪或 ignored 数据的工作树；旧式任务成功后删除分支，已登记任务须先 clean+integrated `close`，清理后保留分支与登记作审计 |
 
 **失败语义**（失败后 task 对象一律保留，不覆盖不清理不确定状态）：
 
@@ -127,10 +131,10 @@ Git worktree 允许你在同一个仓库的不同目录下检出不同的分支�
 | `needs-rebase` | task 不含当前 canonical tip | 在 task worktree 内 `git rebase <canonical>` 后重试 |
 | `head-drift` | 校验后 canonical/task 漂移 | 未合并未清理；复核后重试 |
 | `already-integrated` | tip 已是 canonical 祖先 | 响应丢失后的安全重试结果；不重复提交 |
-| `lock-busy` | canonical writer 锁被持有 | 稍后重试 |
+| `lock-busy` | common-dir 锁被持有 | 核实持有者与状态，不按超时夺锁 |
 | `partial-state` / `refused` | cleanup 身份不符 | fail closed，人工核对 |
 
-**响应丢失恢复**：不认领原调用。重试 `create` 生成新 ID；旧对象经 `git worktree list --porcelain` 与 `git branch --list 'task/*'` 可发现，仅对可证明 clean 的对象执行 cleanup；重试 `integrate` 经 ancestry 判 `already-integrated`。
+**响应丢失恢复**：新建已返回 ID 时用 `resume` 验证 owner/generation；不知道 ID 时先 `list` 和 `git worktree list --porcelain`，不重试创建冒充恢复。`creating` 半状态不能 `resume`，也没有自动修复命令：停止写入，记录 ID/路径，核对 common-dir 登记、分支、Git worktree registration、实际文件和提交；由项目负责人确认归属与无唯一数据后，按项目恢复流程显式修复或回滚，不能凭时间删除登记或夺锁。重试 `integrate` 经 ancestry 判 `already-integrated`。
 
 **canonical 分支快进保护 hook**（`assets/hooks/reference-transaction.sh`）：安装后，canonical 分支（默认解析 `main` → `master`，可用 `git config worktree-task.canonicalRef` 显式指定）的每次更新必须能证明快进——amend、向非后代的 reset、rebase rewrite、直接 non-FF update-ref 被机械拒绝；`task/*` 分支不受门控，owner 在 task worktree 内可自由 amend/rebase。
 
@@ -138,11 +142,11 @@ Git worktree 允许你在同一个仓库的不同目录下检出不同的分支�
 
 | 优势 | 说明 |
 |------|------|
-| **隔离性** | 每个 owner 有独立的工作目录和 index，互不干扰 |
+| **隔离性** | 每个 owner 有独立的未提交文件和 index |
 | **共享 Git 历史** | 所有 worktree 共享同一个 `.git`，节省空间 |
 | **独立分支** | 每个任务在不同分支上，便于代码审查和回滚 |
-| **无冲突** | 不会因为同时修改同一文件而产生冲突 |
-| **易于清理** | 任务完成后 cleanup 移除 worktree + 分支 |
+| **协调范围** | 入场快照和同文协议记录重叠与依赖；仍需 Agent 判断语义 |
+| **可审计清理** | 任务完成后清理 worktree；已登记任务保留分支与记录 |
 
 **注意事项：**
 
@@ -170,7 +174,7 @@ git worktree list
 git worktree remove ../project-owner-a
 ```
 
-手工路径只适用于 helper 未安装的项目；安装后一律走四动作（身份、校验、失败语义由 helper 保证，不靠 Agent 记忆）。
+手工路径只适用于 helper 未安装的项目；安装后由 Agent 主动使用 helper 的领取、入场与整合入口。CLI 校验自己的登记和 Git 状态，但不是身份认证或全局文件写入拦截器。
 
 ---
 

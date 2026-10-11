@@ -223,7 +223,7 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 ├── scripts/
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
 │   ├── maintain.py        # （中型+）文档体系维护管线：记忆索引重建 + 审计 + 活性报告
-│   ├── worktree_task.py   # （可选）多 Agent worktree 四动作运行时（第 6.5 步）
+│   ├── worktree_task.py   # （可选）任务 worktree 与协作入场工具（第 6.5 步）
 │   └── audit.py           # 文档一致性机械检查（死链/漂移/结构）
 ├── .githooks/             # （可选）质量门控
 │   ├── pre-commit
@@ -260,7 +260,7 @@ init-agent-docs/
     ├── scripts/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
     │   ├── maintain.py               # 文档体系维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
-    │   ├── worktree_task.py          # 多 Agent worktree 四动作运行时（可选，第 6.5 步）
+│   ├── worktree_task.py          # 任务 worktree 与协作入场工具（可选，第 6.5 步）
     │   ├── audit.py                  # 文档一致性深度审计（死链/漂移/结构完整性，定期跑 ~15 项）
     │   └── check_all.py              # 高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
     ├── references/
@@ -679,15 +679,15 @@ python scripts/changelog.py add \
 
 **触发条件**：第 0 步维度 8 确认项目经常多 Agent / 多窗口并行（协作模式倾向），且用户同意安装。单 Agent 顺序推进的项目**跳过本步**——机制成本不为偶发场景预付（Occam）；将来协作成为常态时可随时补装，只需执行本步并在 AGENTS.md 保留路由节。
 
-**要解决的问题**：多个 Agent 共享同一工作树时，未提交修改互相可见、`git add`/commit 的 index 竞争、半成品互相污染。git worktree 物理隔离工作区与 index；helper 把"先建 worktree 再干活"从口头约定变成四动作机械入口。
+**要解决的问题**：多个 Agent 共享同一工作树时，未提交修改互相可见、`git add`/commit 的 index 竞争、半成品互相污染。git worktree 隔离未提交文件与 index；合入、语义与外部状态冲突仍需协调。helper 提供跨 Agent 宿主的本地协作入口，但不拦截任意写入或手动 Git 操作。
 
-1. 复制四动作 helper 到项目：
+1. 将同一 helper 安装到项目：
 
    ```bash
    cp assets/scripts/worktree_task.py scripts/
    ```
 
-2. （推荐）安装 canonical 分支快进保护 hook——防止普通 Agent 在 canonical 分支上 amend / 非快进改写历史：
+2. 如项目另行确认需要 canonical 分支快进保护，可选装 hook；入场协调不依赖它，也不会自动修改 `core.hooksPath`：
 
    ```bash
    cp assets/hooks/reference-transaction.sh .githooks/reference-transaction
@@ -704,16 +704,19 @@ python scripts/changelog.py add \
 
 4. 在 AGENTS.md 保留模板候选节「多 Agent worktree 路由」（默认偏好段之后）。
 
-5. 验证一次全生命周期（可选但推荐）：
+5. 在 AGENTS.md 的可选路由节写明任务入场顺序，并验证一次全生命周期：
 
    ```bash
-   python scripts/worktree_task.py create          # → created + task/<id> + 独立 worktree 路径
-   # 在 worktree 内随便提交一个改动，然后：
-   python scripts/worktree_task.py integrate <id>  # → integrated，主分支快进
-   python scripts/worktree_task.py cleanup <id>    # → cleaned，worktree 与分支移除
+   python scripts/worktree_task.py create --name "任务显示名" --owner <owner>
+   python scripts/worktree_task.py intent <id> --repo <任务工作树> --owner <owner> --generation 1 --goal "目标" --non-goal "非目标" --scope "预计模块"
+   python scripts/worktree_task.py review <id> --repo <任务工作树> --owner <owner> --generation 1
+   # 相关任务先双方 coordinate 同一协议，再各自重新 review 取最新 digest。
+   python scripts/worktree_task.py admit <id> --repo <任务工作树> --owner <owner> --generation 1 --review-digest <最新 digest>
+   python scripts/worktree_task.py check <id> --repo <任务工作树> --owner <owner> --generation 1 --write
+   # 完成且 clean 后 integrate；close；cleanup。不能把 check/admit 当作外部授权。
    ```
 
-**helper 的四动作语义**（详细失败语义表见 `assets/references/workflow-patterns.md`「工具支持」节）：`create` 每次生成新不透明 ID；`check` 只读报告；`integrate` 持 per-repo 锁 + canonical 校验 + `merge --ff-only`，`needs-rebase` / `head-drift` 失败时保留 task 对象；`cleanup` 仅对可证明已集成且 clean 的对象生效，半缺失 fail closed。响应丢失不认领原调用——重试 `create` 生成新 ID，重试 `integrate` 由 Git ancestry 判 `already-integrated`，孤儿经 `git worktree list --porcelain` 与 `git branch --list 'task/*'` 可发现。
+**边界与恢复**（详细契约见 `assets/references/workflow-patterns.md`「工具支持」节）：显示名只在 `create` 或 `register` 输入一次，ID、分支、目录随后稳定；续办用 ID、owner、generation `resume`，不按时间抢占。`intent` 是自由范围，path 只提示重叠；`review` 展示全部未关闭任务与本任务已提交 SHA 依赖，相关双方同文协调后再 `admit`；范围变化重新入场。owner 和 override 均是记录的声明，CLI 无法验证人类授权。普通 `check/list/review/resume` 只读；协作记录位于 Git common-dir，状态变更与 `integrate` 使用不自动超时夺权的原子锁。旧四动作调用继续可用，但未登记工作树在 review 中为 unknown，不能当作已协调。`cleanup` 前核验无未跟踪/ignored 数据；已登记任务 clean+integrated 后 `close`，清理 worktree 时保留其分支与记录。创建失败的 `creating` 半状态不能 `resume`，也没有自动修复命令，须核对登记、Git 对象与文件后由负责人显式恢复或回滚。
 
 ---
 
@@ -825,7 +828,7 @@ python scripts/changelog.py add \
 
 复杂任务需要跨上下文窗口交接。计划文件是不同 Agent / 会话之间的唯一记忆载体，其详细设计 rationale 见设计哲学第 4 条。
 
-执行计划的具体工作模式（单 Agent 顺序推进 vs 多 Agent 并行协作）、git worktree 隔离与 `worktree_task` 四动作机制、阶段粒度控制、协调人职责，以及计划文件的生命周期管理，详见 `assets/references/workflow-patterns.md`。
+执行计划的具体工作模式（单 Agent 顺序推进 vs 多 Agent 并行协作）、git worktree 隔离与 `worktree_task` 协作入口、阶段粒度控制、协调人职责，以及计划文件的生命周期管理，详见 `assets/references/workflow-patterns.md`。
 
 计划模板在 `assets/templates/zh/plan.md.tpl`。关键字段包括任务分配表、阶段划分、决策记录、风险与遗留。
 
@@ -887,7 +890,7 @@ python scripts/changelog.py add \
 
 17. **记忆目录空转**：中型项目创建了 `.agents/memory/` 但从不在其中写入记忆，目录沦为摆设。解法：完工检查清单的"记忆自检"项应被实际触发；`maintain.py` 的记忆活性统计会在 30 天无更新时提示，审计时应据此决定激活或裁剪。
 
-18. **并行协作共享同一工作树**：多个 Agent 在同一目录工作，未提交修改互相覆盖、`git add` / commit 的 index 竞争、半成品互相污染。解法：协作倾向项目按第 6.5 步安装 worktree 运行时——普通写任务默认 `create` 隔离，canonical 分支历史由 `reference-transaction` hook 机械保护，不靠"记得切 worktree"的口头约定。
+18. **并行协作共享同一工作树**：多个 Agent 在同一目录工作，未提交修改互相覆盖、`git add` / commit 的 index 竞争、半成品互相污染。解法：协作倾向项目按第 6.5 步安装 worktree 运行时，普通写任务主动领取独立 worktree 并登记范围；canonical 分支快进保护 hook 另按项目需要选装。工具不会拦截直接写入或代替语义协调。
 
 19. **手工维护 MEMORY.md 索引**：索引是纯派生信息（文件清单 + 标题 + 时间），手工维护必然腐烂，且每次维护都消耗上下文。解法：索引标记段（`<!-- memory-index:start/end -->`）由 `scripts/maintain.py` 自动重建，agent 只负责记忆内容的沉淀与检索。
 

@@ -2,7 +2,7 @@
 
 Uses throwaway git repos in temp dirs; never touches the skill repo itself.
 Covers: create/check/integrate/cleanup identity & failure semantics, the
-canonical-writer lock matrix, and the fast-forward gate hook.
+common-dir no-takeover lock, and the optional fast-forward gate hook.
 """
 from __future__ import annotations
 
@@ -282,43 +282,39 @@ class CleanupTests(RepoFixture):
 
 
 class LockMatrixTests(RepoFixture):
-    def _make_lock(self, pid, ts_offset=0, owner="x"):
+    def _make_lock(self, owner="x"):
         d = wtask._lock_dir(self.repo)
+        d.parent.mkdir(exist_ok=True)
         d.mkdir(exist_ok=True)
-        (d / "pid").write_text(str(pid), encoding="utf-8")
-        (d / "ts").write_text(str(time.time() - ts_offset), encoding="utf-8")
         (d / "owner").write_text(owner, encoding="utf-8")
         return d
 
     def tearDown(self):
         shutil.rmtree(wtask._lock_dir(self.repo), ignore_errors=True)
 
-    def test_live_owner_expired_ts_is_busy(self):
-        d = self._make_lock(os.getpid(), ts_offset=wtask.LOCK_TTL + 100)
+    def test_existing_lock_is_busy_without_timeout_takeover(self):
+        d = self._make_lock()
         self.assertFalse(wtask.lock_acquire(self.repo))
         self.assertTrue((d / "owner").exists())
 
     def test_incomplete_metadata_not_stealable(self):
         d = wtask._lock_dir(self.repo)
+        d.parent.mkdir(exist_ok=True)
         d.mkdir(exist_ok=True)
-        (d / "pid").write_text("99999999", encoding="utf-8")
         self.assertFalse(wtask.lock_acquire(self.repo))
         self.assertTrue(d.exists())
 
-    def test_dead_expired_takeover(self):
-        self._make_lock(99999999, ts_offset=wtask.LOCK_TTL + 100)
-        self.assertTrue(wtask.lock_acquire(self.repo))
-        wtask.lock_release(self.repo)
-        self.assertFalse(wtask._lock_dir(self.repo).exists())
-
-    def test_dual_contender_atomic_takeover(self):
-        self._make_lock(99999999, ts_offset=wtask.LOCK_TTL + 100, owner="old")
+    def test_dual_contender_atomic_acquire(self):
+        wtask._lock_dir(self.repo).parent.mkdir(exist_ok=True)
         barrier = threading.Barrier(2)
         results = {}
 
         def contender(name):
             barrier.wait()
             results[name] = wtask.lock_acquire(self.repo)
+            if results[name]:
+                time.sleep(0.1)
+                wtask.lock_release(self.repo)
 
         threads = [threading.Thread(target=contender, args=(n,)) for n in "ab"]
         for t in threads:
@@ -326,14 +322,24 @@ class LockMatrixTests(RepoFixture):
         for t in threads:
             t.join()
         self.assertEqual(sorted(results.values()), [False, True])
-        self.assertTrue((wtask._lock_dir(self.repo) / "owner").exists())
+        self.assertFalse(wtask._lock_dir(self.repo).exists())
 
     def test_release_only_own(self):
-        d = self._make_lock(os.getpid(), owner="other-token")
-        wtask._LOCK_TOKEN = "my-token"
+        d = self._make_lock(owner="other-token")
+        wtask._LOCK_TOKENS.values = {wtask._norm(d): "my-token"}
         wtask.lock_release(self.repo)
         self.assertTrue(d.exists())
-        wtask._LOCK_TOKEN = None
+        wtask._LOCK_TOKENS.values = {}
+
+    def test_tokens_for_two_repositories_do_not_overlap(self):
+        other = init_repo(self.root / 'other')
+        self.assertTrue(wtask.lock_acquire(self.repo))
+        self.assertTrue(wtask.lock_acquire(other))
+        wtask.lock_release(self.repo)
+        self.assertFalse(wtask._lock_dir(self.repo).exists())
+        self.assertTrue(wtask._lock_dir(other).exists())
+        wtask.lock_release(other)
+        self.assertFalse(wtask._lock_dir(other).exists())
 
 
 class SeparateGitDirTests(RepoFixture):

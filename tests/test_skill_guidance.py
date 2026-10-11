@@ -238,8 +238,10 @@ class SkillGuidanceTestCase(unittest.TestCase):
         self.assert_contains_all(
             patterns,
             [
-                "worktree_task 四动作",
-                "git-dir == common-dir",
+                "worktree_task 协作入口",
+                "Git common-dir",
+                "同一份协议文本",
+                "unknown",
                 "head-drift",
                 "partial-state",
             ],

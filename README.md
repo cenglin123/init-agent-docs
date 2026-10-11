@@ -18,7 +18,7 @@
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agents/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
 - `.githooks/`：可选 lint 质量门控（内置记忆结构兜底与治理文档修改提醒）
-- `scripts/worktree_task.py` + `.githooks/reference-transaction`：可选的多 Agent worktree 运行时（SKILL.md 第 6.5 步；四动作 create/check/integrate/cleanup + canonical 分支快进保护），协作倾向项目才安装
+- `scripts/worktree_task.py`：可选的任务 worktree 与协作入场工具（SKILL.md 第 6.5 步）；canonical 分支快进保护 hook 可另行选装，入场协调不依赖 hook
 
 背后的设计哲学见 SKILL.md"设计哲学"一节。
 
@@ -36,7 +36,7 @@ init-agent-docs/
     ├── scripts/
     │   ├── changelog.py                  # CHANGELOG 脚本化维护
     │   ├── maintain.py                   # 维护管线：记忆+bugfix 索引重建 + 审计 + 活性报告（中型+）
-    │   ├── worktree_task.py              # 多 Agent worktree 四动作运行时（可选）
+    │   ├── worktree_task.py              # 任务 worktree 与协作入场工具（可选）
     │   ├── audit.py                      # 深度审计（定期）
     │   └── check_all.py                # 高频完工检查（每次任务后）
     ├── hooks/
