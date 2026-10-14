@@ -391,3 +391,51 @@ class SkillGuidanceTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GovernanceDiscoveryGuidanceTestCase(unittest.TestCase):
+    """治理可发现性（哲学 12 / 第 6.4 步）的静态回归检查。"""
+
+    def assert_contains_all(self, text: str, expected: list[str]) -> None:
+        for item in expected:
+            with self.subTest(item=item):
+                self.assertIn(item, text)
+
+    def test_skill_documents_session_level_semihard_constraint(self) -> None:
+        text = read_repo_file("SKILL.md")
+        self.assert_contains_all(
+            text,
+            [
+                "### 12. 治理可发现性——提交时钩子之外的会话级半硬约束",
+                "宿主扩展点",
+                "半硬约束",
+                "fail-closed",
+                "第 6.4 步：治理可发现性",
+                "governance-watch.js",
+                "不引入 embedding/LLM/常驻服务",
+            ],
+        )
+
+    def test_plugin_asset_exists_and_stays_light(self) -> None:
+        asset = read_repo_file("assets/plugins/governance-watch.js")
+        self.assert_contains_all(
+            asset,
+            ["GOV_REPO", "GOV_PATHS", "ENTRY_FILE", "GOV-DIRTY", "core.quotepath=false"],
+        )
+        # 轻量边界：只依赖 node 标准库；不引用知识库脚本路径与重型机制
+        imports = [l.strip() for l in asset.splitlines() if l.strip().startswith("import ")]
+        self.assertTrue(imports, "plugin must have imports")
+        for i in imports:
+            self.assertTrue(
+                any(m in i for m in ("child_process", "path", "fs")),
+                f"unexpected dependency import: {i}",
+            )
+        self.assertNotIn(".meta/scripts", asset)
+        self.assertNotIn("kb-guard", asset)
+        self.assertNotIn("host_guard", asset)
+
+    def test_kb_boundary_documented_in_overlay_contract(self) -> None:
+        text = read_repo_file("SKILL.md")
+        self.assertIn("治理分工边界（与本库联动时）", text)
+        self.assertIn("单次独立审计", text)
+        self.assertNotIn("不强求多 reviewer 收敛（用户显式要求时除外）──已废弃", text)
