@@ -24,11 +24,11 @@ import fs from "fs";
 
 // ── 按项目修改这三个常量 ─────────────────────────────────────
 /** 受治理的 git 仓库根 */
-const GOV_REPO = path.join(process.env.USERPROFILE || "", "WORKFLOW");
+const GOV_REPO = path.join(process.env.USERPROFILE || process.env.HOME || "", "WORKFLOW");
 /** 仓库内受治理的路径（git pathspec） */
 const GOV_PATHS = ["oa-ecology-cube", "githooks"];
 /** 宿主保证常驻 Agent 上下文的入口文件（提醒行的载体） */
-const ENTRY_FILE = path.join(process.env.USERPROFILE || "", "AGENTS.md");
+const ENTRY_FILE = path.join(process.env.USERPROFILE || process.env.HOME || "", "AGENTS.md");
 // ─────────────────────────────────────────────────────────────
 
 const MARKER_PREFIX = "> ⚠ GOV-DIRTY:";
@@ -46,7 +46,7 @@ function runWatch() {
       "git",
       [
         "-C", GOV_REPO,
-        "-c", "core.quotepath=false", // 非 ASCII 路径不转义，否则 grep 匹配静默失效
+        "-c", "core.quotepath=false", // 非 ASCII 路径保持字面输出（人工核对 status 友好）
         "status", "--porcelain", "--",
         ...GOV_PATHS,
       ],
@@ -81,8 +81,8 @@ function updateMarker(dirtyCount) {
     let out = cleaned;
     const anchor = "<!-- workflow-index:auto:end -->"; // 有索引表的项目插在表后；否则追加文末
     const ai = out.indexOf(anchor);
-    if (ai >= 0) {
-      const eol = out.indexOf("\n", ai);
+    const eol = ai >= 0 ? out.indexOf("\n", ai) : -1;
+    if (ai >= 0 && eol >= 0) {
       out = out.slice(0, eol + 1) + line + "\n" + out.slice(eol + 1);
     } else {
       out = out.replace(/\n*$/, "\n\n" + line + "\n");

@@ -26,7 +26,7 @@ description: >
 
 普通代码项目仍使用 `scripts/` 与 `.agents/memory/`。若用户随后叠加 init-kb-harness，按该技能的路径迁移流程统一到 `.meta/scripts/` 与 `.meta/memory/`：本技能四个文档脚本支持两个布局，`maintain.py` 在知识库中重命名为 `docs_maintain.py`，由知识库主 `maintain.py` 调用 `--check` 保留审计与 30 天提醒；记忆索引委托同目录 `memory_index.py`，不会写第二份派生索引。已有知识库重触发本技能时沿用该布局，不能重新创建根 `scripts/` 或 `.agents/memory/`；步骤、模板、hook 中的目标路径按此契约替换，源 `assets/` 路径不变。
 
-**治理分工边界（与本库联动时）**：本 skill 只做轻量机械治理——机械审计、pre-commit 钩子、会话级治理提醒（哲学 12），性能优先；知识库技能做质量优先的重型治理（embedding/LLM 检索、多源一致性、语义级裁决）。两条边界约定：①本 skill 的治理闭环默认**单次独立审计**即闭环，不强求多 reviewer 收敛（用户显式要求时除外）；②会话级提醒保持零依赖（纯 git status + 标记文件），不引入知识库脚本或 API。
+**治理分工边界（与知识库联动时）**：本 skill 只做轻量机械治理——机械审计、pre-commit 钩子、会话级治理提醒（哲学 12），性能优先；知识库技能做质量优先的重型治理（embedding/LLM 检索、多源一致性、语义级裁决）。两条边界约定：①本 skill 的治理闭环默认**单次独立审计**即闭环，不强求多 reviewer 收敛（用户显式要求时除外）；②会话级提醒保持零依赖（纯 git status + 标记文件），不引入知识库脚本或 API。
 
 ## 设计哲学
 
@@ -216,7 +216,7 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 
 pre-commit 钩子只在 `git commit` 时触发；「编辑治理文档后不提交就走人」是天然绕过路径，且会话中途对治理文本的偏离无人兜底。解法是利用**宿主扩展点**（opencode 插件、Claude Code 的 SessionStart hook 等）在**会话边界**注入提醒：检测治理路径的未提交变更（脏区），在入口文件（AGENTS.md）或会话上下文写一条强制可见的提醒行，干净时自动摘除——入口文件是框架保证常驻 Agent 上下文的唯一载体，写进去 = 每个会话都能看到。
 
-定性为**半硬约束**：脏区存在是机械事实（提醒 fail-closed），如何处置属判断（fail-open 不中断任务）——与哲学 8 的三分判据一致。轻量边界：纯 `git status` + 标记行维护，不引入 embedding/LLM/常驻服务（知识库级质量治理属 init-kb-harness 范畴）。落地资产：`assets/plugins/governance-watch.js`（opencode 实测版）+ 第 6.4 步安装流程；Claude Code 宿主等价物为 SessionStart hook 回显同样提醒。提醒行是纯派生信息（脏区计数 + 指引），由插件自动维护、干净自动摘除、标注「禁止手改」——派生信息交给工具，Agent 只负责处置判断。
+定性为**半硬约束**：脏区存在是机械事实（提醒 fail-closed），如何处置属判断（fail-open 不中断任务）——与哲学 8 的三分判据一致；通道本身介于哲学 9 的硬/软之间：提醒行由宿主扩展点保证出现（硬），处置不强制（软）。轻量边界：纯 `git status` + 标记行维护，不引入 embedding/LLM/常驻服务（知识库级质量治理属 init-kb-harness 范畴）。落地资产：`assets/plugins/governance-watch.js`（opencode 实测版）+ 第 6.4 步安装流程；Claude Code 宿主等价物为 SessionStart hook 回显同样提醒。提醒行是纯派生信息（脏区计数 + 指引），由插件自动维护、干净自动摘除、标注「禁止手改」——派生信息交给工具，Agent 只负责处置判断。
 
 ---
 
@@ -281,6 +281,8 @@ init-agent-docs/
     │   ├── pre-commit-generic.sh
     │   ├── reference-transaction.sh  # canonical 分支快进保护（可选，第 6.5 步）
     │   └── pre-commit-config.yaml    # pre-commit 框架样例
+    ├── plugins/
+    │   └── governance-watch.js        # （可选）会话级治理提醒（第 6.4 步）
     └── pitch/
         └── presentation.html         # 对外宣讲 deck（非运行时产物，可忽略）
 ```
@@ -688,13 +690,12 @@ python scripts/changelog.py add \
 pre-commit 只在提交时触发；「编辑后不提交就走人」会完全绕过钩子（哲学 12）。本步用宿主扩展点补一条**会话级半硬约束**，让治理目录的脏区在每个会话边界强制可见：
 
 1. 复制 `assets/plugins/governance-watch.js` 到宿主插件目录（opencode：`~/.config/opencode/plugins/`，自动加载）
-2. 修改文件头部常量：`GOV_REPO`（受治理的 git 仓库根）、`GOV_PATHS`（仓库内受治理路径）、`ENTRY_FILE`（宿主保证常驻上下文的入口文件，opencode 下即全局 `~/AGENTS.md`）
+2. 修改文件头部常量：`GOV_REPO`（受治理的 git 仓库根）、`GOV_PATHS`（仓库内受治理路径）、`ENTRY_FILE`（宿主保证常驻上下文的入口文件，opencode 下即全局 `~/AGENTS.md`）。**`ENTRY_FILE` 必须位于 `GOV_REPO` 监视路径之外**——否则插件自写的提醒行会使入口文件永久处于脏区，假阳性循环
 3. 实测双向：制造脏区 → 入口文件出现提醒行；恢复干净 → 提醒行消失
 4. Claude Code 宿主等价实现：settings.json 的 SessionStart hook 回显同样提醒（stdout 注入上下文）；无扩展点的宿主如实保持软约束，不伪造覆盖
 
-触发语义与轻量边界见哲学 12。已有同类插件（如知识库的 kb-guard.js）时复用后者，不叠加两个会话级插件。
+触发语义与轻量边界见哲学 12。知识库技能的 kb-guard.js 是动作侧门禁（pre-tool deny + compact 哨兵），与本插件互补、可并存；仅当宿主里已有其他**脏区提醒类**会话级插件时复用之，不同质不叠加。
 
----
 ### 第 6.5 步：多 Agent worktree 运行时（协作倾向项目可选，默认跳过）
 
 **触发条件**：第 0 步维度 8 确认项目经常多 Agent / 多窗口并行（协作模式倾向），且用户同意安装。单 Agent 顺序推进的项目**跳过本步**——机制成本不为偶发场景预付（Occam）；将来协作成为常态时可随时补装，只需执行本步并在 AGENTS.md 保留路由节。

@@ -389,10 +389,6 @@ class SkillGuidanceTestCase(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class GovernanceDiscoveryGuidanceTestCase(unittest.TestCase):
     """治理可发现性（哲学 12 / 第 6.4 步）的静态回归检查。"""
 
@@ -436,6 +432,10 @@ class GovernanceDiscoveryGuidanceTestCase(unittest.TestCase):
 
     def test_kb_boundary_documented_in_overlay_contract(self) -> None:
         text = read_repo_file("SKILL.md")
-        self.assertIn("治理分工边界（与本库联动时）", text)
+        self.assertIn("治理分工边界（与知识库联动时）", text)
         self.assertIn("单次独立审计", text)
         self.assertNotIn("不强求多 reviewer 收敛（用户显式要求时除外）──已废弃", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

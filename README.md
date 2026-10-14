@@ -14,7 +14,7 @@
 - `scripts/audit.py`：文档一致性深度审计（死链 / 结构完整性 / 依赖漂移 / 记忆结构，定期跑 ~15 项）
 - `scripts/check_all.py`：高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
 - `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
-- `assets/plugins/governance-watch.js`：治理可发现性插件（opencode，可选）——会话边界检测治理目录脏区，在入口 AGENTS.md 置顶提醒行（哲学 12 / 第 6.4 步）
+- `assets/plugins/governance-watch.js`：治理可发现性插件（opencode，可选）——会话边界检测治理目录脏区，在入口 AGENTS.md 写入显眼提醒行（哲学 12 / 第 6.4 步）
 - `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist,frontmatter-schemas}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agents/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
