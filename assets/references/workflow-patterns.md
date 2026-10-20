@@ -107,6 +107,8 @@ Git worktree 允许你在同一个仓库的不同目录下检出不同的分支�
 
 **隔离边界**：worktree 仅隔离未提交文件和 index；合入冲突、跨文件语义冲突与外部系统状态仍需 Agent 协调。`worktree_task.py` 是跨 Agent 宿主共享 Git common-dir 登记的自愿协作入口，不会拦截直接写文件、手动 Git 操作、未调用它的旧工具或另一份 clone。owner 是协作声明，不是身份认证；review digest 证明快照一致，不证明语义判断正确。canonical 快进保护 hook 可单独选装，不是入场协调的必要条件。
 
+**主工作树占用声明（main-claim，2026-10-20 起）**：主工作树（canonical）只属于持有 main-claim 的 agent。primary 开工前 `claim-main --owner primary`（TTL 默认 180 分钟，同 owner 续期重置到期、过期可接管），收工 `release-main --owner primary`；`main-claim` 只读查询、`list` 显示占用；`integrate` 在存在他人活动 claim 时机械拒绝。**不要以「git status 干净」判定主工作树可用**——两次写入之间的快照必然干净，时点检查防不了撞车（2026-10-20 双守规 agent 实测碰撞）。fork / 子代理一律 worktree，无例外。
+
 #### 工作树与任务入场
 
 本 skill 附带 `assets/scripts/worktree_task.py`（安装步骤见 SKILL.md 第 6.5 步）。`create --name <显示名> --owner <标识>` 只输入一次显示名，派生稳定的 ID、`task/<id>-<slug>` 分支和 `wt-<id>-<slug>` 目录；同名新建仍是不同任务，续办用 `resume <id> --owner ... --generation ...`，不按时间抢占。`register` 可将已存在的 linked worktree 显式登记。未登记的 `task/*` 工作树和无 intent 的旧记录在 review 中是 unknown，不视为已协调。

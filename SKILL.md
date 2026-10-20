@@ -702,6 +702,8 @@ pre-commit 只在提交时触发；「编辑后不提交就走人」会完全绕
 
 **要解决的问题**：多个 Agent 共享同一工作树时，未提交修改互相可见、`git add`/commit 的 index 竞争、半成品互相污染。git worktree 隔离未提交文件与 index；合入、语义与外部状态冲突仍需协调。helper 提供跨 Agent 宿主的本地协作入口，但不拦截任意写入或手动 Git 操作。
 
+**主工作树占用声明（main-claim，2026-10-20 起）**：仅靠 worktree 隔离仍会撞车——两个守规 agent 可能同时被「主工作树干净」的时点快照误导而进入主工作树（实测碰撞）。helper 现提供主工作树占用声明：primary 开工前 `claim-main --owner primary`（TTL 默认 180 分钟，同 owner 自动续期、过期可接管、防止崩溃残锁），收工 `release-main --owner primary`；`integrate` 在存在他人活动 claim 时机械拒绝；`main-claim` 只读查询、`list` 显示占用。**fork / 子代理一律开 worktree，无例外**——主工作树只属于持有 main-claim 的 agent。规程细节见 AGENTS.md 模板候选节「多 Agent worktree 路由」。
+
 1. 将同一 helper 安装到项目：
 
    ```bash
@@ -729,6 +731,7 @@ pre-commit 只在提交时触发；「编辑后不提交就走人」会完全绕
 
    ```bash
    python scripts/worktree_task.py create --name "任务显示名" --owner <owner>
+   # primary 在主工作树开工前：claim-main --owner primary（收工 release-main --owner primary）
    python scripts/worktree_task.py intent <id> --repo <任务工作树> --owner <owner> --generation 1 --goal "目标" --non-goal "非目标" --scope "预计模块"
    python scripts/worktree_task.py review <id> --repo <任务工作树> --owner <owner> --generation 1
    # 相关任务先双方 coordinate 同一协议，再各自重新 review 取最新 digest。

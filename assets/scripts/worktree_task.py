@@ -38,11 +38,13 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 BRANCH_PREFIX = 'task/'
 STATE_DIRECTORY = 'worktree-task'
+MAIN_CLAIM_FILE = 'main-claim.json'
+MAIN_CLAIM_TTL_MINUTES = 180
 
 _NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
@@ -435,6 +437,120 @@ def mutation_lock(repo):
         lock_release(repo)
 
 
+# ─── 主工作树占用声明（main-claim）────────────────────────────────────────
+# 主工作树只属于持有活动 claim 的 agent（通常是主对话）；其他 agent 入场时
+# 工具层机械拒绝，替代依赖记忆与 git status 时点快照的旧做法（2026-10-20 撞车）。
+
+def _main_claim_file(repo) -> Path | None:
+    """claim 状态放 common git dir：对所有 worktree 全局可见。"""
+    _, cd = _git_dir_pair(repo)
+    if not cd:
+        return None
+    return Path(cd) / STATE_DIRECTORY / MAIN_CLAIM_FILE
+
+
+def _now_stamp() -> str:
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _parse_stamp(text: str) -> datetime | None:
+    try:
+        return datetime.strptime(text, '%Y-%m-%d %H:%M:%S')
+    except (TypeError, ValueError):
+        return None
+
+
+def _load_main_claim(repo) -> dict | None:
+    """返回未过期的 claim；过期条目视为不存在（不主动删除，由下一次 claim 覆盖）。
+
+    损坏 / 非 dict 的状态文件按无占用处理并容错返回（独立审计 high：
+    原实现对非 dict JSON 抛 AttributeError，claim/release/status/list 四动作全崩）。"""
+    path = _main_claim_file(repo)
+    if not path or not path.is_file():
+        return None
+    try:
+        claim = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(claim, dict):
+        return None
+    expires = _parse_stamp(claim.get('expires_at', ''))
+    if expires is None or expires <= datetime.now():
+        return None
+    return claim
+
+
+def main_claim_status(repo) -> dict:
+    claim = _load_main_claim(repo)
+    if not claim:
+        return {'claimed': False}
+    return {'claimed': True, 'owner': claim.get('owner'),
+            'claimed_at': claim.get('claimed_at'), 'expires_at': claim.get('expires_at')}
+
+
+def claim_main(repo, owner: str, ttl_minutes: int = MAIN_CLAIM_TTL_MINUTES,
+               force: bool = False) -> dict:
+    """声明主工作树占用。
+
+    他人持有**未过期** claim 时一律拒绝（--force 不豁免：强夺他人活动占用等于
+    绕过协调，2026-10-20 独立审计 high）。同 owner 再次 claim 视为续期：到期时间
+    重置为 now + ttl（不叠加），claimed_at 保留首次时刻（审计链）。
+    --force 只用于接管**已过期**残留（此时 previous 已按过期视为不存在）。"""
+    repo = Path(repo)
+    path = _main_claim_file(repo)
+    if not path:
+        return _result(RESULT_REFUSED, 1, id='main-worktree', detail='not a git repository')
+    now = datetime.now()
+    expires = now + timedelta(minutes=ttl_minutes)
+    existing = _load_main_claim(repo)
+    previous_owner = existing.get('owner') if existing else None
+    if previous_owner and previous_owner != owner:
+        return _result(RESULT_REFUSED, 1, id='main-worktree',
+                       holder=previous_owner,
+                       expires_at=existing.get('expires_at'),
+                       detail='canonical worktree claimed by another agent')
+    renewed = previous_owner == owner
+    claimed_at = existing.get('claimed_at') if renewed else _now_stamp()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        'owner': owner,
+        'claimed_at': claimed_at,
+        'expires_at': expires.strftime('%Y-%m-%d %H:%M:%S'),
+        'ttl_minutes': ttl_minutes,
+    }, ensure_ascii=False, indent=1), encoding='utf-8')
+    return _result(RESULT_OK, 0, id='main-worktree', owner=owner,
+                   expires_at=expires.strftime('%Y-%m-%d %H:%M:%S'),
+                   renewed=renewed)
+
+
+def release_main(repo, owner: str) -> dict:
+    """释放本人持有的占用；无占用返回 not-found，他人持有拒绝（防误删）。"""
+    repo = Path(repo)
+    path = _main_claim_file(repo)
+    if not path:
+        return _result(RESULT_NOT_FOUND, 1, id='main-worktree')
+    try:
+        claim = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return _result(RESULT_NOT_FOUND, 1, id='main-worktree')
+    if claim.get('owner') != owner:
+        return _result(RESULT_REFUSED, 1, id='main-worktree',
+                       holder=claim.get('owner'),
+                       detail='main-claim held by another agent')
+    path.unlink(missing_ok=True)
+    return _result(RESULT_OK, 0, id='main-worktree', released=True)
+
+
+def main_claim_blocks(repo, except_owner: str | None = None) -> dict | None:
+    """存在他人持有的活动占用时返回该 claim（供 integrate / 入场检查拒绝）。"""
+    claim = _load_main_claim(repo)
+    if not claim:
+        return None
+    if except_owner and claim.get('owner') == except_owner:
+        return None
+    return claim
+
+
 def _scope_revision(row):
     return (row.get('intent') or {}).get('revision', 0)
 
@@ -566,7 +682,8 @@ def resume(repo, task_id, owner, generation):
 
 def list_tasks(repo):
     rows, worktrees = _snapshot(repo)
-    return _result(RESULT_OK, 0, tasks=_all_open(repo, rows, worktrees))
+    return _result(RESULT_OK, 0, tasks=_all_open(repo, rows, worktrees),
+                   main_claim=main_claim_status(repo))
 
 
 def intent(repo, task_id, owner, generation, goal, non_goal, scope=(), paths=(), depends_on=()):
@@ -757,6 +874,17 @@ def integrate(repo, wt_root=None, task_id=None, _before_merge=None):
     err = canonical_error(repo, canonical)
     if err:
         return _result(RESULT_NOT_CANONICAL, 1, id=task_id, detail=err)
+    # 主工作树占用检查：存在他人活动 main-claim 时拒绝合入（对方可能正在写工作树）。
+    # 已知接受的残余竞态：claim 的读-判-写未加锁也非原子文件替换，两个进程在同一个
+    # 检查窗口内先后 claim 仍可能都成功；当前协作规模（primary + 至多一个 fork）下
+    # 接受该残余风险，并发规模扩大时应改临时文件+os.replace 原子写并加 mutation_lock。
+    # 若本任务自己持有 claim（不推荐），先 release-main 再合入，否则会在这里自锁。
+    claim = main_claim_blocks(repo)
+    if claim:
+        return _result(RESULT_REFUSED, 1, id=task_id,
+                       holder=claim.get('owner'),
+                       expires_at=claim.get('expires_at'),
+                       detail='canonical worktree claimed by another agent; coordinate or wait for expiry')
     if not _worktree_clean(repo):
         return _result(RESULT_NOT_CLEAN, 1, id=task_id,
                        detail='canonical worktree dirty')
@@ -871,7 +999,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description='worktree task helper and cooperative admission')
     parser.add_argument('action', choices=['create', 'check', 'integrate', 'cleanup',
                                            'register', 'resume', 'list', 'intent',
-                                           'review', 'coordinate', 'admit', 'close'])
+                                           'review', 'coordinate', 'admit', 'close',
+                                           'claim-main', 'release-main', 'main-claim'])
     parser.add_argument('id', nargs='?', default=None)
     parser.add_argument('--repo', default='.')
     parser.add_argument('--wt-root', default=None,
@@ -879,6 +1008,10 @@ def main(argv=None) -> int:
     parser.add_argument('--name')
     parser.add_argument('--owner')
     parser.add_argument('--generation', type=int)
+    parser.add_argument('--ttl-minutes', type=int, default=MAIN_CLAIM_TTL_MINUTES,
+                        help='main-claim time-to-live in minutes')
+    parser.add_argument('--force', action='store_true',
+                        help='claim-main: take over an expired main-claim')
     parser.add_argument('--base')
     parser.add_argument('--worktree-path')
     parser.add_argument('--goal')
@@ -899,7 +1032,10 @@ def main(argv=None) -> int:
     repo = Path(args.repo).resolve()
     wt_root = Path(args.wt_root) if args.wt_root else None
 
-    if args.action not in ('create', 'list') and not args.id:
+    if args.action in ('claim-main', 'release-main') and not args.owner:
+        parser.error(f'{args.action} requires --owner')
+    if args.action not in ('create', 'list', 'claim-main', 'release-main', 'main-claim') \
+            and not args.id:
         parser.error(f'{args.action} requires <id>')
     try:
         if args.action == 'create':
@@ -932,6 +1068,14 @@ def main(argv=None) -> int:
         elif args.action == 'admit':
             payload, rc = admit(repo, args.id, args.owner, args.generation,
                                 args.review_digest)
+        elif args.action == 'claim-main':
+            payload, rc = claim_main(repo, args.owner, ttl_minutes=args.ttl_minutes,
+                                     force=args.force)
+        elif args.action == 'release-main':
+            payload, rc = release_main(repo, args.owner)
+        elif args.action == 'main-claim':
+            payload = main_claim_status(repo)
+            rc = 0
         else:
             payload, rc = close(repo, args.id, args.owner, args.generation)
     except (ValueError, RuntimeError, OSError, TypeError) as exc:

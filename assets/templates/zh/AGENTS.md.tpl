@@ -77,8 +77,11 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）必须先查索引段的 bug
 ### 多 Agent worktree 路由（可选）
 
 <!-- 仅 Git profile 的协作倾向项目按 SKILL.md 第 6.5 步安装后保留；否则整节删除 -->
+- **主工作树归持有 main-claim 的 agent**（通常是主对话/primary）：开工前 `python scripts/worktree_task.py claim-main --owner primary`，收工 `release-main --owner primary`；忘记释放由 TTL（默认 180 分钟）自动过期兜底。
+- **fork / 子代理一律开 worktree，无例外**：入场即 `create` 并按下方流程登记。不要以「主工作树干净」作为可直接工作的依据——两次写文件之间它总是干净的，时点快照防不了撞车（两个守规 agent 仍会碰撞）。
 - 普通写任务用 `python scripts/worktree_task.py create --name <显示名> --owner <标识>` 获得独立 worktree；显示名只输入一次，续办凭 ID、owner、generation 执行 `resume`，不按时间抢占。
 - 写前登记 `intent` 的目标、非目标、自由范围并 `review` 全部未关闭任务；路径重叠仅作提示。相关双方确认同一协议、重新 review 后 `admit`，再主动 `check <id> --write`。范围变化重新入场；未登记旧任务视为 unknown。
+- **`integrate` 在存在他人活动 main-claim 时机械拒绝**（对方可能正在写主工作树）——被拒就协调或等待过期，不要强夺。
 - worktree 仅隔离未提交内容与 index，不消除合入、语义或外部系统冲突。此入口是协作软约束，不能拦截直接文件写入或手动 Git；owner/override 声明不是身份认证或外部授权。`integrate`、`close`、`cleanup` 的清理与审计边界见 `python scripts/worktree_task.py --help` 和本项目协作说明。
 <!-- /Git profile only -->
 
