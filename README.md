@@ -131,6 +131,15 @@ git branch --show-current
 - 哲学条款尽量保留，增改需要在 SKILL.md 顶部说清"为什么"——本 skill 的价值一半以上在于设计哲学的阐释，纯模板替换价值有限。
 - `assets/pitch/presentation.html` 是宣讲 deck，和执行流程无关，但核心方法论变化时应同步更新。
 
+### 评测义务
+
+本仓自身的行为面改动——`SKILL.md`、`README.md`、`assets/templates/zh/**`、`assets/references/*.md`（不含 `eval-baseline.md` 自身：账本不入被考对象，否则每次记分制造下一次违规）——提交前必须跑 eval-baseline 的 L1 清单，并在其回归记录表记一行分。义务分工：
+
+- **记分粒度**：允许范围化记分（`L1 partial: scope=…`，scope 须枚举实际触达的 test bed 维度，skipped 维度计入噪音率）与多条改动批量补记。`assets/scripts/**`、`assets/hooks/**`、`.githooks/**`、`assets/plugins/**` 由 pytest 门控，不改变 skill 产出质量，不入 eval 义务。
+- **L2/L3 判分**不由执行者自跑自记：由维护者发起 converge 评议承担（跨模型族独立判分），结果记入回归记录表。
+- **唯一权威**：`assets/references/eval-baseline.md` 是评测记分与回归记录的唯一账本，bugfix 文档内的 `eval_score` 只是快照。审计裁决（`docs/audit-checklist.md` 审计记录段，裁设计正确性）与 eval 记分（裁行为面改动有没有被度量）是两本不同性质的账。
+- **R2 强制机制**（audit.py）：anchor = 最近一次触碰回归表数据行的提交，其后 1 个行为面提交 → warn（放行补记），≥2 → error（阻塞）；往回归表记分即重置计数，记分与行为改动同一提交时自锚定。R2 是 fixture 重放 runner 落地前的过渡机制，runner 使记分连续化后退役。与之互补的 R1（bugfix 档案 eval 记录存在性）考的是生成项目侧的档案，本仓无 bugfix 目录、天然 no-op。
+
 ## 吸纳外部素材
 
 当外部材料——文章、其他仓库的实践、一次初始化的教训——可能驱动对本 skill 的改进时，走本节流程；常规维护仍循上文「维护指引」。**素材是过路的：判完即弃，不入库、不设收件箱台账——留下的只有对 skill 的改动本身。**

@@ -199,6 +199,7 @@ AGENTS.md 是唯一被框架保证始终在 Agent 上下文中的文件。因此
 - **维护管线**：中型及以上项目安装 `scripts/maintain.py`，把"重建记忆索引（覆盖记忆条目 + bugfix 文档）+ audit 机械检查 + 记忆活性统计 + 审计触发器 + 近期脉络摘要"编成一条命令。其中 MEMORY.md 的索引标记段（`<!-- memory-index:start/end -->`）由脚本每次维护自动重建——索引是纯派生信息（文件清单 + 标题 + 时间），手工维护必然腐烂且浪费上下文；Agent 的判断力应花在记忆内容的取舍（写什么、更新什么）上，而不是目录维护上。这是设计哲学第 9 条"硬约束靠工具"在记忆系统上的兑现。审计触发器同理：**机械化的是"距上次审计裁决 >30 天就 WARN 提醒"（状态唯一来源是 audit-checklist.md 的「审计记录」段日期，裁决过就追加记录，"已判断 = 已销警"），而不是"文档 mtime 是否陈旧"**——治理文档的正确性是事件驱动的，mtime 对比只会产生假警报，还会诱发为消警而做的凑数编辑（Goodhart），把信号本身摧毁。
 - **结构硬约束**：pre-commit hook 检查 `.agents/memory/MEMORY.md` 存在且非空；`audit.py` 检查记忆文件完整性和 AGENTS.md 指针存在性；`maintain.py` 的 `empty` 状态覆盖"目录存在但从未沉淀记忆"的空壳场景（告警不阻塞）——三层分工防止记忆系统静默腐化。
 - **规模裁剪**：小型项目不建 `.agents/memory/` 目录（单次会话即可完成的工具脚本不需要跨会话记忆）；中型+项目建立全套记忆目录。
+- **pitfalls 升格通道（软约束，判断即触发）**：`pitfalls.md` 条目是轻量速记（现象/原因/解决），bugfix 档案是带证据门禁与验证/eval 字段的完整载体。同一坑位再次实际踩到、且当时并未建立 bugfix 档案时，由修复该问题的 agent 把该条坑位**升格**为 bugfix 档案——升格动作即记录，无需审批，也没有机械检测（不假装能自动触发）。术语固定，两条经验流动不混用：「晋升」指 bugfix/记忆教训提炼进 AGENTS.md 内联段（上文 confirmed_count 驱动的晋升候选）；「升格」指 pitfalls 条目补写为 bugfix 档案。本仓自身维护侧对应的评测义务（行为面改动记分）见 README「维护指引 → 评测义务」。
 
 这不违反 Occam——跨会话协作缺少记忆载体，会导致 Agent 在每次新对话中重复询问用户偏好、忘记项目上下文、重蹈已知教训。它解决的是真实发生的、有成本的具体问题。
 
@@ -232,7 +233,7 @@ pre-commit 钩子只在 `git commit` 时触发；「编辑治理文档后不提�
 │   ├── changelog.py       # CHANGELOG 的 token-light 操作入口
 │   ├── maintain.py        # （中型+）文档体系维护管线：记忆索引重建 + 审计 + 活性报告
 │   ├── worktree_task.py   # （可选）任务 worktree 与协作入场工具（第 6.5 步）
-│   └── audit.py           # 文档一致性机械检查（死链/漂移/结构）
+│   └── audit.py           # 文档一致性机械检查（死链/漂移/结构/bugfix eval 记录）
 ├── .githooks/             # （可选）质量门控
 │   ├── pre-commit
 │   └── reference-transaction  # （可选）canonical 分支快进保护（第 6.5 步）
@@ -269,7 +270,7 @@ init-agent-docs/
     │   ├── changelog.py              # CHANGELOG 标题树 / 局部读取 / 追加
     │   ├── maintain.py               # 文档体系维护管线：记忆索引重建 + 审计 + 活性报告（中型+）
 │   ├── worktree_task.py          # 任务 worktree 与协作入场工具（可选，第 6.5 步）
-    │   ├── audit.py                  # 文档一致性深度审计（死链/漂移/结构完整性，定期跑 ~15 项）
+    │   ├── audit.py                  # 文档一致性深度审计（死链/漂移/结构/eval 记录/评测基线，定期跑 ~17 项；评测基线检查依赖 Git，无 Git 自动 skip）
     │   └── check_all.py              # 高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
     ├── references/
     │   ├── workflow-patterns.md      # 执行计划工作流与跨上下文协作详细说明

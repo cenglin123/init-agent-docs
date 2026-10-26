@@ -3,7 +3,10 @@
 Checks that init-agent-docs initialized files have not rotted:
 dead links, STRUCTURE index completeness, tech-stack drift between docs
 and manifests, birth-record presence, AGENTS.md line budget, memory
-structure health.
+structure health, bugfix eval records (R1, Git-free), and eval-baseline
+behavior-surface scoring (R2 — conditionally Git-dependent: activates
+only when assets/references/eval-baseline.md and .git both exist,
+skips with a hint otherwise).
 
 All subcommands are read-only — this tool never modifies files.
 """
@@ -13,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -20,9 +24,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
-# Supports <project_root>/scripts/ and <project_root>/.meta/scripts/.
+# Supports <project_root>/scripts/ and <project_root>/.meta/scripts/. The skill
+# repo itself keeps audit.py at <repo>/assets/scripts/ — resolve ROOT to the
+# repo root there too, so R2 (eval-baseline scoring) can bind the skill repo
+# itself, its only intended subject.
 SCRIPTS_DIR = Path(__file__).resolve().parent
-ROOT = SCRIPTS_DIR.parent.parent if SCRIPTS_DIR.parent.name == '.meta' else SCRIPTS_DIR.parent
+ROOT = SCRIPTS_DIR.parent.parent if SCRIPTS_DIR.parent.name in ('.meta', 'assets') else SCRIPTS_DIR.parent
 SCRIPTS_REL = '.meta/scripts' if SCRIPTS_DIR.parent.name == '.meta' else 'scripts'
 
 MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -692,6 +699,210 @@ def _check_plans() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# eval record (R1) — fixed bugfix docs must carry an eval record
+# ---------------------------------------------------------------------------
+
+_EVAL_GRANDFATHER_DATE = "2026-10-27"
+_YYYYMMDD_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _check_bugfix_eval_record() -> list[dict[str, Any]]:
+    """R1: a bugfix doc with `status: fixed` must carry an eval record.
+
+    Existence-only mechanical check, fully decoupled from the verification
+    fields: fixed+manual docs cannot escape, fixed+none docs with a complete
+    eval block are not flagged, and `skipped` is no shield for missing
+    verification. Compliant forms:
+    - `eval: scored` (the fixture/command/expect/last_scored keys are
+      template-enforced, not machine-checked here — R1 only pins "recorded"), or
+    - `eval: skipped` + non-empty `eval_skip_reason`.
+
+    Grandfathering: only docs with `created_at >= 2026-10-27` are subject;
+    missing or malformed created_at (incl. the [YYYY-MM-DD] placeholder)
+    is exempted with a warn asking to fill the field. Scan scope is
+    docs/problems/bugfix/*.md excluding _template.md; a missing directory
+    is a no-op.
+    """
+    results: list[dict[str, Any]] = []
+    bugfix_dir = ROOT / "docs" / "problems" / "bugfix"
+    if not bugfix_dir.is_dir():
+        return results
+    for f in sorted(bugfix_dir.glob("*.md")):
+        if f.name == "_template.md":
+            continue
+        rel = str(f.relative_to(ROOT)).replace("\\", "/")
+        fm = _parse_frontmatter(_read(f))
+        if fm.get("status", "") != "fixed":
+            continue
+        created = str(fm.get("created_at", "")).strip()
+        if not _YYYYMMDD_RE.match(created):
+            results.append({
+                "kind": "eval_record",
+                "status": "warn",
+                "file": rel,
+                "detail": "created_at missing or not YYYY-MM-DD — exempted from "
+                          "the eval-record rule; fill created_at",
+            })
+            continue
+        if created < _EVAL_GRANDFATHER_DATE:
+            continue  # legacy doc, grandfathered
+        eval_val = str(fm.get("eval", "")).strip().lower()
+        skip_reason = str(fm.get("eval_skip_reason", "")).strip()
+        if eval_val == "scored" or (eval_val == "skipped" and skip_reason):
+            results.append({"kind": "eval_record", "status": "ok", "file": rel, "detail": ""})
+        else:
+            if eval_val == "skipped":
+                detail = "eval: skipped requires eval_skip_reason"
+            else:
+                detail = ("status: fixed without eval record — add eval: scored "
+                          "(+ eval_fixture/eval_command/eval_expect/eval_last_scored) "
+                          "or eval: skipped + eval_skip_reason")
+            results.append({"kind": "eval_record", "status": "error", "file": rel, "detail": detail})
+    return results
+
+
+# ---------------------------------------------------------------------------
+# eval baseline (R2) — behavior-surface commits must be scored in the ledger
+# ---------------------------------------------------------------------------
+
+# 行为面清单：plan 显式枚举，不复用 GOV_PATTERNS 作为单一事实源——GOV_PATTERNS
+# 在仓库有 5 处定义、2 套内容（.githooks/pre-commit 与 assets/hooks/pre-commit-*.sh
+# 各异），运行时解析不成立。治理面（GOV_PATTERNS，提交时提醒人工复查）≠ 行为面
+# （此处，强制 eval 记分）：两套词表语义不同，对照关系以本注释为准。
+# 排除项及理由：assets/scripts/**、assets/hooks/**、.githooks/**、assets/plugins/**
+# 由 pytest 门控、不改变 skill 产出质量，不入 eval 义务（强行记分是 Goodhart 诱因）；
+# assets/pitch/** 非运行时产物。eval-baseline.md 自身不入被考对象——否则每次
+# 记分制造下一次违规。
+_EVAL_BASELINE_REL = "assets/references/eval-baseline.md"
+_EVAL_SURFACE_PATHS = [
+    "SKILL.md",
+    "README.md",
+    "assets/templates/zh",
+    "assets/references",
+]
+_EVAL_SURFACE_EXCLUDE = ":(exclude)" + _EVAL_BASELINE_REL
+_SHA40_RE = re.compile(r"\b[0-9a-f]{40}\b")
+_SHA40_LINE_RE = re.compile(r"^[0-9a-f]{40}$")
+_TABLE_ROW_DIFF_RE = re.compile(r"^[+-]\|")
+
+
+def _git_lines(*args: str) -> list[str]:
+    """Run a git command in ROOT; return stdout lines (empty on failure)."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(ROOT), *args],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    return proc.stdout.splitlines()
+
+
+def _check_eval_baseline() -> list[dict[str, Any]]:
+    """R2: behavior-surface commits after the last ledger touch must be scored.
+
+    Transitional mechanism — retires once a fixture-replay runner makes
+    scoring continuous (see README 评测义务 and eval-baseline.md). Semantics:
+
+    - Activation gate: eval-baseline.md exists AND the repo has .git. The
+      obligation only binds the skill repo itself; generated projects don't
+      ship the ledger and are naturally exempt. Otherwise → skip + hint.
+    - anchor = newest commit whose diff on eval-baseline.md adds/removes
+      regression-table rows (lines starting with `|`); prose-only edits of
+      the ledger do not move the anchor. Writing a score row moves the
+      anchor, so a commit that both changes behavior surface and records
+      the score anchors itself — self-consistent.
+    - Empty table (no data row carrying a full 40-hex SHA) → skip until
+      the first record.
+    - anchor SHA no longer reachable from HEAD (rebase/amend) → degraded
+      skip + rebuild hint; no mtime fallback (philosophy #10).
+    - behavior-surface commits after anchor: 1 → warn, >=2 → error.
+    """
+    baseline = ROOT / _EVAL_BASELINE_REL
+    if not baseline.is_file() or not (ROOT / ".git").is_dir():
+        return [{
+            "kind": "eval_baseline",
+            "status": "skip",
+            "detail": "eval-baseline ledger or .git absent — behavior-surface "
+                      "scoring check not active",
+        }]
+
+    # Empty table → skip until the first scored record (bootstrap writes it).
+    table_rows = [ln for ln in _lines(baseline) if ln.lstrip().startswith("|")]
+    if not any(_SHA40_RE.search(ln) for ln in table_rows):
+        return [{
+            "kind": "eval_baseline",
+            "status": "skip",
+            "detail": "regression table has no scored row (full 40-hex SHA) — "
+                      "skip until first record",
+        }]
+
+    # Per-commit diffs of the ledger: newest commit touching table rows is
+    # the anchor. With `-p -U0` every diff line is prefixed (+/-/@/space/
+    # header), so a bare 40-hex line can only be a commit header.
+    anchor: str | None = None
+    current_sha: str | None = None
+    touched_table = False
+    for line in _git_lines("log", "--format=%H", "-p", "-U0", "--", _EVAL_BASELINE_REL):
+        if _SHA40_LINE_RE.match(line):
+            if current_sha is not None and touched_table:
+                anchor = current_sha
+                break
+            current_sha = line
+            touched_table = False
+        elif _TABLE_ROW_DIFF_RE.match(line):
+            touched_table = True
+    if anchor is None and current_sha is not None and touched_table:
+        anchor = current_sha
+    if anchor is None:
+        return [{
+            "kind": "eval_baseline",
+            "status": "skip",
+            "detail": "no commit found touching regression-table rows — "
+                      "rebuild the baseline record",
+        }]
+
+    # History rewritten under the anchor (rebase/amend) → degraded skip.
+    # git log only reports commits reachable from HEAD, so a recomputed
+    # anchor is always reachable — this check is a defensive guard for
+    # future changes (e.g. stored anchors) and documents the degraded
+    # intent explicitly.
+    reach = subprocess.run(
+        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", anchor, "HEAD"],
+        capture_output=True, timeout=60,
+    )
+    if reach.returncode != 0:
+        return [{
+            "kind": "eval_baseline",
+            "status": "skip",
+            "detail": f"anchor {anchor[:12]} no longer reachable from HEAD "
+                      "(history rewritten) — rebuild the baseline record",
+        }]
+
+    pending = [
+        ln for ln in _git_lines(
+            "log", "--format=%H", f"{anchor}..HEAD", "--",
+            *_EVAL_SURFACE_PATHS, _EVAL_SURFACE_EXCLUDE,
+        )
+        if _SHA40_LINE_RE.match(ln)
+    ]
+    n = len(pending)
+    if n == 0:
+        return [{"kind": "eval_baseline", "status": "ok", "anchor": anchor, "pending": 0}]
+    return [{
+        "kind": "eval_baseline",
+        "status": "warn" if n == 1 else "error",
+        "anchor": anchor,
+        "pending": n,
+        "detail": f"{n} behavior-surface commit(s) after last ledger touch — "
+                  "run L1 and add a score row to eval-baseline.md",
+    }]
+
+
+# ---------------------------------------------------------------------------
 # aggregate
 # ---------------------------------------------------------------------------
 
@@ -704,6 +915,8 @@ def _run_all() -> list[dict[str, Any]]:
     results.extend(_check_line_budget())
     results.extend(_check_memory())
     results.extend(_check_plans())
+    results.extend(_check_bugfix_eval_record())
+    results.extend(_check_eval_baseline())
     return results
 
 
@@ -727,6 +940,7 @@ _STATUS_GLYPHS: dict[str, str] = {
     "linger":      "LINGER",
     "misplaced":   "MISPLACED",
     "invalid":     "INVALID",
+    "error":       "ERROR",
 }
 
 
@@ -790,6 +1004,13 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append(f"[LINGER ] {r['file']}: {r['detail']}")
             elif r["status"] == "ok" and verbose:
                 lines_out.append(f"[OK    ] {r['file']}")
+        elif kind == "eval_record":
+            if r["status"] == "ok" and verbose:
+                lines_out.append(f"[OK    ] eval record: {r['file']}")
+            else:
+                lines_out.append(f"[{glyph:<6}] eval record: {r['file']} — {r['detail']}")
+        elif kind == "eval_baseline":
+            lines_out.append(f"[{glyph:<6}] eval-baseline: {r['detail']}")
     return "\n".join(lines_out)
 
 
@@ -804,7 +1025,12 @@ def _cmd_check(args: argparse.Namespace) -> None:
     else:
         print(_format_text(results, verbose=args.verbose))
 
-    has_issues = any(r["status"] not in ("ok", "found", "skip") for r in results)
+    # warn is advisory (eval_baseline R2 with one unscored behavior-surface
+    # commit, AGENTS.md line_budget over budget) and tolerated for exit-code
+    # purposes; error still fails. This deliberately relaxes line_budget
+    # from exit-1 to pass-with-hint — an accepted trade-off recorded in
+    # README「评测义务」.
+    has_issues = any(r["status"] not in ("ok", "found", "skip", "warn") for r in results)
     if has_issues:
         raise SystemExit(1)
 
