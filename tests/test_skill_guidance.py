@@ -389,6 +389,18 @@ class SkillGuidanceTestCase(unittest.TestCase):
         )
 
 
+    def test_audit_checklist_debt_register_structure(self) -> None:
+        checklist_tpl = read_repo_file("assets/templates/zh/audit-checklist.md.tpl")
+        self.assertIn("## 未决债务登记", checklist_tpl)
+        self.assertIn("已销账", checklist_tpl)
+        # 段序铁律：债务段必须在审计记录段之前——maintain.py 的审计触发器
+        # 只解析「## 审计记录」之后的窗口，债务条目日期不得进入该窗口
+        self.assertLess(
+            checklist_tpl.index("## 未决债务登记"),
+            checklist_tpl.index("## 审计记录"),
+        )
+
+
 class GovernanceDiscoveryGuidanceTestCase(unittest.TestCase):
     """治理可发现性（哲学 12 / 第 6.4 步）的静态回归检查。"""
 

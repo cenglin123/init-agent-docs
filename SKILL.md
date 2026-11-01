@@ -822,6 +822,7 @@ pre-commit 只在提交时触发；「编辑后不提交就走人」会完全绕
    - 读 `assets/templates/zh/audit-checklist.md.tpl`
    - 写入 `docs/audit-checklist.md`
    - 模板已可直接使用，无需裁剪
+   - 清单含「未决债务登记」段：文档收敛类待收敛项（能指认稳定出处者）随发现随登记，审计时逐条清点（格式与销账规则见模板该段；业务挂账走 `docs/plans/active/` 或项目 issue 系统，不进债务段）
 
 2. **更新 docs/STRUCTURE.md 索引表**：在表格中新增一行：
 

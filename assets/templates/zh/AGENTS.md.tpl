@@ -121,5 +121,6 @@ python scripts/check_all.py --quiet
 
 机械层通过后再确认：
 - [ ] 有高风险改动且没经过独立视角复查？→ 新上下文或 subagent 复查
+- [ ] 评审 / 审计留下文档收敛类遗留？→ 登记到 docs/audit-checklist.md「未决债务登记」段（业务挂账走 plans/active 或 issue，不进债务段）
 - [ ] 本次对话有值得沉淀的记忆？→ 更新 `.agents/memory/` 并同步 AGENTS 内联摘要<!-- 小型项目：整行替换为"小型项目，无记忆目录" -->
 - [ ] 纯格式修改/注释修改/同一会话已记录？→ 文档更新可跳过（验证不跳过）
