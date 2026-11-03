@@ -94,15 +94,16 @@ class SkillGuidanceTestCase(unittest.TestCase):
         ref = read_repo_file("assets/references/initialization.md")
         expansion = ref.split("## 扩展资产", 1)[1].split("## 验收与交付", 1)[0]
         acceptance = ref.split("## 验收与交付", 1)[1]
-        for term in ("titles/show/add/recent", "不读全文", "冻结基线盲评", "≥3 独立视角", "结论记录"):
+        for term in ("titles/show/add/recent", "不读全文", "一次独立视角", "更严格要求", "结论记录", "纯记录编辑豁免"):
             self.assertIn(term, expansion)
-        self.assertIn("CHANGELOG 局部操作和治理盲评标定", acceptance)
+        self.assertIn("CHANGELOG 局部操作和治理独立复查", acceptance)
         self.assertIn("基线正文", acceptance)
         template = project_profile(read_repo_file("assets/templates/zh/AGENTS.md.tpl"), "no-git", "medium")
         self.assertIn("**记忆自检**", template)
         self.assertIn("MEMORY.md「确认 touch」", template)
         self.assertIn("titles/show/add/recent", template)
-        self.assertIn("只给冻结基线", template)
+        self.assertIn("一次独立视角复查", template)
+        self.assertNotIn("须补派盲评", template)
 
     def test_current_eval_method_covers_all_small_deliverables(self):
         ledger = read_repo_file("assets/references/eval-baseline.md")

@@ -15,6 +15,7 @@
     python scripts/maintain.py                 # 完整维护：重建索引 + 全部检查 + 报告
     python scripts/maintain.py --check         # 只读校验（不修改文件），异常时退出码非 0
     python scripts/maintain.py --memory-index  # 仅重建 MEMORY.md 索引标记段
+    python scripts/maintain.py --memory-search QUERY --limit 5  # 有界经验检索
 
 无第三方依赖。小型项目（无 .agents/memory/ 目录）自动跳过记忆相关步骤。
 """
@@ -111,6 +112,46 @@ def _entry_title(path: Path) -> str:
 
 def _fmt_date(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
+def search_memory(query: str, limit: int) -> int:
+    """Search all retained entries; bound output rather than archive coverage."""
+    terms = list(dict.fromkeys(query.casefold().split()))
+    if not terms:
+        print("请输入非空检索关键词。")
+        return 1
+    matches = []
+    errors = []
+    for path in _memory_files() + _bugfix_files():
+        try:
+            text = _read(path)
+        except (OSError, UnicodeDecodeError):
+            errors.append(path.relative_to(ROOT).as_posix())
+            continue
+        title = _frontmatter_value(text, "title") or _entry_title(path)
+        rel = path.relative_to(ROOT).as_posix()
+        haystack = (rel + "\n" + text).casefold()
+        score = sum(term in haystack for term in terms)
+        if not score:
+            continue
+        score += sum(term in title.casefold() for term in terms)
+        # Match the retained full entry, but show experience prose rather than
+        # YAML metadata. Title/tag-only matches fall back to the body's start.
+        body = re.sub(r"\A---\s*\n.*?\n---[^\S\n]*(?:\n|$)", "", text, count=1, flags=re.DOTALL)
+        positions = [body.casefold().find(term) for term in terms]
+        start = max(0, min((p for p in positions if p >= 0), default=0) - 40)
+        excerpt = " ".join(body[start:start + 160].split())
+        matches.append((-score, rel, title[:MAX_TITLE_LEN], excerpt))
+    matches.sort()
+    shown = matches[:limit]
+    print(f"命中 {len(matches)} 条；显示 {len(shown)} 条；截断：{'是' if len(matches) > limit else '否'}。链接相对项目根。")
+    for _, rel, title, excerpt in shown:
+        print(f"- [{title}]({rel}) — {excerpt}")
+    if not matches:
+        print("未找到相关经验；可换关键词或按需读取完整索引。")
+    if errors:
+        print(f"检索不完整：{len(errors)} 个文件无法读取 UTF-8：" + ", ".join(errors[:5]))
+    return 1 if errors else 0
 
 
 # ---------------------------------------------------------------------------
@@ -502,11 +543,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="仅重建 MEMORY.md 索引标记段",
     )
+    parser.add_argument("--memory-search", metavar="QUERY", help="检索全部记忆和 bugfix，默认最多输出 5 条")
+    parser.add_argument("--limit", type=int, default=5, help="检索输出条数，1–50，默认 5")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.memory_search is not None:
+        if args.memory_index or args.check:
+            parser.error("--memory-search 不能与维护选项同时使用")
+        if not 1 <= args.limit <= 50:
+            parser.error("--limit 必须在 1–50 之间")
+        return search_memory(args.memory_search, args.limit)
     if args.memory_index:
         status, detail = rebuild_memory_index(check_only=False)
         print(_line(status, f"memory index: {detail}"))

@@ -92,16 +92,16 @@ init-agent-docs/
 
 维护本仓先读 [AGENTS.md](AGENTS.md)。规则等级与标定归 [设计原则](assets/references/design-principles.md)，日常维护与规则候选归 [治理合同](assets/references/governance-contract.md)。本文件保留面向维护者的产品说明与评测方法。
 
-验证使用 `python -X utf8 -m pytest tests/ -q` 与 `git diff --check`；模板改动在实际测试项目运行初始化和独立入口验收。交付脚本应安装到目标项目验证，不直接在本仓 assets 下运行冒充自用检查。
+验证使用 `python -X utf8 -m pytest tests/ -q`、`python -X utf8 scripts/check_source.py` 与 `git diff --check`；模板改动在实际测试项目运行初始化和独立入口验收。来源检查只复用 audit.py 的 R2 判据，不执行目标全套审计；交付脚本安装到目标项目验证。
 
 ### 评测义务
 
-本仓自身的行为面改动——`AGENTS.md`、`SKILL.md`、`README.md`、`assets/templates/zh/**`、`assets/references/*.md`（不含 `eval-baseline.md` 自身：账本不入被考对象，否则每次记分制造下一次违规）——提交前必须跑 eval-baseline 的 L1 清单，并在其回归记录表记一行分。义务分工：
+本仓自身的行为面改动——`AGENTS.md`、`SKILL.md`、`README.md`、`assets/templates/zh/**`、`assets/references/*.md`（不含评测方法 `eval-baseline.md`）——提交前按评测方法运行适用 L1 清单，在[结果账本 evals/results.md](evals/results.md)记分。方法与结果均不因自身修订制造记分义务。义务分工：
 
 - **记分粒度**：允许范围化记分（`L1 partial: scope=…`，scope 须枚举实际触达的 test bed 维度，skipped 维度计入噪音率）与多条改动批量补记。`assets/scripts/**`、`assets/hooks/**`、`.githooks/**`、`assets/plugins/**` 由 pytest 门控，不改变 skill 产出质量，不入 eval 义务。
 - **L2/L3 判分**不由执行者自跑自记：由维护者发起 converge 评议承担（跨模型族独立判分），结果记入回归记录表。
-- **唯一权威**：`assets/references/eval-baseline.md` 是评测记分与回归记录的唯一账本，bugfix 文档内的 `eval_score` 只是快照。审计裁决（`docs/audit-checklist.md` 审计记录段，裁设计正确性）与 eval 记分（裁行为面改动有没有被度量）是两本不同性质的账。
-- **R2 强制机制**（audit.py）：anchor = 最近一次触碰回归表数据行的提交，其后 1 个行为面提交 → warn（放行补记），≥2 → error（阻塞）；往回归表记分即重置计数，记分与行为改动同一提交时自锚定。R2 是 fixture 重放 runner 落地前的过渡机制，runner 使记分连续化后退役。与之互补的 R1（bugfix 档案 eval 记录存在性）考的是生成项目侧的档案，本仓无 bugfix 目录、天然 no-op。
+- **唯一结果入口**：[评测方法](assets/references/eval-baseline.md)定义方法与标准，[结果账本 evals/results.md](evals/results.md)保存来源评测结果，不复制下游。审计裁决与行为面记分各记其实际结论；生成项目以实际验证证据为默认，明确使用重放时才启用 eval 字段，R1 校验显式记录完整性。
+- **R2 强制机制**（audit.py）：anchor = 最近一次触碰结果账本记分行的提交，兼容迁移前历史锚点，方法文字不重置锚点；其后 1 个行为面提交 → warn（放行补记），≥2 → error（阻塞）。来源命令与 pre-commit 复用该实现；hook 纳入暂存记分行，记分与行为改动同一提交可自锚定。R2 是 fixture 重放 runner 落地前的过渡机制，runner 使记分连续化后退役；支持 `.git` 指针文件的 linked worktree。
 
 ## 吸纳外部素材
 

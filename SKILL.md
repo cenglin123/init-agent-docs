@@ -20,7 +20,7 @@ description: >
 
 - AGENTS.md 是唯一行为入口，目标 ≤250 行，只放项目硬约束、必要偏好、命令绑定与导航；专题按需读。
 - 可执行事实源优先：CI / hook / task runner / manifest scripts / lockfile / config > README / prose 文档 > 模板默认文案。
-- 覆盖前读所有已有 instruction，保留已验证硬约束、精确命令与禁止事项；冲突和迁移去向入初始化记录。不得静默丢失用户定制。
+- 广泛调查或迁移前先落盘起始检查点。覆盖前分批核对已有 instruction，记录已核/未核位置，保留硬约束、精确命令、禁止事项及其条件作用域；冲突和迁移去向入初始化记录，不要求单个上下文全文读完。
 - Git/no-Git 与规模独立；no-Git 不运行 Git、不自动 init、不生成 Git-only 资产。Git 使用实际当前分支/remote/upstream，不假定名称，不自动 stash、pull、commit 或 push。
 - 已有授权持续有效，不重复确认；规模、覆盖、可选集成没有既有授权时才澄清。越权、预算或不可逆副作用须按实际边界处理。
 - 模型选择任务分解、协作方式、提示词和模型；脚本处理确定性顺序、记账、路由、验收与止损。不固定组织、模型或永久拓扑。
@@ -52,7 +52,7 @@ Small 的初始化进度唯一源是 docs/initialization.md，完成后原路径
 | 安装可选机制 | [optional-integrations.md](assets/references/optional-integrations.md) 对应节 | hooks、会话提醒或 worktree，默认不加载 |
 | 复杂任务协作 | [workflow-patterns.md](assets/references/workflow-patterns.md) 对应节 | 所有权、交接、隔离与协作工具契约 |
 | 设计取舍/规则维护 | [design-principles.md](assets/references/design-principles.md) 对应节；治理合同 | 适用评审等级、边界与最小候选 |
-| 维护/评测本 Skill | 根 AGENTS、[eval-baseline.md](assets/references/eval-baseline.md) | L1/L1.5 分开；未跑 L2/L3 如实记录 |
+| 维护/评测本 Skill | 根 AGENTS、[评测方法](assets/references/eval-baseline.md) | L1/L1.5 分开；未跑 L2/L3 如实记录 |
 
 拆文件不会释放已经读入的上下文；必要时写清状态后用新上下文接续。CURRENT 初始化期间只放状态入口与下一步，不抄阶段清单。
 

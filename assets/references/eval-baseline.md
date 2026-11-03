@@ -1,5 +1,5 @@
 ---
-title: Skill 质量评估基线与测试用例
+title: 评测方法
 purpose: 定义 init-agent-docs skill 的三层验证框架、测试数据与评分标准，用于回归测试和持续迭代
 ---
 
@@ -15,7 +15,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 ## 方法版本
 
-当前方法标识：`context-bounded-l1-v2`。本节之后定义当前验收方法；回归表保留各次实际执行范围与结果，历史记分不按新方法追写或改分。新记录注明采用的方法标识。
+当前方法标识：`context-bounded-l1-v2`。本节之后定义当前验收方法；[结果账本 evals/results.md](../../evals/results.md)保留实际执行范围与结果，历史记分不按新方法追写或改分。新记录注明采用的方法标识。
 
 ## 测试项目矩阵
 
@@ -91,7 +91,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 - [ ] `scripts/changelog.py titles` 正常输出，入口保留 titles/show/add/recent 局部操作与不读全文约束
 - [ ] 所有 profile 运行 audit.py check、check_all.py --quiet（Small 加 --small）；中大型额外运行 audit.py memory、maintain.py --check，KB 按实际布局替换
-- [ ] 治理修改的独立复查及冻结基线盲评标定合同在生成入口可发现；同基线 ≥3 独立视角豁免与结论记录口径没有因改写而丢失
+- [ ] 生成入口保留规则修改默认一次独立视角复查与纯记录豁免，遵从目标已有更严格要求；来源 ultraverge/盲评标定不复制下游
 - [ ] `scripts/changelog.py add --title "test" --body "test body"` 成功追加且格式正确
 - [ ] 迁移场景：旧入口副本（`CLAUDE.md` / `GEMINI.md` 等）内容已并入 AGENTS.md 且副本已删除
 - [ ] 已安装 pre-commit hook 时，人为破坏记忆结构（移走 MEMORY.md）后提交应被拒绝
@@ -192,21 +192,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 2. **运行 L1**：对每组执行 skill，过静态自检清单
 3. **运行 L2**：用 12 组话术测试触发（6 组应触发 + 6 组不应触发）
 4. **运行 L3**：选择 1 组 test bed（建议 `eval-medium`）做 baseline 对比盲评
-5. **记录结果**：填入下表
-
-| 版本 / commit（完整 40 位 SHA） | 日期 | L1 通过 | 命中率 | 误触率 | 无 Skill 均分 | 有 Skill 均分 | 护栏 | 记分来源 | 主要问题 |
-|--------------|------|---------|--------|--------|--------------|--------------|------|---------|---------|
-| `4dc052d757c66d325af88648152c9dc7606724d5` | 2026-10-27 | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | — | converge 评议 20261027（3R 评议+盲审） | 基线行；正式记分待首轮全量 eval |
-| `9d2903e45a5217b4d0a5751a57ac41577b6e8592` | 2026-11-01 | L1 partial: scope=step9-static（模板债务段存在/段序在审计记录之前/无残留占位符，AGENTS 完工必检含债务指针；2 结构断言通过） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | — | 标准 converge 1R（ses_e683d8b0，22 项发现修正 21） | 结构吸纳（债务登记）；skipped=4/4 test bed 执行维度、L2/L3 全跳，噪音率 100%，如实计入 |
-| `82606afa5db97c53c2fb9886d38656eecaef02cb` | 2026-11-01 | L1 partial: scope=philosophy5-6-style（标定/局部核对/三问句/边界条款 + AGENTS 完工必检自包含标定契约 + audit-checklist 触发段完整程序；22 静态断言通过） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | — | ultraverge 3R×2 + R3 收敛确认（P1 5→4→2 单调收敛） | 哲学段吸纳（评审标定 + 执行不符局部核对）；skipped=4/4 test bed 执行维度、L2/L3 全跳，噪音率 100%，如实计入 |
-| 工作区基于 `006148098bede51adb42b43714cebc684e0f9c91`，dirty；组件哈希见本次外置 instruction-metrics | 2026-11-02 | L1 partial: scope=入口路由、四profile模板投影、治理单源/双导航、恢复/来源合同；L1.5=SmallGit与MediumNoGit合成实物全部机械命令通过 | 未跑 | 未跑 | 未跑 | 未跑 | 尚无因果收益证据 | 默认pytest 124 passed（131.92s）；路由/脚本相关22 passed；外置synthetic-results保留初次投影器误删标记失败及修复 | L1独立Agent实物4/4未由本执行者验收，pilot由维护者另派；L2/L3未跑；此行不冒充真实Agent执行或旧新A/B |
-| 本地未提交候选；`006148098bede51adb42b43714cebc684e0f9c91` 仅为 HEAD 基线，dirty；实际组件见外置 fix-round1-metrics | 2026-11-03 | 方法 context-bounded-l1-v2；L1 partial: scope=四profile入口/KB/生成保真与必备集合合同、size/记忆实质失败回归、嵌套noGit能力边界；L1.5=SmallGit/MediumNoGit最终合成树相同命令全部通过 | 未跑 | 未跑 | 未跑 | 未跑 | 独立发现驱动定点修复，尚无因果收益证据 | 默认pytest 150 passed（133.43s）；脚本针对67 passed，维护/指导33 passed；git diff --check通过 | 真实SmallNoGit/MediumGit/Large恢复pilot及最终独立验收由维护者另记；本行不冒充Agent pilot，初轮失败/记分保留；L2/L3未跑 |
-| 本地未提交中间候选；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线 | 2026-11-03 | 方法 context-bounded-l1-v2；机械全量曾177 passed，但fresh原生审查发现quoted status跨检查不一致和普通MD读取异常；后续候选1 failed/184 passed又暴露读错误文案耦合，均未放行 | 未跑 | 未跑 | 未跑 | 未跑 | 失败证据保留，不以机械通过代替独立验收 | release-native/release-blind原报告及冻结快照；外置fix-round2-full-test-failure.json | 修复按原合同进行；不是新旧A/B，不抹去失败，不改变通过标准 |
-| 本地未提交最终候选；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线，dirty；实际字节见外置release-candidate-metrics | 2026-11-03 | 方法 context-bounded-l1-v2；L1 partial: scope=年龄/状态退出语义、R1必填字段、出生档案兼容/冲突、UTF8结构化诊断、模板profile/导航与插件授权边界；L1.5=最终SmallGit/MediumNoGit合成实物原命令通过 | 未跑 | 未跑 | 未跑 | 未跑 | 保留中间失败；无因果收益结论 | 默认pytest185 passed（121.32s）；audit/check_all定向90 passed；git diff --check通过；release-synthetic保留脚本哈希及实际UTF8可选片段投影证据 | 真实pilot与两条fresh原生独立复核由主协调者另记；本行不冒充真实Agent pilot，L2/L3未跑 |
-| 本地未提交185通过候选，实际源版本见该轮冻结manifest；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线 | 2026-11-03 | 方法 context-bounded-l1-v2；185机械回归通过后，独立盲评仍发现ledger与manifest两处读取边界遗漏，未放行 | 未跑 | 未跑 | 未跑 | 未跑 | 185通过不能代替独立验收 | release-blind原报告追加证据与旧冻结快照保留 | 沿用通过标准补两IO边界和预期读错误聚合保护，不吞逻辑异常 |
-| 本地未提交待发布候选，dirty；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线，字节见外置release-candidate-final-metrics | 2026-11-03 | 方法 context-bounded-l1-v2；L1 partial: scope=前述四profile合同与A-F定点、quoted状态全caller一致、MD/ledger/manifest结构化读取失败和聚合继续；L1.5=release-synthetic-final两合成树原命令通过 | 未跑 | 未跑 | 未跑 | 未跑 | 既往失败证据均保留；无因果收益结论 | 默认pytest186 passed（125.44s）；test_audit79 passed；typed guard探针通过；git diff --check通过 | L1真实Agent执行与最终独立验收由主协调者另记；L2/L3全未跑，非旧新A/B或已部署证明 |
-| 本地未提交待发布候选；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为现场基线，dirty=true；实际资产由冻结 publish manifest `7979FBDD3213F208D3490400631E5764C998E846AFC9A0FC12094FED72FC2E65` 字节标识 | 2026-11-03 | context-bounded-l1-v2；L1 partial：真实 Agent pilots 为 SmallNoGit、MediumGit；Large 为 fresh-context 接续；L1.5 合成树为 SmallGit、MediumNoGit；覆盖四 profile、KB 与保护文件 | 未跑 | 未跑 | 未跑 | 未跑 | CLI/ZIP 机械核对不证明质量或因果收益 | 默认 pytest 186 passed（125.44s）；Small 业务断言 exit 0；Medium `npm.cmd test` 13 项、Large `npm.cmd test` 35 项通过；外置 `acceptance/mechanical-release/completed-report.json` 独立机械核对通过 | 既有语义验收范围见外置 release-native/final-native 报告；本次只补机械核对；L2/L3 未跑，无旧新 A/B 或因果结论；GitHub push 待主协调，宿主部署未执行 |
-
+5. **记录结果**：写入[结果账本 evals/results.md](../../evals/results.md)
 6. **迭代**：根据失败项和评分差，修改 入口 / 参考 / 模板 / 脚本，再跑一轮
 
 记分说明：
@@ -219,7 +205,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 ## 护栏指标
 
-护栏是回归表「护栏」列的信号来源，全部为**体系外信号**——eval 清单本身测不到的部分：
+护栏是[结果账本 evals/results.md](../../evals/results.md)「护栏」列的信号来源，全部为**体系外信号**——eval 清单本身测不到的部分：
 
 - **定义**：任务返工率、用户修正次数、同一问题重复出现次数等。
 - **采集**：会话复盘与用户反馈，人工填写，无机械来源、无触发器。
@@ -231,7 +217,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 ## 自动化可能性
 
 - **L1**：可脚本化（检查文件存在、行数、链接有效性、脚本返回值）。建议作为 CI 步骤在每次提交前运行
-- **R2（audit.py 的行为面记分强制）是过渡机制**：在 fixture 重放 runner 落地前，以「最近一次触碰回归表之后的行为面改动 commit 数」强制记分义务；runner 使记分连续化后，该机制退役
+- **R2（audit.py 的行为面记分强制）是过渡机制**：在 fixture 重放 runner 落地前，以「最近一次触碰结果账本记分行之后的行为面改动 commit 数」强制记分义务；兼容迁移前历史锚点，方法文字修订不重置锚点。来源运行 `python -X utf8 scripts/check_source.py`，pre-commit 调同一实现并纳入暂存记分行；runner 使记分连续化后，该机制退役
 - **L2**：目前需人工在 Claude Code 中测试，但可用批量会话脚本辅助记录结果
 - **L3**：评分部分依赖主观判断，但可用"另一个 Agent 盲评"部分自动化
 

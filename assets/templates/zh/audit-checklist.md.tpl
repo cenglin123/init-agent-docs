@@ -9,7 +9,7 @@
 
 运行 `python scripts/audit.py check`，对每个非 OK 项逐条复核。
 
-> **首次审计注意**：`audit.py` 内置的 DRIFT_PATTERNS 只覆盖 24 种常见技术栈。如果你的项目使用了不在字典中的技术（如 Cassandra、DynamoDB、NATS、SQS），应编辑 `scripts/audit.py` 的 `DRIFT_PATTERNS` 字典，追加项目实际使用的技术关键词。通用字典是起点，应以项目实际依赖核对误报。
+> **依赖提示口径**：关键词匹配只作 advisory，不阻断检查。标准库、系统设施及外部服务不一定在应用 manifest 中声明；Agent 按实际依赖和部署事实裁决，不靠扩充字典代替语义判断。坏文件、死链和必需资产缺失仍失败。
 
 - [ ] 死链：是文件被移动了？还是 AGENTS.md 指针过时？
 <!-- Medium/Large profile only -->
@@ -38,7 +38,7 @@
 <!-- Medium/Large profile only -->
 重新读取 `docs/overview.md` 中"关键设计决策"段，逐条验证：
 
-- [ ] 对每条决策中提到的技术栈，检查 manifest（`package.json` / `pyproject.toml` 等）中是否仍有对应依赖。若文档说"使用 SQLite"，但 manifest 中已无 sqlite 相关依赖 → 决策已过时，改写为当前决策并在 CHANGELOG 记录原因。
+- [ ] 对技术栈决策核对 manifest、标准库及实际部署设施；例如 SQLite 可由标准库提供，外部数据库可独立部署。仅关键词缺失不能判过时；确认事实变化后才改写决策并记 CHANGELOG。
 <!-- Git profile only -->
 - [ ] 对每条决策中提到的约束条件（如"单机部署"、"数据量 < 10GB"），用 `git log --oneline --since="6 months ago"` 检查是否有相关的基础设施变更。若有重构/迁移类 commit → 约束可能已失效，需更新。
 <!-- /Git profile only -->
@@ -112,6 +112,7 @@
 
 > 按项目治理合同记录改变规则的候选：问题出处、范围、冻结基线与验收、保护场景、预算/重试/停止、独立验收与保留任务回归、成本/副作用、结果、采用/拒绝/观察/撤回。没有候选时不预建实体；记录不改写合同本身。
 > 本段位于审计记录前；候选结果不是全量审计日期。CURRENT 只指本记录，不重复候选状态。
+> 候选状态、证据、验证、拒绝、观察等纯记录编辑与债务/审计记录同属复查豁免；修改行为或判据仍按治理规则独立复查。
 
 ## 审计记录
 

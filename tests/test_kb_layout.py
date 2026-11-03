@@ -74,6 +74,14 @@ class KnowledgeBaseLayoutTests(unittest.TestCase):
         self.run_tool('docs_maintain.py', '--memory-index')
         self.assertEqual(before, self.index.read_bytes())
 
+    def test_bounded_search_uses_kb_paths_without_another_index_writer(self):
+        before = self.index.read_bytes()
+        output = self.run_tool('docs_maintain.py', '--memory-search', 'Preserved', '--limit', '1')
+        self.assertIn('.meta/memory/user/role.md', output)
+        self.assertIn('命中 1 条', output)
+        self.assertEqual(before, self.index.read_bytes())
+        self.assertFalse((self.root / '.agents').exists())
+
     def test_failed_kb_index_is_not_reported_as_healthy(self):
         (self.scripts / 'memory_index.py').write_text("raise SystemExit(1)\n", encoding='utf-8')
         self.run_tool('docs_maintain.py', '--check', expected=1)

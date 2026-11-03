@@ -1,9 +1,9 @@
 """Functional contracts for assets/scripts/audit.py.
 
-R1 (bugfix eval records) and the legacy checks are Git-free. R2
-(eval-baseline behavior-surface scoring) is conditionally Git-dependent:
-it activates only when assets/references/eval-baseline.md and .git both
-exist, and its tests explicitly build a temporary git repository fixture.
+R1 (bugfix eval records) and target checks are Git-free. Source-only R2
+(results-ledger behavior-surface scoring) runs through check_source.py,
+using evals/results.md or the scored migration ledger and Git history.
+Its tests explicitly build temporary git repository fixtures.
 """
 from __future__ import annotations
 
@@ -346,7 +346,7 @@ class AuditTest(unittest.TestCase):
 
 
 class BugfixEvalRecordTest(AuditTest):
-    """R1：status: fixed 的 bugfix 档案必须携带 eval 记录（Git-free）。"""
+    """R1：仅显式启用的 eval 记录要求完整字段（Git-free）。"""
 
     def write_bugfix(self, name: str, frontmatter: str) -> None:
         bugfix_dir = self.root / "docs" / "problems" / "bugfix"
@@ -358,12 +358,10 @@ class BugfixEvalRecordTest(AuditTest):
         stdout = self.run_audit("check", "--json").stdout
         return [r for r in json.loads(stdout) if r["kind"] == "eval_record"]
 
-    def test_fixed_without_eval_record_is_error(self):
+    def test_fixed_without_eval_record_uses_actual_verification(self):
         self.write_bugfix("b1.md", "status: fixed\ncreated_at: 2026-10-28")
         rows = self.eval_rows()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["status"], "error")
-        self.assertEqual(rows[0]["file"], "docs/problems/bugfix/b1.md")
+        self.assertEqual(rows, [])
 
     def test_quoted_casefolded_fixed_status_still_requires_eval_fields(self):
         self.write_bugfix("b1.md", 'status: "FIXED"\ncreated_at: 2026-10-28\neval: scored')
@@ -430,19 +428,19 @@ class BugfixEvalRecordTest(AuditTest):
         self.assertEqual(row["status"], "error")
         self.assertIn("eval_fixture", row["detail"])
 
-    def test_created_at_placeholder_is_exempt_with_warn(self):
-        self.write_bugfix("b1.md", "status: fixed\ncreated_at: [YYYY-MM-DD]")
+    def test_created_at_placeholder_does_not_exempt_explicit_eval(self):
+        self.write_bugfix("b1.md", "status: fixed\ncreated_at: [YYYY-MM-DD]\neval: scored")
         rows = self.eval_rows()
-        self.assertEqual([r["status"] for r in rows], ["warn"])
+        self.assertEqual([r["status"] for r in rows], ["error"])
 
-    def test_created_at_missing_is_exempt_with_warn(self):
+    def test_created_at_missing_without_eval_is_valid(self):
         self.write_bugfix("b1.md", "status: fixed")
         rows = self.eval_rows()
-        self.assertEqual([r["status"] for r in rows], ["warn"])
+        self.assertEqual(rows, [])
 
-    def test_grandfathered_doc_is_fully_exempt(self):
-        self.write_bugfix("b1.md", "status: fixed\ncreated_at: 2026-01-01")
-        self.assertEqual(self.eval_rows(), [])
+    def test_old_explicit_eval_still_requires_complete_fields(self):
+        self.write_bugfix("b1.md", "status: fixed\ncreated_at: 2026-01-01\neval: scored")
+        self.assertEqual(self.eval_rows()[0]["status"], "error")
 
     def test_template_and_non_fixed_docs_are_ignored(self):
         self.write_bugfix("_template.md", "status: fixed\ncreated_at: 2026-10-28")
@@ -455,6 +453,18 @@ class EvalBaselineTest(AuditTest):
 
     SHA1 = "a" * 40
     SHA2 = "b" * 40
+
+    def setUp(self):
+        super().setUp()
+        (self.root / "assets" / "scripts").mkdir(parents=True)
+        shutil.copy(ASSET, self.root / "assets" / "scripts" / "audit.py")
+        shutil.copy(ROOT / "scripts" / "check_source.py", self.root / "scripts" / "check_source.py")
+
+    def run_source(self, *args):
+        return subprocess.run(
+            [sys.executable, str(self.root / "scripts" / "check_source.py"), *args],
+            cwd=self.root, capture_output=True, text=True, encoding="utf-8",
+            env={**os.environ, "PYTHONUTF8": "1"})
 
     def git(self, *args: str) -> None:
         proc = subprocess.run(
@@ -488,7 +498,7 @@ class EvalBaselineTest(AuditTest):
             self.git("commit", "-m", f"behavior {i + 1}")
 
     def eval_rows(self):
-        stdout = self.run_audit("check", "--json").stdout
+        stdout = self.run_source().stdout
         return [r for r in json.loads(stdout) if r["kind"] == "eval_baseline"]
 
     def test_gate_skips_without_ledger_or_git(self):
@@ -503,14 +513,14 @@ class EvalBaselineTest(AuditTest):
         rows = self.eval_rows()
         self.assertEqual(rows[0]["status"], "skip")
 
-    def test_unreadable_ledger_and_manifest_are_structured_aggregate_failures(self):
+    def test_unreadable_source_ledger_and_target_manifest_are_structured_failures(self):
         self.write_common()
         (self.root / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
         self.write_baseline()
         (self.root / ".git").mkdir()
         baseline = self.root / "assets" / "references" / "eval-baseline.md"
         baseline.write_bytes(b"# ledger\n\xff")
-        result = self.run_audit("check", "--json")
+        result = self.run_source()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertNotIn("Traceback", result.stdout + result.stderr)
         rows = json.loads(result.stdout)
@@ -518,8 +528,6 @@ class EvalBaselineTest(AuditTest):
         self.assertEqual(ledger_error["status"], "invalid")
         self.assertEqual(ledger_error["error_code"], "read_error")
         self.assertEqual(ledger_error["path"], "assets/references/eval-baseline.md")
-        self.assertTrue(any(row.get("kind") == "line_budget" for row in rows))
-
         (self.root / "package.json").write_bytes(b"{\xff")
         result = self.run_audit("check", "--json")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)

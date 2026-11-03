@@ -335,7 +335,7 @@
 ├── AGENTS.md                      # 唯一入口（框架约定已收敛）
 ├── README.md
 ├── .agents/memory/
-│   ├── MEMORY.md                # 统一经验索引
+│   ├── MEMORY.md                # 按需读取的派生索引
 │   └── user/role.md
 ├── docs/
 │   ├── STRUCTURE.md / CHANGELOG.md / CURRENT.md
@@ -367,11 +367,11 @@
             <div class="slide" data-title="记忆与 Bugfix">
                 <div class="slide-header"><h2>记忆系统：一个入口，持续维护</h2></div>
                 <div class="slide-content">
-                    <div class="lead-text">经验检索不落到统一入口，就等于对未来 Agent 不存在。</div>
+                    <div class="lead-text">日常默认有界查询；完整经验索引按需读取。</div>
                     <div class="grid-2" style="height: 100%;">
                         <div class="info-box">
                             <h3>.agents/memory/MEMORY.md</h3>
-                            <p style="font-size: 26px; line-height: 1.5;">索引标记段由 <code>scripts/maintain.py</code> 自动重建；Agent 负责经验内容的取舍，不手工维护派生目录。</p>
+                            <p style="font-size: 26px; line-height: 1.5;">默认用 <code>maintain.py --memory-search</code> 有界查询；写入后由 <code>--memory-index</code> 刷新派生索引。</p>
                         </div>
                         <div class="info-box">
                             <h3>docs/problems/bugfix/</h3>
@@ -390,7 +390,7 @@
                         <div class="ap-card"><h4>文档复制代码事实</h4><p>同一事实出现多份，修改后必然腐烂。</p></div>
                         <div class="ap-card"><h4>CURRENT 与 plans 空转</h4><p>按项目规模裁剪，不创建永远没人维护的空壳。</p></div>
                         <div class="ap-card"><h4>共享工作树并行</h4><p>多个 owner 争用 index；协作时使用 worktree 隔离。</p></div>
-                        <div class="ap-card"><h4>手工维护派生索引</h4><p>让 maintain.py 重建 MEMORY 索引与 Bugfix 分区。</p></div>
+                        <div class="ap-card"><h4>全文加载经验索引</h4><p>默认有界查询；完整索引按需，由 maintain.py 派生。</p></div>
                         <div class="ap-card"><h4>实现完成即宣告完成</h4><p>保留 review 节点，以独立视角验证高风险改动。</p></div>
                     </div>
                 </div>

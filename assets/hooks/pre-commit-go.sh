@@ -75,14 +75,14 @@ check_governance_changes() {
 
         if [ "$CONVERGE_AVAILABLE" -eq 1 ]; then
             echo ""
-            echo "建议走 converge 流程进行独立审查："
-            echo "  准则段改动（行为规则/禁止事项）→ ultraverge（≥3 Reviewer）"
-            echo "  其他治理文档修改（导航/说明）→ 标准 converge"
+            echo "遵从目标 AGENTS 和选定的独立审查流程："
+            echo "  默认一次独立视角审查；项目已有更严格要求优先。"
+            echo "  纯记录编辑按目标项目的豁免规则处理。"
         else
             echo ""
-            echo "当前环境未检测到 converge 工具。降级方案："
-            echo "  在提交前，至少启动一个独立上下文的子 agent，"
-            echo "  让它全面审计本次修改——检查规则一致性、边界条件、遗漏项。"
+            echo "当前环境未检测到 converge 工具；遵从目标 AGENTS："
+            echo "  默认在提交前安排一次独立视角审查，"
+            echo "  检查规则一致性、边界条件与遗漏；项目已有更严格要求优先。"
             echo "  不要依赖执行者自检。"
         fi
         echo ""

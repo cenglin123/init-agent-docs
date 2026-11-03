@@ -44,7 +44,7 @@
 - **用户**：<!-- 称呼、关键偏好 -->
 - **项目上下文**：<!-- 当前活跃项目的一句话描述 -->
 - **最近教训**：<!-- 最重要的 1–2 条 -->
-- **详细记忆**：[.agents/memory/MEMORY.md](.agents/memory/MEMORY.md)
+- **经验检索**：`python scripts/maintain.py --memory-search "关键词" --limit 5`；按命中链接读原文，完整索引按需读取。
 
 > 维护细节（写入触发、touch 规范、索引重建）见 MEMORY.md 和 `python scripts/maintain.py`。
 
@@ -57,7 +57,7 @@
 若上下文含 "continued from a previous conversation"：
 1. 读 [docs/CURRENT.md](docs/CURRENT.md) — 确认当前任务状态
 <!-- Medium/Large profile only -->
-2. 读 [.agents/memory/MEMORY.md](.agents/memory/MEMORY.md) — 恢复项目记忆
+2. 按 CURRENT 中任务关键词运行 `python scripts/maintain.py --memory-search "关键词" --limit 5`，按需读命中原文；不默认全文加载累积索引。
 <!-- /Medium/Large profile only -->
 3. 上述完成前，**禁止写操作、禁止有副作用的判断**
 
@@ -65,13 +65,13 @@
 ### 任务前记忆检索
 
 <!-- 中型+项目保留。小型项目删除本节 -->
-除非任务非常简单明确，开始前先查经验系统：[.agents/memory/MEMORY.md](.agents/memory/MEMORY.md) 索引段 → 按需深入。
-Bugfix 任务（修复 / bug / 报错 / 异常等）必须先查索引段的 bugfix 分区——检索动作必须发生，确认无相关记录才可继续。检索流程详情见 MEMORY.md。
+除非任务非常简单明确，开始前运行 `python scripts/maintain.py --memory-search "任务关键词" --limit 5`，按命中链接深入；截断时换词或调整 limit，完整索引按需读。
+Bugfix 任务（修复 / bug / 报错 / 异常等）须检索相关经验，检索覆盖记忆与 bugfix 分区；无相关记录也可继续。检索流程详情见 MEMORY.md。
 
 ### Bugfix 沉淀
 
 <!-- 中型+项目保留。小型项目删除本节 -->
-修复 bug、排查异常、处理回归完工时，必须沉淀一篇 `docs/problems/bugfix/<slug>.md`。触发条件不变：完工时必写；写作规范（frontmatter、复现、验证）见 [docs/problems/bugfix/_template.md](docs/problems/bugfix/_template.md)。逐篇索引由 `python scripts/maintain.py` 派生，不手工登记。
+修复具有可复用教训、发生复发、涉及高风险或用户要求时，在 `docs/problems/bugfix/<slug>.md` 留专篇；其余在现有任务记录或 CHANGELOG 留必要验证证据。写作规范见 [docs/problems/bugfix/_template.md](docs/problems/bugfix/_template.md)；经验写入、修改、移动或删除后，同一任务运行 `python scripts/maintain.py --memory-index` 刷新派生入口，无需为此运行全量维护审计。
 
 <!-- /Medium/Large profile only -->
 
@@ -176,10 +176,10 @@ python scripts/check_all.py --quiet --small
 
 机械层通过后再确认：
 - [ ] 有高风险改动且没经过独立视角复查？→ 新上下文或 subagent 复查
-- [ ] 触及治理文档（入口、流程、hook、审计脚本等被作为规则消费的文件）？→ 无论行数必须独立复查（记录性编辑：债务登记/销账、审计记录追加除外）；治理文档独立评审须补派盲评——只给冻结基线，不给首轮结论，同一基线 ≥3 独立视角（同上下文/同模型不计）可豁免，结论记计划完成记录/CHANGELOG（基线 / 评审者数 / 一致或分歧）
+- [ ] 触及治理文档（入口、流程、hook、审计脚本等被作为规则消费的文件）的规则？→ 无论行数须一次独立视角复查，记录基线、发现与裁决；遵从项目已有更严格要求。纯记录编辑（债务登记/销账、审计记录、候选状态/证据/验证/拒绝/观察）豁免，改变判据或行为仍须复查。
 - [ ] 执行中发现文档断言与实机不符？→ 先判定哪侧错，再修正该处 + 核对同维度其余断言（细节见 docs/audit-checklist.md 触发段；结论记计划完成记录/CHANGELOG，不写「审计记录」段的日期字面量）
 - [ ] 评审 / 审计 / 执行中发现留下文档收敛类遗留？→ 登记到 docs/audit-checklist.md「未决债务登记」段（业务挂账走项目当前任务记录，不进债务段）
 <!-- Medium/Large profile only -->
-- [ ] **记忆自检**：本次对话有值得沉淀的记忆？→ 更新 `.agents/memory/` 并同步 AGENTS 内联摘要；命中并实际遵循的经验按 MEMORY.md「确认 touch」更新确认字段。
+- [ ] **记忆自检**：本次对话有值得沉淀的记忆？→ 更新 `.agents/memory/` 并同步 AGENTS 内联摘要；命中并实际遵循的经验按 MEMORY.md「确认 touch」更新确认字段。经验变动后运行 `python scripts/maintain.py --memory-index`。
 <!-- /Medium/Large profile only -->
 - [ ] 纯格式修改/注释修改/同一会话已记录？→ 文档更新可跳过（验证不跳过）
