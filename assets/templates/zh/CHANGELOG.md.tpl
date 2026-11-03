@@ -6,7 +6,7 @@
 - 同一天的多次修改合并到同一个日期节，用 `###` 区分主题。
 - 写入前不要读全文，用 `python scripts/changelog.py titles/show/add/recent` 查看标题树、局部读取、追加和近期浏览。
 - 当前工作状态写在 docs/CURRENT.md；CHANGELOG 只记录历史变更。
-- 文件初始化后保持空壳；第一条记录由 `python scripts/changelog.py add ...` 创建（见 SKILL.md 第 5 步）。
+- 文件初始化后保持空壳；第一条记录由 `python scripts/changelog.py add ...` 创建（初始化验收时执行）。
 -->
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->

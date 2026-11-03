@@ -3,7 +3,7 @@
 > 记录部署方式、环境差异和启动约定。
 > 修改本文件后同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->
 
 ## 环境变量
 

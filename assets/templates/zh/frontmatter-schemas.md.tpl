@@ -29,7 +29,7 @@ created_at: ""            # YYYY-MM-DD
 ```
 
 说明：
-- `status` 字段被 `scripts/audit.py plans` 检查使用：`status=done` 或 `status=cancelled` 时审计脚本会报告 STALE（应归档到 `completed/`）。
+- `status` 字段被 `scripts/audit.py plans` 检查使用：`status=done` 或 `status=cancelled` 的计划仍放在 `active/` 时会报告 STALE（应归档到 `completed/`）；正确归档的历史计划不因年龄失败，进行中计划的年龄仅为调查线索。
 - 写入只用 `in_progress | done | cancelled`；legacy 读兼容：`completed` → `done`，`proposed` → `in_progress`。
 - `liveness` 字段不在此处使用——计划文件完成后即归档，不需要活性追踪。
 

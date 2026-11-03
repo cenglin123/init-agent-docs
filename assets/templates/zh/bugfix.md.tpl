@@ -33,18 +33,24 @@ updated_at: [YYYY-MM-DD]
      - last_confirmed / confirmed_count：任务前检索命中本文档并实际遵循后，
        将 last_confirmed 更新为当日、confirmed_count +1（touch 规范，见 AGENTS.md
        完工检查清单「记忆自检」项）。
+-->
 
 <!-- Git profile only -->
+<!--
        缺失时维护脚本以 git 最后提交时间兜底——
        git 修改 ≠ 确认有效，只补日期，不虚增 confirmed_count。
        时间戳兜底命令：`git log -1 --format=%ai -- <文件路径>`
+-->
 <!-- /Git profile only -->
 <!-- no-Git profile only -->
+<!--
        缺失时维护脚本以文件系统修改时间兜底——
        文件修改 ≠ 确认有效，只补日期，不虚增 confirmed_count。
        时间戳兜底方式：文件系统的最后修改时间（stat / Get-Item）
+-->
 <!-- /no-Git profile only -->
 
+<!--
      - tags / related_files：供检索命中；related_files 必须指向真实存在的文件
      - verification.level：manual | automated | none；为 automated 时必须补
        verification.kind（如 unit-test / regression-test）+ verification.path +

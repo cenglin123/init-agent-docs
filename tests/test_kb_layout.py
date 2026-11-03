@@ -50,6 +50,17 @@ class KnowledgeBaseLayoutTests(unittest.TestCase):
         output = self.run_tool('audit.py', 'memory', expected=1)
         self.assertIn('.meta/memory/MEMORY.md', output)
 
+    def test_audit_rejects_whitespace_and_invalid_utf8_memory_indexes(self):
+        for label, content, expected in (('whitespace', b' \n\t', 'empty'), ('invalid', b'\xff', 'invalid')):
+            with self.subTest(label=label):
+                self.index.write_bytes(content)
+                result = subprocess.run(
+                    [sys.executable, str(self.scripts / 'audit.py'), 'memory', '--json'],
+                    cwd=self.root, capture_output=True, text=True, encoding='utf-8',
+                    env={**os.environ, 'PYTHONUTF8': '1'})
+                self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+                self.assertIn(expected, result.stdout)
+
     def test_missing_meta_memory_directory_fails_all_document_checks(self):
         shutil.rmtree(self.index.parent)
         self.run_tool('audit.py', 'memory', expected=1)
@@ -67,6 +78,18 @@ class KnowledgeBaseLayoutTests(unittest.TestCase):
         (self.scripts / 'memory_index.py').write_text("raise SystemExit(1)\n", encoding='utf-8')
         self.run_tool('docs_maintain.py', '--check', expected=1)
         self.run_tool('docs_maintain.py', '--memory-index', expected=1)
+
+    def test_maintainer_reports_invalid_utf8_kb_memory_without_traceback(self):
+        self.index.write_bytes(b'\xff')
+
+        for args in (('--memory-index',), ('--check',)):
+            result = subprocess.run(
+                [sys.executable, str(self.scripts / 'docs_maintain.py'), *args],
+                cwd=self.root, capture_output=True, text=True, encoding='utf-8',
+                env={**os.environ, 'PYTHONUTF8': '1'})
+            self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+            self.assertIn('.meta/memory/MEMORY.md', result.stdout)
+            self.assertNotIn('Traceback', result.stdout + result.stderr)
 
 
 if __name__ == '__main__':

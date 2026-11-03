@@ -6,24 +6,25 @@
 
 为一个代码仓库初始化"面向 AI agent 协作"的文档体系：
 
-- `AGENTS.md`：唯一入口——行为规则 + 信息导航 + docs/ 文件治理规则（Agent 面向；框架入口约定已收敛到 AGENTS.md，不再生成 CLAUDE.md / GEMINI.md 副本）
+- `AGENTS.md`：唯一入口——行为规则 + 信息导航 + profile 对应文件治理指针（Agent 面向；实际加载由宿主配置决定，不生成 CLAUDE.md / GEMINI.md 副本）
 - `README.md`：项目概述、快速开始、贡献指南（人类面向；从模板生成或迁移保留）
-- `docs/STRUCTURE.md`：架构文档总索引
+- `docs/STRUCTURE.md`：中大型文档总索引与详细文件治理规则
+- `docs/governance.md`：中大型自维护与规则改进合同；Small 从同一源合同投影内联 AGENTS
 - `docs/CHANGELOG.md`：倒序变更记录
 - `scripts/changelog.py`：CHANGELOG 标题树、近期条目、局部读取和追加
 - `scripts/audit.py`：文档一致性深度审计（死链 / 结构完整性 / 依赖漂移 / 记忆结构，定期跑 ~15 项）
 - `scripts/check_all.py`：高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
 - `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
-- `assets/plugins/governance-watch.js`：治理可发现性插件（opencode，可选）——会话边界检测治理目录脏区，在入口 AGENTS.md 写入显眼提醒行（哲学 12 / 第 6.4 步）
-- `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist,frontmatter-schemas}.md`：专题文档（中型 / 大型项目；小型项目只保留 `CURRENT.md` 和 `audit-checklist.md`）
+- `assets/plugins/governance-watch.js`：治理可发现性插件（opencode，可选）——会话边界检测治理目录脏区，在入口 AGENTS.md 写入显眼提醒行（见可选集成的会话级治理提醒）
+- `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist,frontmatter-schemas}.md`：专题文档（中型 / 大型项目；Small 文档为 `CURRENT.md`、`CHANGELOG.md`、`audit-checklist.md`、`initialization.md`，另有根 AGENTS/README 和三个文档脚本）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agents/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
 - `.githooks/`：可选 lint 质量门控（内置记忆结构兜底与治理文档修改提醒）
-- `scripts/worktree_task.py`：可选的任务 worktree 与协作入场工具（SKILL.md 第 6.5 步）；canonical 分支快进保护 hook 可另行选装，入场协调不依赖 hook
+- `scripts/worktree_task.py`：可选的任务 worktree 与协作入场工具（按需读取 optional-integrations.md）；canonical 分支快进保护 hook 可另行选装，入场协调不依赖 hook
 
-背后的设计哲学见 SKILL.md"设计哲学"一节。
+设计取舍见 assets/references/design-principles.md，执行阶段见 assets/references/initialization.md。
 
-**领域角色与控制器边界**：Coordinator / Owner / Reviewer 是当前选定的控制器下的领域交接角色，不是顶层控制器。全局流程模式、预算门、角色转换和终端决策由当前选定的控制器（如 Converge）负责；如果未选定控制器，由用户直接协调。详见 `assets/references/workflow-patterns.md`。
+协作分工由 Agent 按任务选择；保留所有权、交接与独立验收，已选控制器继续掌握预算/终端裁决，无控制器用本地合同完成，不建立平行组织。
 
 ## 目录结构
 
@@ -55,7 +56,7 @@ init-agent-docs/
 
 ```
 目标项目/
-├── AGENTS.md              # 唯一入口：行为规则 + 治理规则 + 内联记忆（硬约束）+ 导航
+├── AGENTS.md              # 唯一入口：行为规则 + 治理指针 + 内联记忆 + 导航
 ├── .agents/memory/        # 跨会话记忆（硬约束内联在 AGENTS.md）
 │   ├── MEMORY.md          # 记忆索引（标记段由 maintain.py 自动重建，禁止手改）
 │   └── user/role.md       # 用户画像
@@ -87,53 +88,15 @@ init-agent-docs/
 2. **模板仅一种语言**：当前只附带 zh/。其他语言需要手工复制 zh 目录并翻译；`scripts/changelog.py` 内置了对英文 CHANGELOG 标题的识别，所以即使模板只有中文，用户后续手写英文条目仍能正确归类。
 3. **pre-commit 片段没跑过所有平台**：Windows 原生 Git Bash 下 `xargs` 对空输入的处理偶有差异；如遇问题，用 `if [ -n "$STAGED" ]; then echo "$STAGED" | ...; fi` 兜住。
 
-## 维护约定
+## 维护入口
 
-### 操作前仓库一致性核对（硬约束）
+维护本仓先读 [AGENTS.md](AGENTS.md)。规则等级与标定归 [设计原则](assets/references/design-principles.md)，日常维护与规则候选归 [治理合同](assets/references/governance-contract.md)。本文件保留面向维护者的产品说明与评测方法。
 
-**开始任何操作前**，必须先核对当前仓库与 GitHub 远端版本的一致性。这是防止在过时或分叉的基础上工作的第一道防线。
-
-**检查步骤**：
-
-```bash
-# 1. 拉取远端最新状态
-git fetch origin
-
-# 2. 检查本地是否有未提交的修改
-git status --short
-
-# 3. 检查当前分支是否落后于远端
-git log --oneline HEAD..origin/main
-
-# 4. （可选）确认当前所在分支
-git branch --show-current
-```
-
-**判定与处理**：
-
-| 状态 | 处理 |
-|------|------|
-| 工作区干净、与 origin/main 同步 | 正常开始操作 |
-| 有未提交修改 | 先确认修改归属：属于进行中的工作则 stash 或 commit；属于脏文件则清理后再操作 |
-| 本地落后于 origin/main | `git pull origin main` 合并远端更新后再操作 |
-| 本地有未推送的 commit | 确认是否需要先 push，避免后续操作基于未同步的本地状态 |
-| 当前不在 main 分支 | 确认分支意图；若无意在特性分支上工作，先切回 main |
-
-**为什么这是硬约束而非建议**：在过时的基线上工作会产生隐性冲突——Agent 修改的文件可能已被远端更新覆盖，导致合并时大量冲突或静默覆盖他人修改。机械检查的成本（几秒钟）远低于事后解决分叉的成本。
-
-## 维护指引
-
-- 修改模板后，手工在一个测试项目上跑一遍 skill 看是否还通顺。
-- 如果新增一个模板文件，记得在 zh/ 下添加，并在 SKILL.md 的"目标文件结构"一节补说明。
-- 维护 CHANGELOG 相关规则时，优先改 `assets/scripts/changelog.py` 的能力和 AGENTS 模板中的调用说明，不要把手工插入流程重新塞回模板。
-- 维护 MEMORY.md 索引相关规则时，优先改 `assets/scripts/maintain.py` 的重建逻辑；索引标记段（`<!-- memory-index:start/end -->`）是脚本领地，模板里不要要求 agent 手工维护索引。
-- 维护方法论时，只保留跨项目可迁移、能解决真实问题的原则（如 Occam / Bitter Lesson），不要复制不必要的治理形式或组织隐喻。
-- 哲学条款尽量保留，增改需要在 SKILL.md 顶部说清"为什么"——本 skill 的价值一半以上在于设计哲学的阐释，纯模板替换价值有限。
-- `assets/pitch/presentation.html` 是宣讲 deck，和执行流程无关，但核心方法论变化时应同步更新。
+验证使用 `python -X utf8 -m pytest tests/ -q` 与 `git diff --check`；模板改动在实际测试项目运行初始化和独立入口验收。交付脚本应安装到目标项目验证，不直接在本仓 assets 下运行冒充自用检查。
 
 ### 评测义务
 
-本仓自身的行为面改动——`SKILL.md`、`README.md`、`assets/templates/zh/**`、`assets/references/*.md`（不含 `eval-baseline.md` 自身：账本不入被考对象，否则每次记分制造下一次违规）——提交前必须跑 eval-baseline 的 L1 清单，并在其回归记录表记一行分。义务分工：
+本仓自身的行为面改动——`AGENTS.md`、`SKILL.md`、`README.md`、`assets/templates/zh/**`、`assets/references/*.md`（不含 `eval-baseline.md` 自身：账本不入被考对象，否则每次记分制造下一次违规）——提交前必须跑 eval-baseline 的 L1 清单，并在其回归记录表记一行分。义务分工：
 
 - **记分粒度**：允许范围化记分（`L1 partial: scope=…`，scope 须枚举实际触达的 test bed 维度，skipped 维度计入噪音率）与多条改动批量补记。`assets/scripts/**`、`assets/hooks/**`、`.githooks/**`、`assets/plugins/**` 由 pytest 门控，不改变 skill 产出质量，不入 eval 义务。
 - **L2/L3 判分**不由执行者自跑自记：由维护者发起 converge 评议承担（跨模型族独立判分），结果记入回归记录表。
@@ -142,36 +105,6 @@ git branch --show-current
 
 ## 吸纳外部素材
 
-当外部材料——文章、其他仓库的实践、一次初始化的教训——可能驱动对本 skill 的改进时，走本节流程；常规维护仍循上文「维护指引」。**素材是过路的：判完即弃，不入库、不设收件箱台账——留下的只有对 skill 的改动本身。**
+仅吸纳跨项目可迁移、解决实际痛点且能改变指令行为的素材；先查现有规则，同义方法归并，新增判断步骤或失败模式才新增实体。素材本身不设收件箱或永久台账，论证进入实际任务记录。
 
-### 收录判据（三条全过才动手）
-
-1. **跨项目可迁移**：只对某个技术栈或单个项目成立的不收；
-2. **解决真实问题**：有实际发生的痛点，不是"让体系看起来更完整"；
-3. **改变 skill 的行为**：材料必须能落到下表某一行。"只是知道了一下"的信息不收——模型本来就知道的东西，收进来既重复又永远收不完；能改变指令行为的方法论才是稀缺的。（一次性教训是例外，去向见路由表末行。）
-
-### 去向路由
-
-| 材料内容 | 去向 | 复查门控 |
-|---------|------|---------|
-| 新设计原则 / 重定义既有原则 | `SKILL.md` 设计哲学段 | ultraverge（准则段变更，≥3 Reviewer） |
-| 文档结构模式、模板改进 | `assets/templates/zh/*.tpl` + `SKILL.md` 对应步骤 | 标准 converge |
-| 机械检查、脚本与 hook | `assets/scripts/`；hook 模板在 `assets/hooks/`，本仓自托管接线于 `.githooks/` | 标准 converge |
-| 工作流与跨上下文协作细节 | `assets/references/workflow-patterns.md` | 标准 converge |
-| 其余资产类改动（tests、eval-baseline 等） | 对应资产文件 | 标准 converge |
-| 一次性教训（单次初始化踩坑） | 有活跃 plan 记入其复盘段，否则丢弃；**同一教训再次实际遭遇时**，按上表重新走收录判据与路由 | 无 |
-
-### 查重裁决
-
-动手前先读 `SKILL.md` 设计哲学各条标题和可能受影响的模板/脚本现状，然后判断：
-
-- **同一套方法换个外壳** → 并入已有段落或模板，不新增实体；
-- **多出新的判断步骤或新的失败模式** → 才允许新增。
-
-裁决判据只有一条：按收录判据第 3 条复核——说清"它改变了哪条指令的哪个行为"，说不清就丢弃。裁决由你判断，不设评分表——写死的评判规则遇到没预料过的材料就会判错，而这种判断本来就是模型擅长的。
-
-### 实施与记录
-
-1. 按上表门控执行复查（治理文档分级见 SKILL.md 设计哲学第 5 条；pre-commit hook 会 WARN 提醒）。
-2. 跨多文件的吸纳在实施前落一份设计依据 plan 到 `docs/plans/active/`，完成后归档至 `docs/plans/completed/`（如 `20260728-init-agent-docs-improvement.md` 就是一次从 novel_world_one 吸纳经验的完整记录）。plan 记录的是改动的设计论证，不是素材台账；单点小改直接改，git 历史即记录。
-3. **不预建任何脚本辅助**。仅当多次吸纳因"找不准插入点/判不了重"反复产生实际摩擦时，才考虑最小工具——在流入量证明需要之前装机器，违反设计哲学第 8 条。
+跨文件改动使用现有任务计划；一次性教训记活跃计划，否则不为其新建制度。根据 AGENTS 与设计原则的治理等级独立复查，采用后观察与撤回，不自动反馈其他来源。源资产中的执行指令总量与入口预算共同评估，拆文件不能掩盖整体膨胀。

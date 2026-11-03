@@ -45,6 +45,13 @@ class AuditTest(unittest.TestCase):
         docs.mkdir()
         (docs / "STRUCTURE.md").write_text("# Index\n", encoding="utf-8")
 
+    def write_memory(self):
+        memory = self.root / ".agents" / "memory"
+        memory.mkdir(parents=True)
+        (memory / "MEMORY.md").write_text("# Memory\n", encoding="utf-8")
+        (self.root / "AGENTS.md").write_text(
+            "# Rules\n.agents/memory/MEMORY.md\n## 项目记忆\n", encoding="utf-8")
+
     def test_dead_links_discovers_root_and_scripts_readmes_and_all_plans(self):
         self.write_common()
         (self.root / "README.md").write_text("[bad](missing-root.md)\n", encoding="utf-8")
@@ -81,13 +88,93 @@ class AuditTest(unittest.TestCase):
         self.assertEqual(bad["bad.md"], "misplaced")
         self.assertNotIn("legacy.md", bad)
 
+    def test_quoted_casefolded_plan_status_is_consistent_in_cli_checks(self):
+        self.write_common()
+        active = self.root / "docs" / "plans" / "active"
+        completed = self.root / "docs" / "plans" / "completed"
+        active.mkdir(parents=True)
+        completed.mkdir()
+        (active / "initialization.md").write_text(
+            '---\nsize: medium\nstatus: "IN_PROGRESS"\nrepository_mode: git\n---\n', encoding="utf-8")
+        (completed / "done.md").write_text(
+            "---\nsize: medium\nstatus: 'COMPLETED'\n---\n", encoding="utf-8")
+        self.write_memory()
+
+        for command in (("plans",), ("check",)):
+            result = self.run_audit(*command, "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            rows = json.loads(result.stdout)
+            self.assertFalse(any(row["kind"] == "plans" and row["status"] in ("stale", "misplaced")
+                                 for row in rows))
+
+    def test_invalid_utf8_files_report_paths_without_aborting_other_checks(self):
+        self.write_common()
+        (self.root / "docs" / "initialization.md").write_bytes(b"# broken\n\xff")
+        (self.root / "docs" / "notes.md").write_bytes(b"[bad](absent.md)\n\xff")
+        (self.root / "docs" / "links.md").write_text("[bad](absent.md)\n", encoding="utf-8")
+        active = self.root / "docs" / "plans" / "active"
+        active.mkdir(parents=True)
+        (active / "broken-plan.md").write_bytes(b"---\nstatus: in_progress\n---\n\xff")
+        for command in (("check",), ("dead-links",)):
+            result = self.run_audit(*command, "--json")
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertNotIn("Traceback", result.stdout + result.stderr)
+            rows = json.loads(result.stdout)
+            paths = {row.get("path", row.get("file", row.get("source"))) for row in rows
+                     if row["status"] == "invalid"}
+            if command[0] == "check":
+                self.assertIn("docs/initialization.md", paths)
+                self.assertIn("docs/notes.md", paths)
+                self.assertIn("docs/plans/active/broken-plan.md", paths)
+                self.assertTrue(any(row.get("target") == "absent.md" for row in rows))
+            else:
+                self.assertIn("docs/initialization.md", paths)
+                self.assertIn("docs/notes.md", paths)
+                self.assertIn("docs/plans/active/broken-plan.md", paths)
+            text_result = self.run_audit(*command)
+            self.assertEqual(text_result.returncode, 1, text_result.stdout + text_result.stderr)
+            self.assertNotIn("Traceback", text_result.stdout + text_result.stderr)
+            self.assertIn("docs/notes.md", text_result.stdout)
+
+    def test_old_completed_plan_remains_valid_historical_record(self):
+        self.write_common()
+        self.write_memory()
+        completed = self.root / "docs" / "plans" / "completed"
+        completed.mkdir(parents=True)
+        path = completed / "initialization.md"
+        path.write_text("---\nstatus: done\nsize: medium\n---\n", encoding="utf-8")
+        os.utime(path, (946684800, 946684800))
+
+        plans = self.run_audit("plans", "--json")
+        self.assertEqual(plans.returncode, 0, plans.stdout + plans.stderr)
+        self.assertEqual(json.loads(plans.stdout)[0]["status"], "ok")
+        check = self.run_audit("check", "--json")
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_old_active_plan_is_warning_and_not_a_command_failure(self):
+        self.write_common()
+        self.write_memory()
+        active = self.root / "docs" / "plans" / "active"
+        active.mkdir(parents=True)
+        path = active / "initialization.md"
+        path.write_text("---\nstatus: in_progress\nsize: medium\n---\n", encoding="utf-8")
+        os.utime(path, (946684800, 946684800))
+
+        plans = self.run_audit("plans", "--json")
+        self.assertEqual(plans.returncode, 0, plans.stdout + plans.stderr)
+        self.assertEqual(json.loads(plans.stdout)[0]["status"], "warn")
+        check = self.run_audit("check", "--json")
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_birth_record_location_is_bound_to_size(self):
         self.write_common()
         small = self.root / "docs" / "initialization.md"
         small.write_text("---\nsize: small\nrepository_mode: no-git\n---\n", encoding="utf-8")
         result = self.run_audit("check", "--json")
         rows = json.loads(result.stdout)
-        self.assertTrue(any(row["kind"] == "birth_record" and row["status"] == "found" for row in rows))
+        birth = next(row for row in rows if row["kind"] == "birth_record")
+        self.assertEqual(birth["status"], "warn")
+        self.assertIn("not completion evidence", birth["detail"])
 
         small.unlink()
         completed = self.root / "docs" / "plans" / "completed"
@@ -106,6 +193,156 @@ class AuditTest(unittest.TestCase):
             "---\nstatus: done\nsize: medium\nrepository_mode: git\n---\n", encoding="utf-8")
         rows = json.loads(self.run_audit("check", "--json").stdout)
         self.assertTrue(any(row["kind"] == "birth_record" and row["status"] == "found" for row in rows))
+
+    def test_active_medium_birth_record_passes_before_archival(self):
+        self.write_common()
+        active = self.root / "docs" / "plans" / "active"
+        active.mkdir(parents=True)
+        self.write_memory()
+        (active / "initialization.md").write_text(
+            "---\nstatus: in_progress\nsize: medium\nrepository_mode: git\n---\n",
+            encoding="utf-8")
+
+        result = self.run_audit("check", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        rows = json.loads(result.stdout)
+        birth = next(row for row in rows if row["kind"] == "birth_record")
+        self.assertEqual(birth["status"], "found")
+        self.assertEqual(birth["path"], "docs/plans/active/initialization.md")
+        self.assertEqual(birth["detail"], "status: in_progress")
+
+    def test_birth_record_fails_when_no_valid_location_exists(self):
+        self.write_common()
+
+        rows = json.loads(self.run_audit("check", "--json").stdout)
+        birth = next(row for row in rows if row["kind"] == "birth_record")
+
+        self.assertEqual(birth["status"], "missing")
+        self.assertIn("docs/plans/active/initialization.md", birth["path"])
+
+    def test_quoted_case_insensitive_size_and_small_in_progress_are_valid(self):
+        self.write_common()
+        small = self.root / "docs" / "initialization.md"
+        (self.root / "docs" / "STRUCTURE.md").write_text(
+            "# Index\n\n| Document | Description |\n|---|---|\n| [Initialization](initialization.md) | Birth record |\n",
+            encoding="utf-8")
+        small.write_text(
+            "---\nstatus: \"IN_PROGRESS\"\nsize: ' SMALL '\n---\n",
+            encoding="utf-8")
+
+        result = self.run_audit("check", "--json")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        birth = next(row for row in json.loads(result.stdout) if row["kind"] == "birth_record")
+        self.assertEqual(birth["status"], "found")
+        self.assertEqual(birth["size"], "small")
+        self.assertEqual(birth["detail"], "status: in_progress")
+
+    def test_quoted_medium_size_and_status_are_valid_in_active_location(self):
+        self.write_common()
+        active = self.root / "docs" / "plans" / "active"
+        active.mkdir(parents=True)
+        self.write_memory()
+        (active / "initialization.md").write_text(
+            "---\nstatus: in_progress\nsize: \"MEDIUM\"\n---\n", encoding="utf-8")
+
+        result = self.run_audit("check", "--json")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        birth = next(row for row in json.loads(result.stdout) if row["kind"] == "birth_record")
+        self.assertEqual((birth["status"], birth["size"], birth["detail"]),
+                         ("found", "medium", "status: in_progress"))
+
+    def test_unknown_size_is_rejected_with_expected_values(self):
+        self.write_common()
+        small = self.root / "docs" / "initialization.md"
+        for size in ("", "medium/large", "中型", "business-medium"):
+            with self.subTest(size=size):
+                small.write_text(f"---\nsize: '{size}'\n---\n", encoding="utf-8")
+                rows = json.loads(self.run_audit("check", "--json").stdout)
+                birth = next(row for row in rows if row["kind"] == "birth_record")
+                self.assertEqual(birth["status"], "invalid")
+                self.assertIn("expected small, medium, or large", birth["detail"])
+
+    def test_empty_and_title_only_birth_records_are_not_found(self):
+        self.write_common()
+        path = self.root / "docs" / "initialization.md"
+        for label, content, expected in (
+            ("empty", "", "invalid"),
+            ("title only", "# Initialization\n", "warn"),
+            ("metadata without status", "---\nsize: small\n---\n", "warn"),
+        ):
+            with self.subTest(label=label):
+                path.write_text(content, encoding="utf-8")
+                rows = json.loads(self.run_audit("check", "--json").stdout)
+                birth = next(row for row in rows if row["kind"] == "birth_record")
+                self.assertEqual(birth["status"], expected)
+                self.assertNotEqual(birth["status"], "found")
+
+    def test_unknown_explicit_birth_status_is_rejected(self):
+        self.write_common()
+        (self.root / "docs" / "initialization.md").write_text(
+            "---\nsize: small\nstatus: initializing\n---\n", encoding="utf-8")
+
+        rows = json.loads(self.run_audit("check", "--json").stdout)
+        birth = next(row for row in rows if row["kind"] == "birth_record")
+
+        self.assertEqual(birth["status"], "invalid")
+        self.assertIn("expected in_progress, done, or cancelled", birth["detail"])
+
+    def test_quoted_casefolded_legacy_status_aliases_remain_valid(self):
+        self.write_common()
+        path = self.root / "docs" / "initialization.md"
+        for raw_status, expected in (("'COMPLETED'", "done"), ('"PROPOSED"', "in_progress")):
+            with self.subTest(status=raw_status):
+                path.write_text(
+                    f"---\nsize: small\nstatus: {raw_status}\n---\n", encoding="utf-8")
+                rows = json.loads(self.run_audit("check", "--json").stdout)
+                birth = next(row for row in rows if row["kind"] == "birth_record")
+                self.assertEqual(birth["status"], "found")
+                self.assertEqual(birth["detail"], f"status: {expected}")
+
+    def test_multiple_birth_records_report_conflict(self):
+        self.write_common()
+        (self.root / "docs" / "initialization.md").write_text(
+            "---\nsize: small\nstatus: in_progress\n---\n", encoding="utf-8")
+        active = self.root / "docs" / "plans" / "active"
+        active.mkdir(parents=True)
+        (active / "initialization.md").write_text(
+            "---\nsize: medium\nstatus: in_progress\n---\n", encoding="utf-8")
+
+        rows = json.loads(self.run_audit("check", "--json").stdout)
+        birth = next(row for row in rows if row["kind"] == "birth_record")
+
+        self.assertEqual(birth["status"], "conflict")
+        self.assertIn("docs/initialization.md", birth["path"])
+        self.assertIn("docs/plans/active/initialization.md", birth["path"])
+
+    def test_medium_profile_requires_memory_if_memory_directory_is_absent(self):
+        self.write_common()
+        active = self.root / "docs" / "plans" / "active"
+        active.mkdir(parents=True)
+        (active / "initialization.md").write_text(
+            "---\nstatus: in_progress\nsize: medium\n---\n", encoding="utf-8")
+
+        rows = json.loads(self.run_audit("check", "--json").stdout)
+        memory = next(row for row in rows if row["kind"] == "memory")
+        self.assertEqual(memory["status"], "missing")
+
+    def test_memory_whitespace_and_invalid_utf8_fail_without_crashing(self):
+        self.write_common()
+        memory = self.root / ".agents" / "memory"
+        memory.mkdir(parents=True)
+        (self.root / "AGENTS.md").write_text(
+            "# Rules\n.agents/memory/MEMORY.md\n## 项目记忆\n", encoding="utf-8")
+        index = memory / "MEMORY.md"
+        for label, content, status in (("whitespace", b" \n\t", "empty"),
+                                       ("invalid", b"\xff", "invalid")):
+            with self.subTest(label=label):
+                index.write_bytes(content)
+                result = self.run_audit("memory", "--json")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                rows = json.loads(result.stdout)
+                self.assertTrue(any(row["status"] == status for row in rows))
 
 
 class BugfixEvalRecordTest(AuditTest):
@@ -128,6 +365,13 @@ class BugfixEvalRecordTest(AuditTest):
         self.assertEqual(rows[0]["status"], "error")
         self.assertEqual(rows[0]["file"], "docs/problems/bugfix/b1.md")
 
+    def test_quoted_casefolded_fixed_status_still_requires_eval_fields(self):
+        self.write_bugfix("b1.md", 'status: "FIXED"\ncreated_at: 2026-10-28\neval: scored')
+        rows = self.eval_rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "error")
+        self.assertIn("eval_fixture", rows[0]["detail"])
+
     def test_skipped_with_reason_passes(self):
         self.write_bugfix(
             "b1.md",
@@ -146,6 +390,45 @@ class BugfixEvalRecordTest(AuditTest):
             "eval_fixture: bed\neval_command: cmd\neval_expect: ok\n"
             "eval_last_scored: 2026-10-28")
         self.assertEqual(self.eval_rows()[0]["status"], "ok")
+
+    def test_scored_requires_all_four_nonempty_fields(self):
+        required = ("eval_fixture", "eval_command", "eval_expect", "eval_last_scored")
+        values = {
+            "eval_fixture": "bed",
+            "eval_command": "cmd",
+            "eval_expect": "ok",
+            "eval_last_scored": "2026-10-28",
+        }
+        for missing in required:
+            with self.subTest(missing=missing):
+                fields = [f"{key}: {value}" for key, value in values.items() if key != missing]
+                self.write_bugfix(
+                    "b1.md",
+                    "status: fixed\ncreated_at: 2026-10-28\neval: scored\n" + "\n".join(fields),
+                )
+                row = self.eval_rows()[0]
+                self.assertEqual(row["status"], "error")
+                self.assertIn(missing, row["detail"])
+
+    def test_scored_empty_required_field_is_error_but_score_is_optional(self):
+        self.write_bugfix(
+            "b1.md",
+            "status: fixed\ncreated_at: 2026-10-28\neval: scored\n"
+            "eval_fixture: bed\neval_command: cmd\neval_expect: '  '\n"
+            "eval_last_scored: 2026-10-28\n",
+        )
+        row = self.eval_rows()[0]
+        self.assertEqual(row["status"], "error")
+        self.assertIn("eval_expect", row["detail"])
+
+    def test_quoted_new_created_at_is_subject_to_scored_fields(self):
+        self.write_bugfix(
+            "b1.md",
+            'status: fixed\ncreated_at: "2026-10-28"\neval: scored\n',
+        )
+        row = self.eval_rows()[0]
+        self.assertEqual(row["status"], "error")
+        self.assertIn("eval_fixture", row["detail"])
 
     def test_created_at_placeholder_is_exempt_with_warn(self):
         self.write_bugfix("b1.md", "status: fixed\ncreated_at: [YYYY-MM-DD]")
@@ -219,6 +502,35 @@ class EvalBaselineTest(AuditTest):
         (self.root / "assets" / "references" / "eval-baseline.md").unlink()
         rows = self.eval_rows()
         self.assertEqual(rows[0]["status"], "skip")
+
+    def test_unreadable_ledger_and_manifest_are_structured_aggregate_failures(self):
+        self.write_common()
+        (self.root / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+        self.write_baseline()
+        (self.root / ".git").mkdir()
+        baseline = self.root / "assets" / "references" / "eval-baseline.md"
+        baseline.write_bytes(b"# ledger\n\xff")
+        result = self.run_audit("check", "--json")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+        rows = json.loads(result.stdout)
+        ledger_error = next(row for row in rows if row.get("kind") == "eval_baseline")
+        self.assertEqual(ledger_error["status"], "invalid")
+        self.assertEqual(ledger_error["error_code"], "read_error")
+        self.assertEqual(ledger_error["path"], "assets/references/eval-baseline.md")
+        self.assertTrue(any(row.get("kind") == "line_budget" for row in rows))
+
+        (self.root / "package.json").write_bytes(b"{\xff")
+        result = self.run_audit("check", "--json")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+        rows = json.loads(result.stdout)
+        manifest_error = next(
+            row for row in rows
+            if row.get("kind") == "drift" and row.get("error_code") == "read_error"
+        )
+        self.assertEqual(manifest_error["path"], "package.json")
+        self.assertTrue(any(row.get("kind") == "line_budget" for row in rows))
 
     def test_empty_table_skips_even_with_pending_commits(self):
         self.write_common()

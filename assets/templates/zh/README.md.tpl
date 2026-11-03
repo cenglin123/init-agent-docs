@@ -1,6 +1,6 @@
 # [项目名]
 
-<!-- 生成本文件前，用第 0 步收集的信息填充所有 [方括号] 占位符。 -->
+<!-- 生成本文件前，用调查阶段收集的信息填充所有 [方括号] 占位符。 -->
 <!-- 最终文件不得残留 HTML 注释或 [方括号] 占位符。 -->
 
 [1–2 句话说明这个项目做什么、面向谁。]
@@ -67,13 +67,14 @@ cd [项目目录]
 [项目根]/
 ├── src/           # 源代码
 ├── tests/         # 测试
-├── docs/          # 文档（详见 docs/overview.md）
+├── docs/          # 文档与当前状态
 └── scripts/       # 工具脚本
 ```
 
 <!-- Medium/Large profile only -->
 <!-- 如有架构文档，指向它： -->
 详细的架构说明见 [docs/overview.md](docs/overview.md)。
+<!-- /Medium/Large profile only -->
 
 ## 文档
 
@@ -90,6 +91,10 @@ cd [项目目录]
 <!-- /Medium/Large profile only -->
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 变更记录 |
 | [docs/CURRENT.md](docs/CURRENT.md) | 当前任务状态 |
+| [docs/audit-checklist.md](docs/audit-checklist.md) | 文档审计与改进候选 |
+<!-- Small profile only -->
+| [docs/initialization.md](docs/initialization.md) | 初始化出生档案 |
+<!-- /Small profile only -->
 
 ## 贡献
 

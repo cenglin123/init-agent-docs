@@ -15,14 +15,13 @@
 用法：
     python scripts/check_all.py            # 全量输出
     python scripts/check_all.py --quiet    # 静默模式（完工清单默认用这个）
-    python scripts/check_all.py --small    # 小型项目模式（跳过记忆/STRUCTURE 检查）
+    python scripts/check_all.py --small    # 小型项目模式（跳过记忆检查）
 """
 from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -33,11 +32,14 @@ def _has_file(rel: str) -> bool:
     return (ROOT / rel).is_file()
 
 
-def _file_lines(rel: str) -> int:
+def _read_nonblank_utf8(rel: str) -> tuple[bool, str]:
     try:
-        return len((ROOT / rel).read_text(encoding="utf-8").splitlines())
+        text = (ROOT / rel).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        return 0
+        return False, f"{rel} 不存在或无法按 UTF-8 解码"
+    if not text.strip():
+        return False, f"{rel} 为空白文件"
+    return True, text
 
 
 def _run(name: str, cmd: list[str]) -> tuple[bool, str]:
@@ -69,45 +71,96 @@ CHECKS.append(("CHANGELOG", _check_changelog,
 
 
 def _check_line_budget():
-    lines = _file_lines("AGENTS.md")
+    ok, text = _read_nonblank_utf8("AGENTS.md")
+    if not ok:
+        return False, text
+    lines = len(text.splitlines())
     ok = lines <= 250
     detail = f"AGENTS.md: {lines} 行"
     return ok, detail
 
 CHECKS.append(("行数", _check_line_budget,
-              f"超过 250 行——AGENTS.md 中有内容该下沉到 docs/ 或删除"))
+              "恢复非空 UTF-8 AGENTS.md；超过 250 行时将内容下沉到 docs/ 或删除"))
+
+
+def _has_explicit_medium_large_profile() -> tuple[bool, str]:
+    """Reuse audit's birth-record parser to detect a configured project size."""
+    candidates = (
+        "docs/initialization.md",
+        "docs/plans/active/initialization.md",
+        "docs/plans/completed/initialization.md",
+    )
+    if not any((ROOT / rel).is_file() for rel in candidates):
+        return False, ""
+    try:
+        from . import audit as audit_module
+    except ImportError:
+        try:
+            import audit as audit_module
+        except ImportError as exc:
+            return False, f"无法加载 audit.py 检查初始化档案: {exc}"
+
+    try:
+        prior_root, prior_scripts_dir = audit_module.ROOT, audit_module.SCRIPTS_DIR
+        audit_module.ROOT = ROOT
+        audit_module.SCRIPTS_DIR = SCRIPTS_DIR
+        rows = audit_module._check_birth_record()
+        unreadable = next((
+            row for row in rows
+            if row.get("status") == "invalid"
+            and row.get("error_code") == "read_error"
+        ), None)
+        if unreadable:
+            return False, f"无法读取初始化档案 {unreadable['path']}: {unreadable['detail']}"
+        found = any(
+            row.get("size") in ("medium", "large")
+            or any(size in ("medium", "large") for size in row.get("sizes", []))
+            for row in rows
+        )
+        return found, ""
+    except (OSError, UnicodeDecodeError) as exc:
+        return False, f"无法读取初始化档案: {exc}"
+    finally:
+        if "prior_root" in locals():
+            audit_module.ROOT = prior_root
+            audit_module.SCRIPTS_DIR = prior_scripts_dir
 
 
 def _check_memory_touch():
-    """检查记忆系统最近是否有写入（中型+项目）。"""
+    """检查已配置的记忆索引是否存在且可读。"""
     mem_dir = ROOT / (".meta" if SCRIPTS_DIR.parent.name == ".meta" or (ROOT / ".meta" / "memory").is_dir() else ".agents") / "memory"
     if not mem_dir.is_dir():
         if SCRIPTS_DIR.parent.name == ".meta":
             return False, ".meta/memory/ 不存在——知识库记忆系统缺失"
+        profile_exists, profile_error = _has_explicit_medium_large_profile()
+        if profile_error:
+            return False, profile_error
+        if profile_exists:
+            return False, f"{mem_dir.relative_to(ROOT).as_posix()}/ 不存在——显式中大型项目需要记忆系统"
         return True, ""  # 小型项目，无记忆系统
-    # 检查 MEMORY.md 最近修改时间
     mem_file = mem_dir / "MEMORY.md"
     if not mem_file.is_file():
         return False, f"{mem_dir.relative_to(ROOT).as_posix()}/MEMORY.md 不存在——中型+项目需要记忆系统"
-    stat = mem_file.stat()
-    mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-    age_days = (datetime.now(timezone.utc) - mtime).days
-    if age_days > 14:
-        return False, f"MEMORY.md 上次更新 {age_days} 天前——本次如有值得沉淀的记忆，请更新"
-    return True, f"MEMORY.md {age_days} 天前更新"
+    try:
+        content = mem_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False, f"{mem_file.relative_to(ROOT).as_posix()} 无法按 UTF-8 解码"
+    if not content.strip():
+        return False, f"{mem_file.relative_to(ROOT).as_posix()} 为空白文件"
+    return True, f"{mem_file.relative_to(ROOT).as_posix()} 存在且可读"
 
 CHECKS.append(("记忆", _check_memory_touch,
-              "本次对话如有值得沉淀的记忆 → 更新当前记忆目录并同步 AGENTS '项目记忆' 摘要"))
+              "恢复当前记忆目录的非空 UTF-8 MEMORY.md；内容有效性由 Agent 审查，不为年龄消警修改"))
 
 
 def _check_dead_links():
     if not _has_file(f"{SCRIPTS_REL}/audit.py"):
-        return True, ""
+        return False, f"{SCRIPTS_REL}/audit.py 不存在——无法执行死链审计"
     ok, detail = _run("死链", [f"{SCRIPTS_REL}/audit.py", "dead-links"])
     return ok, detail
 
 CHECKS.append(("死链", _check_dead_links,
-              "检查标 dead 的链接目标是否确实不存在——可能是路径拼写或文件被移动"))
+              "恢复 audit.py 并检查标记 dead 的链接目标是否确实不存在"))
 
 
 def main() -> int:

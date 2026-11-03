@@ -3,7 +3,7 @@
 > 记录 API 的设计约定和非显而易见的行为。具体端点列表可从代码获取，这里只记约定。
 > 修改本文件后同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->
 
 ## 通用约定
 

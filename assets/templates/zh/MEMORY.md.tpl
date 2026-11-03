@@ -4,7 +4,7 @@
 > 关键摘要已内联在 AGENTS.md「项目记忆」段——本文件是详细版本。
 > **索引段由 `python scripts/maintain.py` 自动重建——覆盖 `.agents/memory/` 记忆条目与 `docs/problems/bugfix/` 文档；agent 只负责经验的沉淀与检索，禁止手工编辑标记段内容。**
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->
 
 ## 记忆条目索引
 

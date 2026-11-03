@@ -3,7 +3,7 @@
 > 记录开发和部署中遇到的坑。每条记录包括：现象、原因、解决方案。
 > 修改本文件后同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->
 
 <!--
 何时填写：实际踩到坑、且这个坑无法从代码 / 文档直接看出来时。空档没关系，
@@ -21,7 +21,7 @@
 -->
 
 <!-- 可选片段：UTF-8 编码（适用于在 Windows 上开发、或文件名/内容含中文的项目；
-     纯 Linux/macOS 且全英文项目可整段删除）
+     纯 Linux/macOS 且全英文项目可整段删除；启用时保留下方正文） -->
 
 ## UTF-8 编码
 
@@ -36,10 +36,13 @@
 - 在 `.editorconfig` 中设置 `charset = utf-8`（如项目使用 EditorConfig）
 - VS Code 用户在 settings.json 中设置 `"files.encoding": "utf-8"`
 
+<!-- Git profile only -->
 ### Git 与中文路径
 **现象**：`git status` 或 `git diff` 中，中文文件名显示为 `\345\274\200\345\217\221...` 这样的八进制转义序列，无法阅读。
 **原因**：Git 默认对非 ASCII 文件名进行 quote 转义。
 **解决**：执行 `git config --global core.quotepath false`，让 Git 原样显示中文文件名。
+
+<!-- /Git profile only -->
 
 ### 终端与 Shell
 **现象**：脚本输出中文时终端显示乱码，或 `print()` 抛出编码错误。
@@ -48,5 +51,3 @@
 - Windows Terminal 默认已支持 UTF-8，推荐使用
 - 旧版 cmd 可执行 `chcp 65001` 切换到 UTF-8 代码页
 - Python 脚本开头可设置 `PYTHONUTF8=1` 环境变量强制 UTF-8 模式
-
--->

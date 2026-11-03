@@ -128,6 +128,51 @@ class MaintainPipelineTestCase(unittest.TestCase):
         check = self.run_maintain("--check")
         self.assertEqual(check.returncode, 1)
 
+    def test_invalid_utf8_memory_index_and_entry_fail_without_tracebacks(self) -> None:
+        paths = (
+            self.root / ".agents" / "memory" / "MEMORY.md",
+            self.root / ".agents" / "memory" / "user" / "role.md",
+            self.root / "docs" / "problems" / "bugfix" / "broken.md",
+        )
+        for path in paths:
+            with self.subTest(path=path.name):
+                (self.root / ".agents" / "memory" / "MEMORY.md").write_text(
+                    MEMORY_MD, encoding="utf-8")
+                (self.root / ".agents" / "memory" / "user" / "role.md").write_text(
+                    "# 用户画像\n", encoding="utf-8")
+                broken = self.root / "docs" / "problems" / "bugfix" / "broken.md"
+                broken.unlink(missing_ok=True)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"\xff")
+                shutil.copy(AUDIT_SCRIPT, self.root / "scripts" / "audit.py")
+                for args in (("--memory-index",), ("--check",), ()):
+                    result = self.run_maintain(*args)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(path.relative_to(self.root).as_posix(), result.stdout)
+                    self.assertNotIn("Traceback", result.stdout + result.stderr)
+
+    def test_check_reports_invalid_utf8_docs_and_plans_without_traceback(self) -> None:
+        shutil.copy(AUDIT_SCRIPT, self.root / "scripts" / "audit.py")
+        docs = self.root / "docs"
+        (docs / "plans" / "active").mkdir(parents=True)
+        (self.root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+        (docs / "STRUCTURE.md").write_text("# Index\n", encoding="utf-8")
+        cases = (
+            (docs / "initialization.md", b"# broken\n\xff"),
+            (docs / "notes.md", b"# note\n\xff"),
+            (docs / "audit-checklist.md", b"# checklist\n\xff"),
+            (docs / "plans" / "active" / "plan.md", b"---\nstatus: in_progress\n---\n\xff"),
+        )
+        for path, content in cases:
+            with self.subTest(path=path.relative_to(self.root).as_posix()):
+                for candidate, _ in cases:
+                    candidate.unlink(missing_ok=True)
+                path.write_bytes(content)
+                result = self.run_maintain("--check")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(path.relative_to(self.root).as_posix(), result.stdout)
+                self.assertNotIn("Traceback", result.stdout + result.stderr)
+
     def test_no_markers_fails(self) -> None:
         index = self.root / ".agents" / "memory" / "MEMORY.md"
         index.write_text("# 项目记忆索引\n\n无标记段的旧版文件。\n", encoding="utf-8")
@@ -305,12 +350,67 @@ class MaintainPipelineTestCase(unittest.TestCase):
         self.assertNotIn("sentinel-git-invoked", result.stdout + result.stderr)
         self.assertIn("文件时间", result.stdout)
 
+    def test_nested_no_git_root_does_not_inherit_parent_git_capability(self) -> None:
+        import importlib.util
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location("nested_maintain", ASSET_SCRIPT)
+        maintain = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(maintain)
+        (self.root / ".git").mkdir()
+        child = self.root / "nested-no-git"
+        child.mkdir()
+        entry = child / "memory.md"
+        entry.write_text("# Memory\n", encoding="utf-8")
+        with patch.object(maintain, "ROOT", child), patch.object(maintain, "BUGFIX_DIR", child / "absent"), patch.object(maintain.subprocess, "run") as run:
+            self.assertFalse(maintain._is_git_repo())
+            self.assertEqual(maintain._git_recent(), [])
+            self.assertEqual(maintain._memory_last_update_ts([entry]), entry.stat().st_mtime)
+            run.assert_not_called()
+        # A worktree pointer file at the target root still declares Git capability.
+        (child / ".git").write_text("gitdir: ../.git/worktrees/child\n", encoding="utf-8")
+        with patch.object(maintain, "ROOT", child):
+            self.assertTrue(maintain._is_git_repo())
+
     def test_delegated_audit_failure_propagates(self) -> None:
         (self.root / "scripts" / "audit.py").write_text(
             "raise SystemExit(7)\n", encoding="utf-8")
         result = self.run_maintain()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("audit.py check (exit 7)", result.stdout)
+
+    def test_old_plan_age_warnings_do_not_fail_maintenance_check(self) -> None:
+        shutil.copy(AUDIT_SCRIPT, self.root / "scripts" / "audit.py")
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "STRUCTURE.md").write_text(
+            "# Index\n\n| Document | Description |\n|---|---|\n"
+            "| [Initialization](initialization.md) | Birth record |\n",
+            encoding="utf-8")
+        (docs / "initialization.md").write_text(
+            "---\nsize: small\nstatus: in_progress\nrepository_mode: no-git\n---\n",
+            encoding="utf-8")
+        (self.root / "AGENTS.md").write_text(
+            "# Project\n.agents/memory/MEMORY.md\n## 项目记忆\n", encoding="utf-8")
+
+        completed = docs / "plans" / "completed"
+        completed.mkdir(parents=True)
+        old_done = completed / "historical.md"
+        old_done.write_text("---\nstatus: done\n---\n", encoding="utf-8")
+        os.utime(old_done, (946684800, 946684800))
+        self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
+        self.assertEqual(self.run_maintain("--check").returncode, 0)
+
+        active = docs / "plans" / "active"
+        active.mkdir()
+        old_active = active / "ongoing.md"
+        old_active.write_text("---\nstatus: in_progress\n---\n", encoding="utf-8")
+        os.utime(old_active, (946684800, 946684800))
+        check = self.run_maintain("--check")
+
+        self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+        self.assertIn("WARN", check.stdout)
+        self.assertIn("ongoing.md", check.stdout)
 
 
 if __name__ == "__main__":

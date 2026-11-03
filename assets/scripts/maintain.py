@@ -50,12 +50,8 @@ GIT_LOG_LIMIT = 10
 
 
 def _is_git_repo() -> bool:
-    """Detect whether ROOT is inside a Git repository without calling git."""
-    return (ROOT / ".git").exists() or any(
-        (ancestor / ".git").exists()
-        for ancestor in ROOT.parents
-        if ancestor != ancestor.parent  # stop at filesystem root
-    )
+    """Detect the target root's Git capability without probing ancestors."""
+    return (ROOT / ".git").exists()
 
 _REBUILT_LINE_RE = re.compile(r"^> 最近重建：.*\n?", re.MULTILINE)
 
@@ -75,6 +71,17 @@ def _memory_files() -> list[Path]:
         p for p in MEMORY_DIR.rglob("*.md")
         if p.name != "MEMORY.md" and "__pycache__" not in p.parts
     )
+
+
+def _memory_utf8_problem() -> str | None:
+    """Return the first unreadable memory Markdown path, if any."""
+    paths = ([MEMORY_INDEX] if MEMORY_INDEX.is_file() else []) + _memory_files() + _bugfix_files()
+    for path in paths:
+        try:
+            path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return str(path.relative_to(ROOT)).replace("\\", "/")
+    return None
 
 
 def _entry_title(path: Path) -> str:
@@ -97,7 +104,7 @@ def _entry_title(path: Path) -> str:
             m = re.match(r"^#+\s*(.+)$", stripped)
             title = (m.group(1) if m else stripped).strip()
             return title[:MAX_TITLE_LEN]
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         pass
     return path.stem
 
@@ -223,8 +230,13 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
     """Rebuild the MEMORY.md index marker section.
 
     Returns (status, detail); status ∈
-    ok / rebuilt / stale / missing / no-markers / skip.
+    ok / rebuilt / stale / missing / no-markers / invalid / skip.
     """
+    if MEMORY_DIR.is_dir():
+        invalid_path = _memory_utf8_problem()
+        if invalid_path:
+            return "invalid", f"{invalid_path} is not readable UTF-8; repair this file before rebuilding"
+
     # A knowledge base has exactly one index writer: memory_index.py.
     indexer = SCRIPTS_DIR / "memory_index.py"
     if MEMORY_REL == ".meta/memory":
@@ -311,11 +323,14 @@ def audit_recency() -> tuple[str, str]:
     诱发凑数编辑（Goodhart）。状态唯一来源是 audit-checklist.md 末尾
     「审计记录」段的日期：裁决过就追加记录，"已判断 = 已销警"。
 
-    Returns (status, detail); status ∈ ok / warn / skip.
+    Returns (status, detail); status ∈ ok / warn / skip / invalid.
     """
     if not AUDIT_CHECKLIST.is_file():
         return "skip", "no docs/audit-checklist.md"
-    text = _read(AUDIT_CHECKLIST)
+    try:
+        text = _read(AUDIT_CHECKLIST)
+    except (OSError, UnicodeDecodeError) as exc:
+        return "invalid", f"{AUDIT_CHECKLIST.relative_to(ROOT).as_posix()}: cannot read or decode UTF-8; inspect and repair file bytes ({exc})"
     marker = "## 审计记录"
     section = text[text.find(marker):] if marker in text else text
     dates = re.findall(r"\d{4}-\d{2}-\d{2}", section)
@@ -400,6 +415,7 @@ _GLYPHS = {
     "rebuilt": "REBUILD",
     "stale": "STALE",
     "missing": "MISS",
+    "invalid": "INVALID",
     "no-markers": "NOMARK",
     "empty": "EMPTY",
     "skip": "SKIP",
@@ -420,8 +436,12 @@ def run_full(*, check_only: bool) -> int:
 
     idx_status, idx_detail = rebuild_memory_index(check_only=check_only)
     print(_line(idx_status, f"memory index: {idx_detail}"))
-    if idx_status in ("missing", "no-markers") or (check_only and idx_status == "stale"):
+    if idx_status in ("missing", "no-markers", "invalid") or (check_only and idx_status == "stale"):
         failures += 1
+    if idx_status == "invalid":
+        print()
+        print("维护完成：1 项需要处理")
+        return 1
 
     audit = _run_script(f"{SCRIPTS_REL}/audit.py", "check")
     if audit is None:
@@ -429,7 +449,7 @@ def run_full(*, check_only: bool) -> int:
     else:
         rc, out = audit
         print(_line("ok" if rc == 0 else "fail", f"audit.py check (exit {rc})"))
-        if out and rc != 0:
+        if out:
             for line in out.splitlines():
                 print(f"           {line}")
         if rc != 0:
@@ -441,6 +461,8 @@ def run_full(*, check_only: bool) -> int:
 
     rec_status, rec_detail = audit_recency()
     print(_line(rec_status, f"audit recency: {rec_detail}"))
+    if rec_status == "invalid":
+        failures += 1
 
     if not check_only:
         git_lines = _git_recent()

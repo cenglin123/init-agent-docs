@@ -1,13 +1,15 @@
 # 当前任务状态
 
 > 只记录"此刻在做什么、做到哪了、下一步是什么"，不做历史累积。
-> 任务完成后清空或覆盖。复杂任务请指向 `docs/plans/active/` 中的详细计划。
->
-> **多 Agent 并行时**：本文件不是真相源。把任务分配表、状态流转、owner/reviewer 全部写进
-> `docs/plans/active/<计划名>.md`；本文件只保留"当前活跃计划入口指针"。否则多个 owner
-> 会互相覆盖，状态彻底失真。
+> 初始化期间只放初始化状态文件的入口与下一步，不重复阶段清单；验收后再用于普通任务。
+<!-- Small profile only -->
+> Small 初始化状态在 docs/initialization.md；出生档案完成后原路径保留且不被普通任务覆盖。
+<!-- /Small profile only -->
+<!-- Medium/Large profile only -->
+> 中大型初始化与复杂任务的状态只在关联计划中维护，本文件只留入口；并行时不抄 owner 状态表。
+<!-- /Medium/Large profile only -->
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->
 
 ## 当前任务
 
@@ -26,7 +28,7 @@
 <!-- 下一步最具体、可执行的动作 -->
 
 <!-- Small profile only -->
-<!-- 小型项目：任务简单，不建 plans 目录，handoff 信息直接内联在此文件中。 -->
+<!-- 小型项目：初始化期间只指 docs/initialization.md；后续普通任务 handoff 直接内联本文件。 -->
 
 ## 交接记录
 

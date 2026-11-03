@@ -13,6 +13,8 @@
 | 已知环境陷阱 | [pitfalls.md](pitfalls.md)（如有） |
 | 文件格式约定（frontmatter schema） | [frontmatter-schemas.md](frontmatter-schemas.md)（如有） |
 | Bugfix 档案 | [problems/bugfix/](problems/bugfix/)（逐篇索引见 MEMORY.md，不逐篇登记到本表） |
+| 自维护与规则改进 | [governance.md](governance.md) |
+| 初始化与任务计划 | [plans/](plans/) |
 | 文档一致性审计 | [audit-checklist.md](audit-checklist.md) |
 | 当前任务状态 | [CURRENT.md](CURRENT.md) |
 | 变更记录 | [CHANGELOG.md](CHANGELOG.md) |

@@ -13,16 +13,25 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 ---
 
+## 方法版本
+
+当前方法标识：`context-bounded-l1-v2`。本节之后定义当前验收方法；回归表保留各次实际执行范围与结果，历史记分不按新方法追写或改分。新记录注明采用的方法标识。
+
 ## 测试项目矩阵
 
-准备 3 组典型项目作为 test bed，覆盖四个 Profile 轴（Git/no-Git × Small/Medium）：
+准备四个 profile 项目作为 test bed，覆盖四个 Profile 轴（Git/no-Git × Small/Medium）：
 
 | 项目代号 | 规模 | 特征 | 初始化预期选项 | Profile |
 |---------|------|------|-------------|---------|
-| `eval-small` | 小型 | Python 单文件脚本（< 5 个核心文件），无现有文档 | 小型：AGENTS.md + docs/CHANGELOG.md + docs/CURRENT.md | Small + Git |
-| `eval-small-nogit` | 小型 | 同 eval-small，但不在 Git 仓库中 | 小型：同上，无 Git 指引 | Small + no-Git |
-| `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | 中型：全套 docs/ + docs/STRUCTURE.md + plans/ | Medium + Git |
-| `eval-medium-nogit` | 中型 | 同 eval-medium，但不在 Git 仓库中 | 中型：全套 docs/，maintain.py 回退到 mtime | Medium + no-Git |
+| `eval-small` | 小型 | Python 单文件脚本（< 5 个核心文件），无现有文档 | Small 必备集合（见下表后清单） | Small + Git |
+| `eval-small-nogit` | 小型 | 同 eval-small，但不在 Git 仓库中 | Small 必备集合；无 Git 指引 | Small + no-Git |
+| `eval-medium` | 中型 | Node.js 全栈应用（15–25 个文件），有 README 和 API 文档 | Medium 必备集合，含治理专题/记忆/维护器 | Medium + Git |
+| `eval-medium-nogit` | 中型 | 同 eval-medium，但不在 Git 仓库中 | Medium 必备集合；无 Git 指引，活性统计回退到 mtime | Medium + no-Git |
+
+必备集合（所有项须逐一核对，不能把文档表中的简称当作完整清单）：
+
+- Small：AGENTS.md、README.md、docs/CURRENT.md、docs/CHANGELOG.md、docs/audit-checklist.md、docs/initialization.md，以及 scripts/changelog.py、scripts/audit.py、scripts/check_all.py。
+- Medium/Large：通用入口/README/CURRENT/CHANGELOG/audit-checklist 与三个脚本，加 docs/STRUCTURE.md、overview.md、deployment.md、governance.md、plans/{active,completed}/、problems/bugfix/_template.md、.agents/memory/{MEMORY.md,user/role.md}、scripts/maintain.py；初始化记录验收前为 plans/active/initialization.md，通过后为 plans/completed/initialization.md。可选专题按实际生成核对。KB 项目将脚本/记忆目录及维护器名按入口路径契约投影。
 
 **新增事实源冲突夹具**：
 
@@ -31,9 +40,9 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 3. `eval-medium` 或 `eval-large`：加入已有 `CLAUDE.md`、`.cursor/rules/project.mdc`、`.github/copilot-instructions.md` 或 repo-local `opencode.json`。预期产物完成**已有 instruction 文件整合**，保留其中已验证的硬约束、Agent 行为限制和禁止事项，不盲目覆盖。
 
 **准备步骤**：
-1. 在临时目录下创建 3 个最小可运行的项目骨架（不必能真正运行，但目录结构和关键文件要真实）
-2. 给每个项目写一段 100 字左右的"项目画像"（技术栈、硬约束、协作模式），作为第 0 步的模拟输入
-3. 用 Git 初始化仓库，确保能测试 pre-commit hook
+1. 在临时目录下创建四个 profile 的项目骨架（不必能真正运行，但目录结构和关键文件要真实）
+2. 给每个项目写一段 100 字左右的"项目画像"（技术栈、硬约束、协作模式），作为调查阶段的模拟输入
+3. 仅 Git profile 使用已有 Git 配置或建立隔离测试仓库；no-Git 不运行 Git。
 
 ---
 
@@ -46,7 +55,10 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 - [ ] `AGENTS.md` 已创建且非空
 - [ ] `AGENTS.md` 是唯一入口：无 `CLAUDE.md` / `GEMINI.md` 残留副本（迁移场景已整合删除）
 - [ ] `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 3` 输出至少一条标题
-- [ ] `docs/CURRENT.md` 已创建
+- [ ] `docs/CURRENT.md`、根 README.md 与 docs/audit-checklist.md 已创建且非空
+- [ ] scripts/changelog.py、scripts/audit.py、scripts/check_all.py 已安装且实际命令可运行（KB 按实际布局）
+- [ ] 所有 profile 的出生档案已写入正确位置：Small 在 docs/initialization.md 原地保留；中大型验收前 active、验收后 completed。进行中状态不能冒充独立验收完成
+- [ ] 新出生档案的 size/repository_mode/status 使用初始化参考规定的枚举；来源组件哈希与可回取的语义生成基线正文一致
 - [ ] `AGENTS.md` 中所有链接指向真实存在的文件（小型项目特别注意死链）
 - [ ] `AGENTS.md` 行数 ≤ 250（小型项目 ≤ 150 更佳）
 - [ ] 未残留未删除的模板指导注释（`<!-- ... -->` 或 `[方括号]` 占位符）
@@ -54,22 +66,32 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 - [ ] 已有 instruction 文件整合：旧 `AGENTS.md` / `CLAUDE.md` / Cursor / Copilot / OpenCode 指令中的硬约束已被读取、去重并保留
 - [ ] 用户提问克制：仓库事实源已经能回答的命令、入口、测试方式、工具链顺序，不应再询问用户
 
+- [ ] 初始化起始有可恢复状态，CURRENT 仅指入口；来源含版本状态与实际组件哈希/生成基线；独立验收后才置 done
+- [ ] Small 最小治理从通用合同投影；无不存在资产的纯文本指引；治理候选与出生档案分离
+
 ### 中型 / 大型额外项
 
 - [ ] `docs/STRUCTURE.md` 存在且索引表与 `docs/` 文件一一对应
 - [ ] `docs/plans/active/` 和 `docs/plans/completed/` 目录存在
+- [ ] governance.md 从 AGENTS 与 STRUCTURE 双导航可达
 - [ ] `docs/overview.md` 已创建且包含至少一句设计决策说明
 - [ ] `docs/deployment.md` 已创建
-- [ ] 出生档案（`docs/plans/completed/initialization.md` 或 `docs/initialization.md`）已写入
 
 ### 大型额外项
 
-- [ ] 迁移的旧文档顶部有"已迁移"标注，未直接删除
+- [ ] 迁移后的约束有明确去向，已迁空旧文档直接删除，正文不留弃用标注
 - [ ] AGENTS.md 或 overview.md 中包含模块级拆分的提示语
+
+### Small 额外项
+
+- [ ] Small 必备集合逐项存在；不建 STRUCTURE、plans、memory、maintain 或 governance 专题，审计全文没有这些不存在资产的操作指引
+- [ ] README、审计清单、CURRENT 与初始化出生档案相互指向真实位置；候选记录与普通任务不覆盖出生档案
 
 ### 脚本验证
 
-- [ ] `scripts/changelog.py titles` 正常输出
+- [ ] `scripts/changelog.py titles` 正常输出，入口保留 titles/show/add/recent 局部操作与不读全文约束
+- [ ] 所有 profile 运行 audit.py check、check_all.py --quiet（Small 加 --small）；中大型额外运行 audit.py memory、maintain.py --check，KB 按实际布局替换
+- [ ] 治理修改的独立复查及冻结基线盲评标定合同在生成入口可发现；同基线 ≥3 独立视角豁免与结论记录口径没有因改写而丢失
 - [ ] `scripts/changelog.py add --title "test" --body "test body"` 成功追加且格式正确
 - [ ] 迁移场景：旧入口副本（`CLAUDE.md` / `GEMINI.md` 等）内容已并入 AGENTS.md 且副本已删除
 - [ ] 已安装 pre-commit hook 时，人为破坏记忆结构（移走 MEMORY.md）后提交应被拒绝
@@ -156,17 +178,17 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 |------|---------|---------|
 | 信息密度低（混入可推导信息） | AGENTS.md 模板 | 收紧模板中的"不要放什么"清单，增加反模式提示 |
 | 导航不清晰 | AGENTS.md 模板"信息导航"段 | 增加具体示例，或调整指针顺序 |
-| 硬约束无工具支撑 | 执行步骤第 6 步 | 为硬约束补配 hook / CI / 检查脚本，使其可机械验证 |
-| 渐进披露不合理 | SKILL.md 设计哲学第 2 条 | 调整 AGENTS.md 行数上限建议，或增加 docs/STRUCTURE.md 的强制要求 |
-| 维护机制缺失 | 执行步骤第 5 步 | 强化"出生档案"和 CHANGELOG 脚本的必做要求 |
-| 事实源裁决错误 | SKILL.md 第 0 / 第 3 步 | 强化可执行事实源优先规则，补充 README 写旧命令的夹具 |
-| 旧指令文件丢失 | SKILL.md 第 1 步 | 扩展已有 instruction 文件整合范围，要求读取 Cursor / Copilot / OpenCode 指令 |
+| 硬约束无工具支撑 | optional-integrations.md 质量 hooks | 为硬约束补配 hook / CI / 检查脚本，使其可机械验证 |
+| 渐进披露不合理 | design-principles.md 地图与事实源 | 调整 AGENTS.md 行数上限建议，或增加 docs/STRUCTURE.md 的强制要求 |
+| 维护机制缺失 | initialization.md 验收与交付 | 强化"出生档案"和 CHANGELOG 脚本的必做要求 |
+| 事实源裁决错误 | initialization.md 调查/迁移 | 强化可执行事实源优先规则，补充 README 写旧命令的夹具 |
+| 旧指令文件丢失 | initialization.md 最小入口与迁移 | 扩展已有 instruction 文件整合范围，要求读取 Cursor / Copilot / OpenCode 指令 |
 
 ---
 
 ## 回归测试执行流程
 
-1. **准备 test bed**：确认 3 组项目骨架可用
+1. **准备 test bed**：确认四个 profile 项目骨架可用
 2. **运行 L1**：对每组执行 skill，过静态自检清单
 3. **运行 L2**：用 12 组话术测试触发（6 组应触发 + 6 组不应触发）
 4. **运行 L3**：选择 1 组 test bed（建议 `eval-medium`）做 baseline 对比盲评
@@ -177,8 +199,15 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 | `4dc052d757c66d325af88648152c9dc7606724d5` | 2026-10-27 | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | — | converge 评议 20261027（3R 评议+盲审） | 基线行；正式记分待首轮全量 eval |
 | `9d2903e45a5217b4d0a5751a57ac41577b6e8592` | 2026-11-01 | L1 partial: scope=step9-static（模板债务段存在/段序在审计记录之前/无残留占位符，AGENTS 完工必检含债务指针；2 结构断言通过） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | — | 标准 converge 1R（ses_e683d8b0，22 项发现修正 21） | 结构吸纳（债务登记）；skipped=4/4 test bed 执行维度、L2/L3 全跳，噪音率 100%，如实计入 |
 | `82606afa5db97c53c2fb9886d38656eecaef02cb` | 2026-11-01 | L1 partial: scope=philosophy5-6-style（标定/局部核对/三问句/边界条款 + AGENTS 完工必检自包含标定契约 + audit-checklist 触发段完整程序；22 静态断言通过） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | 未跑（基线待建） | — | ultraverge 3R×2 + R3 收敛确认（P1 5→4→2 单调收敛） | 哲学段吸纳（评审标定 + 执行不符局部核对）；skipped=4/4 test bed 执行维度、L2/L3 全跳，噪音率 100%，如实计入 |
+| 工作区基于 `006148098bede51adb42b43714cebc684e0f9c91`，dirty；组件哈希见本次外置 instruction-metrics | 2026-11-02 | L1 partial: scope=入口路由、四profile模板投影、治理单源/双导航、恢复/来源合同；L1.5=SmallGit与MediumNoGit合成实物全部机械命令通过 | 未跑 | 未跑 | 未跑 | 未跑 | 尚无因果收益证据 | 默认pytest 124 passed（131.92s）；路由/脚本相关22 passed；外置synthetic-results保留初次投影器误删标记失败及修复 | L1独立Agent实物4/4未由本执行者验收，pilot由维护者另派；L2/L3未跑；此行不冒充真实Agent执行或旧新A/B |
+| 本地未提交候选；`006148098bede51adb42b43714cebc684e0f9c91` 仅为 HEAD 基线，dirty；实际组件见外置 fix-round1-metrics | 2026-11-03 | 方法 context-bounded-l1-v2；L1 partial: scope=四profile入口/KB/生成保真与必备集合合同、size/记忆实质失败回归、嵌套noGit能力边界；L1.5=SmallGit/MediumNoGit最终合成树相同命令全部通过 | 未跑 | 未跑 | 未跑 | 未跑 | 独立发现驱动定点修复，尚无因果收益证据 | 默认pytest 150 passed（133.43s）；脚本针对67 passed，维护/指导33 passed；git diff --check通过 | 真实SmallNoGit/MediumGit/Large恢复pilot及最终独立验收由维护者另记；本行不冒充Agent pilot，初轮失败/记分保留；L2/L3未跑 |
+| 本地未提交中间候选；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线 | 2026-11-03 | 方法 context-bounded-l1-v2；机械全量曾177 passed，但fresh原生审查发现quoted status跨检查不一致和普通MD读取异常；后续候选1 failed/184 passed又暴露读错误文案耦合，均未放行 | 未跑 | 未跑 | 未跑 | 未跑 | 失败证据保留，不以机械通过代替独立验收 | release-native/release-blind原报告及冻结快照；外置fix-round2-full-test-failure.json | 修复按原合同进行；不是新旧A/B，不抹去失败，不改变通过标准 |
+| 本地未提交最终候选；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线，dirty；实际字节见外置release-candidate-metrics | 2026-11-03 | 方法 context-bounded-l1-v2；L1 partial: scope=年龄/状态退出语义、R1必填字段、出生档案兼容/冲突、UTF8结构化诊断、模板profile/导航与插件授权边界；L1.5=最终SmallGit/MediumNoGit合成实物原命令通过 | 未跑 | 未跑 | 未跑 | 未跑 | 保留中间失败；无因果收益结论 | 默认pytest185 passed（121.32s）；audit/check_all定向90 passed；git diff --check通过；release-synthetic保留脚本哈希及实际UTF8可选片段投影证据 | 真实pilot与两条fresh原生独立复核由主协调者另记；本行不冒充真实Agent pilot，L2/L3未跑 |
+| 本地未提交185通过候选，实际源版本见该轮冻结manifest；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线 | 2026-11-03 | 方法 context-bounded-l1-v2；185机械回归通过后，独立盲评仍发现ledger与manifest两处读取边界遗漏，未放行 | 未跑 | 未跑 | 未跑 | 未跑 | 185通过不能代替独立验收 | release-blind原报告追加证据与旧冻结快照保留 | 沿用通过标准补两IO边界和预期读错误聚合保护，不吞逻辑异常 |
+| 本地未提交待发布候选，dirty；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为基线，字节见外置release-candidate-final-metrics | 2026-11-03 | 方法 context-bounded-l1-v2；L1 partial: scope=前述四profile合同与A-F定点、quoted状态全caller一致、MD/ledger/manifest结构化读取失败和聚合继续；L1.5=release-synthetic-final两合成树原命令通过 | 未跑 | 未跑 | 未跑 | 未跑 | 既往失败证据均保留；无因果收益结论 | 默认pytest186 passed（125.44s）；test_audit79 passed；typed guard探针通过；git diff --check通过 | L1真实Agent执行与最终独立验收由主协调者另记；L2/L3全未跑，非旧新A/B或已部署证明 |
+| 本地未提交待发布候选；HEAD `006148098bede51adb42b43714cebc684e0f9c91` 仅为现场基线，dirty=true；实际资产由冻结 publish manifest `7979FBDD3213F208D3490400631E5764C998E846AFC9A0FC12094FED72FC2E65` 字节标识 | 2026-11-03 | context-bounded-l1-v2；L1 partial：真实 Agent pilots 为 SmallNoGit、MediumGit；Large 为 fresh-context 接续；L1.5 合成树为 SmallGit、MediumNoGit；覆盖四 profile、KB 与保护文件 | 未跑 | 未跑 | 未跑 | 未跑 | CLI/ZIP 机械核对不证明质量或因果收益 | 默认 pytest 186 passed（125.44s）；Small 业务断言 exit 0；Medium `npm.cmd test` 13 项、Large `npm.cmd test` 35 项通过；外置 `acceptance/mechanical-release/completed-report.json` 独立机械核对通过 | 既有语义验收范围见外置 release-native/final-native 报告；本次只补机械核对；L2/L3 未跑，无旧新 A/B 或因果结论；GitHub push 待主协调，宿主部署未执行 |
 
-6. **迭代**：根据失败项和评分差，修改 SKILL.md / 模板 / 脚本，再跑一轮
+6. **迭代**：根据失败项和评分差，修改 入口 / 参考 / 模板 / 脚本，再跑一轮
 
 记分说明：
 

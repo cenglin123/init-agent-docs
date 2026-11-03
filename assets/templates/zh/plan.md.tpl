@@ -1,11 +1,11 @@
 ---
 status: in_progress       # in_progress | done | cancelled（写入只用这三个值；legacy 读兼容：completed→done, proposed→in_progress）
 mode: direct-execution    # direct-execution | phased | collaborative
-coordinator: ""           # 协调人（协作模式必填）；没有可写空字符串
+coordinator: ""           # 按任务需要指定协调人；没有可写空字符串
 created_at: ""            # YYYY-MM-DD
 ---
 
-<!-- ⓘ 本文档的治理规则见 AGENTS.md「文档维护原则 → docs/ 文件的治理规则」段 -->
+<!-- 文件治理：Small 见 AGENTS.md「文件治理」；Medium/Large 见 STRUCTURE.md「文件治理」。只保留实际 profile 的指引，生成后删除本注释。 -->
 
 # [计划标题]
 
@@ -24,7 +24,7 @@ created_at: ""            # YYYY-MM-DD
 
 <!--
 阶段划分的原则：
-1. 每个阶段应该能在一个上下文窗口内完成（经验值：涉及 5-10 个文件的修改）
+1. 每个阶段应该能在一个上下文窗口内完成，依据实际任务与剩余上下文决定粒度
 2. 每个阶段结束后系统应该处于可工作状态（不能阶段 1 拆了旧代码、阶段 2 才补新代码）
 3. 阶段之间的依赖要最小化，但执行顺序要明确
 4. 每个阶段要有明确的验证标准，让新上下文的 Agent 能判断"做没做完"
@@ -42,7 +42,7 @@ created_at: ""            # YYYY-MM-DD
 - `✅ completed`：复查通过并确认可交接或可合并
 - 单 Agent 场景可从 `queue` 直接进入 `in_progress`
 - 若 review 未通过，退回 `in_progress`，并在"完成记录"或"决策记录"中写明原因
-- 若 Owner 发现任务粒度、依赖关系或技术方案不合理，应使用 `blocked` 状态上报协调人，而不是私下转包或强行执行
+- 若 Owner 发现任务粒度、依赖关系或技术方案不合理，应使用 `blocked` 状态上报协调人，由 Agent 在既有授权和协调边界内选择重派或调整，不强行执行
 -->
 
 ### 阶段 1：[阶段标题]

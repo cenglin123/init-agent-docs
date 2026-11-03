@@ -128,8 +128,20 @@ DRIFT_PATTERNS: dict[str, list[str]] = {
 # helpers
 # ---------------------------------------------------------------------------
 
+class DocumentReadError(OSError):
+    """Expected failure while reading a project document as UTF-8."""
+
+    def __init__(self, path: Path, cause: OSError | UnicodeDecodeError):
+        self.document_path = path
+        self.cause = cause
+        super().__init__(str(cause))
+
+
 def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise DocumentReadError(path, exc) from exc
 
 
 def _lines(path: Path) -> list[str]:
@@ -250,8 +262,29 @@ _STATUS_MAP: dict[str, str] = {
 
 
 def _normalize_status(val: str) -> str:
-    """Normalize Chinese status values to machine-readable keys."""
-    return _STATUS_MAP.get(val, val)
+    """Normalize quoted, case-insensitive status values to machine-readable keys."""
+    scalar = _normalize_scalar(val)
+    return _STATUS_MAP.get(scalar, scalar)
+
+
+def _read_error(path: Path, exc: Exception, kind: str) -> dict[str, Any]:
+    cause = exc.cause if isinstance(exc, DocumentReadError) else exc
+    rel = str(path.relative_to(ROOT)).replace("\\", "/")
+    return {
+        "kind": kind,
+        "status": "invalid",
+        "error_code": "read_error",
+        "path": rel,
+        "detail": f"cannot read or decode UTF-8; inspect and repair file bytes ({cause})",
+    }
+
+
+def _normalize_scalar(val: str) -> str:
+    """Normalize the simple quoted scalar subset used by project metadata."""
+    scalar = val.strip()
+    if len(scalar) >= 2 and scalar[0] == scalar[-1] and scalar[0] in ("'", '"'):
+        scalar = scalar[1:-1].strip()
+    return scalar.casefold()
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +320,12 @@ def _check_dead_links() -> list[dict[str, Any]]:
         if not path.is_file():
             continue
         source_dir = path.parent
-        for target, _label, lineno in _extract_file_links(_read(path)):
+        try:
+            text = _read(path)
+        except (OSError, UnicodeDecodeError) as exc:
+            results.append(_read_error(path, exc, "read_error"))
+            continue
+        for target, _label, lineno in _extract_file_links(text):
             resolved = _resolve(target, source_dir)
             # 目录不算死链（docs/plans/、docs/problems/bugfix/ 等目录链接）
             exists = resolved.exists()
@@ -334,7 +372,10 @@ def _check_structure() -> list[dict[str, Any]]:
     if not _exists("docs/STRUCTURE.md"):
         return results
 
-    index_entries = _structure_table_links()
+    try:
+        index_entries = _structure_table_links()
+    except (OSError, UnicodeDecodeError) as exc:
+        return [_read_error(ROOT / "docs" / "STRUCTURE.md", exc, "structure")]
     # 索引表目标相对于 docs/（STRUCTURE.md 所在目录）；
     # 孤儿判定统一换算为仓库根相对路径再比较。
     indexed_paths = {"docs/" + e[0] for e in index_entries}
@@ -404,14 +445,17 @@ def _drift_check() -> list[dict[str, Any]]:
     for m in manifests:
         try:
             manifest_text += " " + _read(m).lower()
-        except Exception:
-            continue
+        except DocumentReadError as exc:
+            results.append(_read_error(m, exc, "drift"))
 
     doc_text = ""
     for doc_rel in ["docs/overview.md", "docs/deployment.md"]:
         p = ROOT / doc_rel
         if p.is_file():
-            doc_text += " " + _read(p).lower()
+            try:
+                doc_text += " " + _read(p).lower()
+            except (OSError, UnicodeDecodeError) as exc:
+                results.append(_read_error(p, exc, "drift"))
 
     # Doc mentions → check manifest.
     for tech, keywords in DRIFT_PATTERNS.items():
@@ -456,56 +500,93 @@ def _drift_check() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def _check_birth_record() -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    # Two valid locations depending on project size:
-    # - Small: docs/initialization.md
-    # - Medium/Large: docs/plans/completed/initialization.md
     small_path = "docs/initialization.md"
-    medium_path = "docs/plans/completed/initialization.md"
-    found = False
-    for candidate in [small_path, medium_path]:
-        if _exists(candidate):
-            text = _read(ROOT / candidate)
-            fm = _parse_frontmatter(text)
-            size_val = fm.get("size", "")
-            # Small birth records belong in docs/, not in plans/completed/.
-            # Medium/Large birth records belong in plans/completed/.
-            if candidate == medium_path and size_val == "small":
-                results.append({
-                    "kind": "birth_record",
-                    "status": "invalid",
-                    "path": candidate,
-                    "detail": "small birth record in plans/completed/ (should be docs/initialization.md)",
-                })
-            elif candidate == small_path and size_val in ("medium", "large"):
-                results.append({
-                    "kind": "birth_record",
-                    "status": "invalid",
-                    "path": candidate,
-                    "detail": f"{size_val} birth record in docs/ (should be {medium_path})",
-                })
-            else:
-                results.append({
-                    "kind": "birth_record",
-                    "status": "found",
-                    "path": candidate,
-                })
-            found = True
-            break
-    if not found:
-        results.append({
+    completed_path = "docs/plans/completed/initialization.md"
+    active_path = "docs/plans/active/initialization.md"
+    candidates = [p for p in (small_path, completed_path, active_path) if _exists(p)]
+    if len(candidates) > 1:
+        sizes: list[str] = []
+        for candidate in candidates:
+            try:
+                fm = _parse_frontmatter(_read(ROOT / candidate))
+            except (OSError, UnicodeDecodeError):
+                continue
+            size = _normalize_scalar(fm["size"]) if "size" in fm else ""
+            if size in ("medium", "large"):
+                sizes.append(size)
+        return [{
+            "kind": "birth_record",
+            "status": "conflict",
+            "path": ", ".join(candidates),
+            "sizes": sizes,
+            "detail": "multiple initialization records exist; keep one canonical record",
+        }]
+    if not candidates:
+        return [{
             "kind": "birth_record",
             "status": "missing",
-            "path": "docs/plans/completed/initialization.md or docs/initialization.md",
-        })
-    return results
+            "path": f"{active_path}, {completed_path}, or {small_path}",
+        }]
+
+    candidate = candidates[0]
+    if len(candidates) == 1:
+        try:
+            text = _read(ROOT / candidate)
+        except (OSError, UnicodeDecodeError) as exc:
+            return [_read_error(ROOT / candidate, exc, "birth_record")]
+    if not text.strip():
+        return [{
+            "kind": "birth_record",
+            "status": "invalid",
+            "path": candidate,
+            "detail": "initialization record is empty",
+        }]
+
+    fm = _parse_frontmatter(text)
+    size_val = _normalize_scalar(fm["size"]) if "size" in fm else ""
+    status_val = fm.get("status", "")
+    row: dict[str, Any] = {
+        "kind": "birth_record",
+        "status": "found",
+        "path": candidate,
+        "size": size_val or ("small" if candidate == small_path else ""),
+    }
+
+    if "size" in fm and size_val not in ("small", "medium", "large"):
+        row.update(status="invalid", detail=f"unknown size {fm['size']!r}; expected small, medium, or large")
+    elif status_val and status_val not in ("in_progress", "done", "cancelled"):
+        row.update(
+            status="invalid",
+            detail=f"unknown status {fm['status']!r}; expected in_progress, done, or cancelled",
+        )
+    elif candidate == completed_path and size_val == "small":
+        row.update(status="invalid", detail="small birth record in plans/completed/ (should be docs/initialization.md)")
+    elif candidate == small_path and size_val in ("medium", "large"):
+        row.update(status="invalid", detail=f"{size_val} birth record in docs/ (should be {completed_path})")
+    elif candidate == active_path and size_val and size_val not in ("medium", "large"):
+        row.update(status="invalid", detail="active birth record must have size medium or large")
+    elif candidate == active_path and status_val and status_val != "in_progress":
+        row.update(status="invalid", detail="active birth record must have status in_progress")
+    elif candidate == completed_path and status_val == "in_progress":
+        row.update(status="invalid", detail="in_progress birth record belongs in plans/active/")
+    elif not size_val or not status_val:
+        row.update(
+            status="warn",
+            detail="legacy record missing size or status; compatible for history, not completion evidence",
+        )
+    else:
+        row["detail"] = f"status: {status_val}"
+    return [row]
 
 
 def _check_line_budget() -> list[dict[str, Any]]:
     p = ROOT / "AGENTS.md"
     if not p.is_file():
         return [{"kind": "line_budget", "status": "missing", "lines": 0, "words": 0}]
-    text = _read(p)
+    try:
+        text = _read(p)
+    except (OSError, UnicodeDecodeError) as exc:
+        return [_read_error(p, exc, "line_budget")]
     line_count = len(text.splitlines())
     word_count = len(text.split())
     lines_ok = line_count <= 250
@@ -536,6 +617,23 @@ def _check_memory() -> list[dict[str, Any]]:
 
     # Small projects: memory dir absence is OK
     if not memory_dir.is_dir():
+        required_profile = next((
+            row for row in _check_birth_record()
+            if row.get("size") in ("medium", "large")
+            or any(size in ("medium", "large") for size in row.get("sizes", []))
+        ), None)
+        if required_profile:
+            profile_sizes = required_profile.get("sizes", [])
+            profile_size = required_profile.get("size") or next(
+                (size for size in profile_sizes if size in ("medium", "large")),
+                "medium/large",
+            )
+            results.append({
+                "kind": "memory",
+                "status": "missing",
+                "detail": f"{memory_rel}/ directory required by explicit {profile_size} profile",
+            })
+            return results
         results.append({
             "kind": "memory",
             "status": "missing" if memory_rel == ".meta/memory" else "skip",
@@ -553,18 +651,32 @@ def _check_memory() -> list[dict[str, Any]]:
         })
         return results
 
-    # Check MEMORY.md is not empty
-    if mem_index.stat().st_size == 0:
+    # Check MEMORY.md is readable UTF-8 and contains non-whitespace content.
+    try:
+        memory_text = mem_index.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        results.append({
+            "kind": "memory",
+            "status": "invalid",
+            "detail": f"{memory_rel}/MEMORY.md is not readable UTF-8",
+        })
+        return results
+    if not memory_text.strip():
         results.append({
             "kind": "memory",
             "status": "empty",
-            "detail": f"{memory_rel}/MEMORY.md is empty",
+            "detail": f"{memory_rel}/MEMORY.md is empty or whitespace-only",
         })
+        return results
 
     # Check AGENTS.md contains memory pointer and inline section
     agents_md = ROOT / "AGENTS.md"
     if agents_md.is_file():
-        content = _read(agents_md)
+        try:
+            content = _read(agents_md)
+        except (OSError, UnicodeDecodeError) as exc:
+            results.append(_read_error(agents_md, exc, "memory"))
+            return results
         if f"{memory_rel}/MEMORY.md" not in content:
             results.append({
                 "kind": "memory",
@@ -579,7 +691,7 @@ def _check_memory() -> list[dict[str, Any]]:
             })
 
     # Check referenced memory files exist
-    for target, _label, lineno in _extract_file_links(_read(mem_index)):
+    for target, _label, lineno in _extract_file_links(memory_text):
         resolved = _resolve(target, mem_index.parent)
         if not resolved.is_file():
             results.append({
@@ -641,7 +753,11 @@ def _check_plans() -> list[dict[str, Any]]:
             if f.name == ".gitkeep":
                 continue
             rel = str(f.relative_to(ROOT)).replace("\\", "/")
-            text = _read(f)
+            try:
+                text = _read(f)
+            except (OSError, UnicodeDecodeError) as exc:
+                results.append(_read_error(f, exc, "plans"))
+                continue
             fm = _parse_frontmatter(text)
             status_val = fm.get("status", "")
 
@@ -669,21 +785,21 @@ def _check_plans() -> list[dict[str, Any]]:
                     })
                     continue
 
-            # Check 3: file older than _STALE_DAYS → linger warning
+            # Completed records are historical evidence; age does not invalidate them.
+            # Active records only get a review hint when old.
             try:
                 mtime = f.stat().st_mtime
                 age_days = (now - mtime) / 86400
             except OSError:
                 age_days = 0.0
 
-            if age_days > _STALE_DAYS:
+            if folder == "active" and age_days > _STALE_DAYS:
                 results.append({
                     "kind": "plans",
-                    "status": "linger",
+                    "status": "warn",
                     "file": rel,
                     "detail": f'File not modified in {int(age_days)} days'
-                              f' (threshold: {_STALE_DAYS}d)'
-                              f' — review and either archive or update frontmatter status',
+                              f' (threshold: {_STALE_DAYS}d) — review status and progress',
                 })
                 continue
 
@@ -709,13 +825,10 @@ _YYYYMMDD_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 def _check_bugfix_eval_record() -> list[dict[str, Any]]:
     """R1: a bugfix doc with `status: fixed` must carry an eval record.
 
-    Existence-only mechanical check, fully decoupled from the verification
-    fields: fixed+manual docs cannot escape, fixed+none docs with a complete
-    eval block are not flagged, and `skipped` is no shield for missing
-    verification. Compliant forms:
-    - `eval: scored` (the fixture/command/expect/last_scored keys are
-      template-enforced, not machine-checked here — R1 only pins "recorded"), or
-    - `eval: skipped` + non-empty `eval_skip_reason`.
+    Fixed docs require non-empty `eval_fixture`, `eval_command`,
+    `eval_expect`, and `eval_last_scored` fields when `eval: scored`.
+    `eval_score` is optional. Alternatively, `eval: skipped` requires a
+    non-empty `eval_skip_reason`.
 
     Grandfathering: only docs with `created_at >= 2026-10-27` are subject;
     missing or malformed created_at (incl. the [YYYY-MM-DD] placeholder)
@@ -731,10 +844,14 @@ def _check_bugfix_eval_record() -> list[dict[str, Any]]:
         if f.name == "_template.md":
             continue
         rel = str(f.relative_to(ROOT)).replace("\\", "/")
-        fm = _parse_frontmatter(_read(f))
+        try:
+            fm = _parse_frontmatter(_read(f))
+        except (OSError, UnicodeDecodeError) as exc:
+            results.append(_read_error(f, exc, "eval_record"))
+            continue
         if fm.get("status", "") != "fixed":
             continue
-        created = str(fm.get("created_at", "")).strip()
+        created = _normalize_scalar(str(fm.get("created_at", "")))
         if not _YYYYMMDD_RE.match(created):
             results.append({
                 "kind": "eval_record",
@@ -746,13 +863,21 @@ def _check_bugfix_eval_record() -> list[dict[str, Any]]:
             continue
         if created < _EVAL_GRANDFATHER_DATE:
             continue  # legacy doc, grandfathered
-        eval_val = str(fm.get("eval", "")).strip().lower()
-        skip_reason = str(fm.get("eval_skip_reason", "")).strip()
-        if eval_val == "scored" or (eval_val == "skipped" and skip_reason):
+        eval_val = _normalize_scalar(str(fm.get("eval", "")))
+        skip_reason = _normalize_scalar(str(fm.get("eval_skip_reason", "")))
+        scored_fields = ("eval_fixture", "eval_command", "eval_expect", "eval_last_scored")
+        scored_complete = eval_val == "scored" and all(
+            _normalize_scalar(str(fm.get(key, ""))) for key in scored_fields
+        )
+        if scored_complete or (eval_val == "skipped" and skip_reason):
             results.append({"kind": "eval_record", "status": "ok", "file": rel, "detail": ""})
         else:
             if eval_val == "skipped":
                 detail = "eval: skipped requires eval_skip_reason"
+            elif eval_val == "scored":
+                missing = [key for key in scored_fields
+                           if not _normalize_scalar(str(fm.get(key, "")))]
+                detail = "eval: scored missing non-empty " + ", ".join(missing)
             else:
                 detail = ("status: fixed without eval record — add eval: scored "
                           "(+ eval_fixture/eval_command/eval_expect/eval_last_scored) "
@@ -775,6 +900,7 @@ def _check_bugfix_eval_record() -> list[dict[str, Any]]:
 # 记分制造下一次违规。
 _EVAL_BASELINE_REL = "assets/references/eval-baseline.md"
 _EVAL_SURFACE_PATHS = [
+    "AGENTS.md",
     "SKILL.md",
     "README.md",
     "assets/templates/zh",
@@ -831,7 +957,10 @@ def _check_eval_baseline() -> list[dict[str, Any]]:
         }]
 
     # Empty table → skip until the first scored record (bootstrap writes it).
-    table_rows = [ln for ln in _lines(baseline) if ln.lstrip().startswith("|")]
+    try:
+        table_rows = [ln for ln in _lines(baseline) if ln.lstrip().startswith("|")]
+    except DocumentReadError as exc:
+        return [_read_error(baseline, exc, "eval_baseline")]
     if not any(_SHA40_RE.search(ln) for ln in table_rows):
         return [{
             "kind": "eval_baseline",
@@ -908,15 +1037,15 @@ def _check_eval_baseline() -> list[dict[str, Any]]:
 
 def _run_all() -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    results.extend(_check_dead_links())
-    results.extend(_check_structure())
-    results.extend(_drift_check())
-    results.extend(_check_birth_record())
-    results.extend(_check_line_budget())
-    results.extend(_check_memory())
-    results.extend(_check_plans())
-    results.extend(_check_bugfix_eval_record())
-    results.extend(_check_eval_baseline())
+    for checker in (
+        _check_dead_links, _check_structure, _drift_check, _check_birth_record,
+        _check_line_budget, _check_memory, _check_plans,
+        _check_bugfix_eval_record, _check_eval_baseline,
+    ):
+        try:
+            results.extend(checker())
+        except DocumentReadError as exc:
+            results.append(_read_error(exc.document_path, exc, checker.__name__))
     return results
 
 
@@ -951,6 +1080,11 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
             continue
         glyph = _STATUS_GLYPHS.get(r["status"], r["status"].upper())
         kind = r["kind"]
+        if r["status"] == "invalid":
+            lines_out.append(
+                f"[{glyph:<6}] {r.get('path', r.get('file', ''))}: {r['detail']}"
+            )
+            continue
 
         if kind == "dead_link":
             lines_out.append(
@@ -971,10 +1105,13 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
             if r["status"] == "missing":
                 lines_out.append(f"[{glyph:<6}] Birth record missing: {r['path']}")
             else:
-                lines_out.append(f"[{glyph:<6}] Birth record: {r['path']}")
+                detail = f" — {r['detail']}" if r.get("detail") else ""
+                lines_out.append(f"[{glyph:<6}] Birth record: {r['path']}{detail}")
         elif kind == "line_budget":
             if r["status"] == "missing":
                 lines_out.append("[MISS  ] AGENTS.md not found")
+            elif r["status"] == "invalid":
+                lines_out.append(f"[{glyph:<6}] {r['path']}: {r['detail']}")
             elif r["status"] == "warn":
                 lines_out.append(
                     f"[WARN   ] AGENTS.md: {r['lines']} lines / {r['words']} words (limit 250/400)"
@@ -1002,6 +1139,8 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append(f"[MISPL  ] {r['file']}: {r['detail']}")
             elif r["status"] == "linger":
                 lines_out.append(f"[LINGER ] {r['file']}: {r['detail']}")
+            elif r["status"] == "warn":
+                lines_out.append(f"[WARN   ] {r['file']}: {r['detail']}")
             elif r["status"] == "ok" and verbose:
                 lines_out.append(f"[OK    ] {r['file']}")
         elif kind == "eval_record":
@@ -1011,6 +1150,8 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append(f"[{glyph:<6}] eval record: {r['file']} — {r['detail']}")
         elif kind == "eval_baseline":
             lines_out.append(f"[{glyph:<6}] eval-baseline: {r['detail']}")
+        elif r.get("status") == "invalid":
+            lines_out.append(f"[{glyph:<6}] {r.get('path', r.get('file', ''))}: {r['detail']}")
     return "\n".join(lines_out)
 
 
@@ -1071,7 +1212,7 @@ def _cmd_plans(args: argparse.Namespace) -> None:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
         print(_format_text(results, verbose=args.verbose))
-    has_issues = any(r["status"] not in ("ok",) for r in results)
+    has_issues = any(r["status"] not in ("ok", "warn") for r in results)
     if has_issues:
         raise SystemExit(1)
 
