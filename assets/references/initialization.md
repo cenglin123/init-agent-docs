@@ -15,7 +15,7 @@
 ## 最小入口与迁移
 
 1. 读 AGENTS、README、CURRENT 模板。先完成项目用途、硬约束、真实验证命令与恢复入口，创建一个能安全接手的最小 AGENTS；不存在的专题先不导航。
-2. 所有规模复制 assets/scripts/{changelog,audit,check_all}.py 到目标 scripts/；KB 按入口契约投影路径。确认目标已有同名文件的定制后再合并，不能直接覆盖。
+2. 所有规模复制 assets/scripts/{changelog,audit,check_all,repo_graph}.py 到目标 scripts/；KB 按入口契约投影路径。repo_graph.py 是 opt-in 静态结构证据工具，复制脚本本身不创建 .agents/repo-graph/；需要结构证据时显式运行 python scripts/repo_graph.py build，audit 只读检查已初始化的图。确认目标已有同名文件的定制后再合并，不能直接覆盖。
 3. 创建/更新 README（已有则保留人类入口与定制）、docs/CURRENT.md、docs/CHANGELOG.md，后者用 changelog 模板作空壳再由 add 写首条。Small 任务/交接内联 CURRENT，初始化进度仍只在出生档案。
 4. 旧行为约束归 AGENTS；设计原因归实际已选专题，Small 短内容内联。API/部署/陷阱按需要归相应专题；从代码可直接推导的重复清单删除。核对迁移完整性后删除旧入口副本与已迁空文档，不留弃用标注，历史写 CHANGELOG；no-Git 用文件系统删除。不要把不属于入口副本的工具配置整个删除，只移除已归口规则并保留其他设置。
 5. 清退遗留同步机制：删除 scripts/agent_links.py，移除旧 hook/pre-commit 配置中的同步调用，保留独立技术栈检查；no-Git 不执行 Git-only 操作。
@@ -52,7 +52,7 @@ Small：不建 STRUCTURE、overview、deployment、plans、memory、maintain 或
 
 1. 按选定 profile 检查实际产物、README、导航、结构索引、初始化状态与源基线。AGENTS 非空 ≤250 行，命令有事实出处；不链接尚未生成文件；逐项对照 AGENTS 模板核实 CHANGELOG 局部操作和治理独立复查合同仍在入口可发现，生成基线正文可按记录位置实际取回。
 2. 用 python scripts/changelog.py add --title "初始化文档体系" --body "范围、迁移去向与初始化记录入口" 写首条，再 titles --limit 5 确认。no-Git 仍可运行文档脚本。
-3. 运行 python scripts/audit.py check 和 python scripts/check_all.py --quiet（Small 加 --small）；中大型运行 audit.py memory、maintain.py --memory-index 后 maintain.py --check。KB 替换实际路径/维护器名。维护器会检查出生档案，进行中的初始化状态必须已存在。
+3. 运行 python scripts/audit.py check 和 python scripts/check_all.py --quiet（Small 加 --small）；中大型运行 audit.py memory、maintain.py --memory-index 后 maintain.py --check。repo_graph.py check 可在未初始化时验证安装副本（返回 not_initialized，不创建图）；需要结构证据时显式运行 python scripts/repo_graph.py build。KB 替换实际路径/维护器名。维护器会检查出生档案，进行中的初始化状态必须已存在。
 4. 检查所有生成 Markdown 无死链、指导注释或未填方括号；可执行占位/写作模板与 memory-index 脚本标记按用途识别，不误删。Small 不得有 STRUCTURE/overview/memory/plans/maintain 指引；no-Git 不得有 Git-only 行为。API/pitfalls/schema 未生成时清理相应指引。
 5. 必须交独立新上下文/Agent 仅先看目标 AGENTS，回答：项目做什么、不能改什么、完工做什么、复杂任务先去哪；再按必要导航核查真实文件/命令。含糊、错误或硬约束丢失则返工，执行者自检不替代此关。沿用既有控制器，无控制器则由项目本地合同完成独立检查；不强制安装 converge。初始化和普通项目后续规则修改默认一次独立视角检查，遵从目标已有更严格要求。
 6. 所有必需检查和独立验收通过才置 status: done：Small 在 docs/initialization.md 原地留出生档案，不被普通任务覆盖；中大型移到 docs/plans/completed/initialization.md，修正 CURRENT 链接并复跑链接检查。记录实际证据与未跑项，不提前报告完成。

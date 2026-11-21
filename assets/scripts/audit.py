@@ -1043,6 +1043,75 @@ def _check_eval_baseline(*, staged: bool = False) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# repo graph (opt-in static structure evidence)
+# ---------------------------------------------------------------------------
+
+def _check_repo_graph() -> list[dict[str, Any]]:
+    """Check an initialized repo graph without ever rebuilding it.
+
+    Absence of .agents/repo-graph/manifest.json means the feature is off: no
+    row is emitted and existing audit behavior is unchanged. A present manifest
+    makes staleness a warning and corruption/unreadability an invalid error,
+    always with the explicit build entry point.
+    """
+    manifest = ROOT / ".agents" / "repo-graph" / "manifest.json"
+    if not manifest.is_file():
+        return []
+    path = ".agents/repo-graph/manifest.json"
+    repair = f"python {SCRIPTS_REL}/repo_graph.py build"
+    script = SCRIPTS_DIR / "repo_graph.py"
+    if not script.is_file():
+        return [{
+            "kind": "repo_graph",
+            "status": "invalid",
+            "path": path,
+            "detail": f"repo graph is initialized but {SCRIPTS_REL}/repo_graph.py is missing "
+                      f"— restore the script, then run: {repair}",
+        }]
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), "check", "--json"],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [{
+            "kind": "repo_graph",
+            "status": "invalid",
+            "path": path,
+            "detail": f"repo graph check could not run ({exc}); run: {repair}",
+        }]
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return [{
+            "kind": "repo_graph",
+            "status": "invalid",
+            "path": path,
+            "detail": f"repo graph check returned unreadable output (exit {proc.returncode}); "
+                      f"run: {repair}",
+        }]
+    status = payload.get("status") if isinstance(payload, dict) else None
+    detail = payload.get("detail", "") if isinstance(payload, dict) else ""
+    if proc.returncode == 0 and status == "ok":
+        return [{"kind": "repo_graph", "status": "ok", "path": path,
+                 "detail": detail or "repo graph is fresh"}]
+    if status == "stale":
+        return [{
+            "kind": "repo_graph",
+            "status": "warn",
+            "path": path,
+            "detail": f"{detail or 'repo graph is stale'} — run: {repair}",
+        }]
+    return [{
+        "kind": "repo_graph",
+        "status": "invalid",
+        "path": path,
+        "detail": f"repo graph is not usable: {detail or f'exit {proc.returncode}'}; run: {repair}",
+    }]
+
+
+# ---------------------------------------------------------------------------
 # aggregate
 # ---------------------------------------------------------------------------
 
@@ -1051,7 +1120,7 @@ def _run_all() -> list[dict[str, Any]]:
     for checker in (
         _check_dead_links, _check_structure, _drift_check, _check_birth_record,
         _check_line_budget, _check_memory, _check_plans,
-        _check_bugfix_eval_record,
+        _check_bugfix_eval_record, _check_repo_graph,
     ):
         try:
             results.extend(checker())
@@ -1159,6 +1228,8 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
                 lines_out.append(f"[OK    ] eval record: {r['file']}")
             else:
                 lines_out.append(f"[{glyph:<6}] eval record: {r['file']} — {r['detail']}")
+        elif kind == "repo_graph":
+            lines_out.append(f"[{glyph:<6}] repo graph: {r['detail']}")
         elif kind == "eval_baseline":
             lines_out.append(f"[{glyph:<6}] source results ledger: {r['detail']}")
         elif r.get("status") == "invalid":

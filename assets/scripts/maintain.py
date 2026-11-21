@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -48,6 +49,7 @@ AUDIT_CHECKLIST = ROOT / "docs" / "audit-checklist.md"
 AUDIT_STALE_DAYS = 30
 MAX_TITLE_LEN = 60
 GIT_LOG_LIMIT = 10
+REPO_GRAPH_MANIFEST = ROOT / ".agents" / "repo-graph" / "manifest.json"
 
 
 def _is_git_repo() -> bool:
@@ -415,6 +417,65 @@ def _run_script(rel: str, *args: str) -> tuple[int, str] | None:
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
+def _run_script_split(rel: str, *args: str) -> tuple[int, str, str] | None:
+    """Run a sibling script with separate stdout/stderr streams."""
+    script = ROOT / rel
+    if not script.is_file():
+        return None
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), *args],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return 2, "", str(exc)
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+
+def refresh_repo_graph(*, check_only: bool) -> tuple[str, str] | None:
+    """Refresh an already initialized repo graph; never create the opt-in.
+
+    Returns None when .agents/repo-graph/manifest.json is absent, so default
+    maintenance stays silent and side-effect free for projects that never ran
+    ``repo_graph.py build``. JSON success is parsed from stdout only; stderr
+    warnings do not change the success decision.
+    """
+    if not REPO_GRAPH_MANIFEST.is_file():
+        return None
+    rel = f"{SCRIPTS_REL}/repo_graph.py"
+    if not (ROOT / rel).is_file():
+        return "invalid", f"repo graph is initialized but {rel} is missing"
+    args = ("check", "--json") if check_only else ("build", "--json")
+    result = _run_script_split(rel, *args)
+    if result is None:
+        return "invalid", f"repo graph is initialized but {rel} is not available"
+    rc, stdout, stderr = result
+    payload: dict = {}
+    try:
+        parsed = json.loads(stdout)
+        payload = parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        payload = {}
+    status = payload.get("status")
+    error = str(payload.get("error") or "")
+    detail = str(payload.get("detail") or "")
+    if error and error not in detail:
+        detail = f"{error}: {detail}" if detail else error
+    if rc == 0 and status in ("ok", "built"):
+        return "ok", detail or ("repo graph is fresh" if check_only else "repo graph rebuilt")
+    if status == "stale":
+        return "stale", f"{detail or 'repo graph is stale'} — run: python {rel} build"
+    reason = detail or stdout or f"exit {rc}"
+    if stderr:
+        reason = f"{reason} (stderr: {stderr[:300]})"
+    return "invalid", f"repo graph: {reason}"
+
+
 # ---------------------------------------------------------------------------
 # recent-context digest
 # ---------------------------------------------------------------------------
@@ -483,6 +544,13 @@ def run_full(*, check_only: bool) -> int:
         print()
         print("维护完成：1 项需要处理")
         return 1
+
+    graph = refresh_repo_graph(check_only=check_only)
+    if graph is not None:
+        graph_status, graph_detail = graph
+        print(_line(graph_status, graph_detail))
+        if graph_status in ("stale", "invalid"):
+            failures += 1
 
     audit = _run_script(f"{SCRIPTS_REL}/audit.py", "check")
     if audit is None:

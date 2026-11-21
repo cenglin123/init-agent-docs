@@ -31,9 +31,9 @@ description: >
 
 | Profile | 必备交付 | 裁剪 |
 |---|---|---|
-| Small + Git | AGENTS、README、docs/{CURRENT,CHANGELOG,audit-checklist,initialization}.md；scripts/{changelog,audit,check_all}.py | 不建 STRUCTURE、overview、plans、memory、maintain、governance 专题；hooks 默认不装 |
+| Small + Git | AGENTS、README、docs/{CURRENT,CHANGELOG,audit-checklist,initialization}.md；scripts/{changelog,audit,check_all,repo_graph}.py（repo_graph 为 opt-in） | 不建 STRUCTURE、overview、plans、memory、maintain、governance 专题；hooks 默认不装 |
 | Small + no-Git | 同 Small + Git 的文件 | 另删全部 Git 命令、history/commit/hook/branch/remote/worktree 指引与资产 |
-| Medium/Large + Git | Small 通用件 + STRUCTURE、overview、deployment、governance、plans、记忆与维护器 | API/pitfalls/schema 按需；Git 集成另按授权选择 |
+| Medium/Large + Git | Small 通用件（含 repo_graph.py opt-in）+ STRUCTURE、overview、deployment、governance、plans、记忆与维护器 | API/pitfalls/schema 按需；Git 集成另按授权选择 |
 | Medium/Large + no-Git | 同中大型文件 | 无 Git-only 内容与资产；以 CURRENT/CHANGELOG/文件状态交接 |
 
 Small 的初始化进度唯一源是 docs/initialization.md，完成后原路径 status: done 保留；后续任务只写 CURRENT，改进候选只写审计清单。中大型进度在 docs/plans/active/initialization.md，独立验收后才移 completed/initialization.md。

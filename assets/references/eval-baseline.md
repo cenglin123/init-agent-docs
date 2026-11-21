@@ -30,8 +30,8 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 
 必备集合（所有项须逐一核对，不能把文档表中的简称当作完整清单）：
 
-- Small：AGENTS.md、README.md、docs/CURRENT.md、docs/CHANGELOG.md、docs/audit-checklist.md、docs/initialization.md，以及 scripts/changelog.py、scripts/audit.py、scripts/check_all.py。
-- Medium/Large：通用入口/README/CURRENT/CHANGELOG/audit-checklist 与三个脚本，加 docs/STRUCTURE.md、overview.md、deployment.md、governance.md、plans/{active,completed}/、problems/bugfix/_template.md、.agents/memory/{MEMORY.md,user/role.md}、scripts/maintain.py；初始化记录验收前为 plans/active/initialization.md，通过后为 plans/completed/initialization.md。可选专题按实际生成核对。KB 项目将脚本/记忆目录及维护器名按入口路径契约投影。
+- Small：AGENTS.md、README.md、docs/CURRENT.md、docs/CHANGELOG.md、docs/audit-checklist.md、docs/initialization.md，以及 scripts/changelog.py、scripts/audit.py、scripts/check_all.py、scripts/repo_graph.py。
+- Medium/Large：通用入口/README/CURRENT/CHANGELOG/audit-checklist 与四个脚本（changelog/audit/check_all/repo_graph），加 docs/STRUCTURE.md、overview.md、deployment.md、governance.md、plans/{active,completed}/、problems/bugfix/_template.md、.agents/memory/{MEMORY.md,user/role.md}、scripts/maintain.py；初始化记录验收前为 plans/active/initialization.md，通过后为 plans/completed/initialization.md。可选专题按实际生成核对。KB 项目将脚本/记忆目录及维护器名按入口路径契约投影。repo_graph.py 复制后保持 opt-in，不默认生成 .agents/repo-graph/。
 
 **新增事实源冲突夹具**：
 
@@ -56,7 +56,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 - [ ] `AGENTS.md` 是唯一入口：无 `CLAUDE.md` / `GEMINI.md` 残留副本（迁移场景已整合删除）
 - [ ] `CHANGELOG.md` 可由 `python scripts/changelog.py titles --limit 3` 输出至少一条标题
 - [ ] `docs/CURRENT.md`、根 README.md 与 docs/audit-checklist.md 已创建且非空
-- [ ] scripts/changelog.py、scripts/audit.py、scripts/check_all.py 已安装且实际命令可运行（KB 按实际布局）
+- [ ] scripts/changelog.py、scripts/audit.py、scripts/check_all.py、scripts/repo_graph.py 已安装且实际命令可运行（KB 按实际布局；repo_graph 未初始化时 check 返回 not_initialized 且不生成图）
 - [ ] 所有 profile 的出生档案已写入正确位置：Small 在 docs/initialization.md 原地保留；中大型验收前 active、验收后 completed。进行中状态不能冒充独立验收完成
 - [ ] 新出生档案的 size/repository_mode/status 使用初始化参考规定的枚举；来源组件哈希与可回取的语义生成基线正文一致
 - [ ] `AGENTS.md` 中所有链接指向真实存在的文件（小型项目特别注意死链）
@@ -90,7 +90,7 @@ Skill 的价值不仅在于"能跑"，更在于**相比无 Skill 的基线是否
 ### 脚本验证
 
 - [ ] `scripts/changelog.py titles` 正常输出，入口保留 titles/show/add/recent 局部操作与不读全文约束
-- [ ] 所有 profile 运行 audit.py check、check_all.py --quiet（Small 加 --small）；中大型额外运行 audit.py memory、maintain.py --check，KB 按实际布局替换
+- [ ] 所有 profile 运行 audit.py check、check_all.py --quiet（Small 加 --small），并用 repo_graph.py check 验证安装副本可运行（未初始化返回 not_initialized、不建图）；中大型额外运行 audit.py memory、maintain.py --check，KB 按实际布局替换
 - [ ] 生成入口保留规则修改默认一次独立视角复查与纯记录豁免，遵从目标已有更严格要求；来源 ultraverge/盲评标定不复制下游
 - [ ] `scripts/changelog.py add --title "test" --body "test body"` 成功追加且格式正确
 - [ ] 迁移场景：旧入口副本（`CLAUDE.md` / `GEMINI.md` 等）内容已并入 AGENTS.md 且副本已删除

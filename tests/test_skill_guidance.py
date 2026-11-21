@@ -105,10 +105,43 @@ class SkillGuidanceTestCase(unittest.TestCase):
         self.assertIn("一次独立视角复查", template)
         self.assertNotIn("须补派盲评", template)
 
+    def test_readme_directory_trees_include_repo_graph(self):
+        readme = read_repo_file("README.md")
+        trees = re.findall(r"```[^\n]*\n(.*?)```", readme, flags=re.DOTALL)
+        script_trees = [
+            tree for tree in trees
+            if "changelog.py" in tree and "audit.py" in tree and "check_all.py" in tree
+        ]
+        self.assertGreaterEqual(len(script_trees), 2)
+        for tree in script_trees:
+            self.assertIn("repo_graph.py", tree)
+
+    def test_repo_graph_install_and_opt_in_contract_is_documented(self):
+        initialization = read_repo_file("assets/references/initialization.md")
+        self.assertIn("scripts/{changelog,audit,check_all,repo_graph}.py", initialization)
+        self.assertIn("repo_graph.py 是 opt-in", initialization)
+        self.assertIn("不创建 .agents/repo-graph/", initialization)
+        self.assertIn("python scripts/repo_graph.py build", initialization)
+
+        skill = read_repo_file("SKILL.md")
+        profile = skill.split("## Profile 摘要", 1)[1].split("## 分阶段读取", 1)[0]
+        self.assertIn("scripts/{changelog,audit,check_all,repo_graph}.py", profile)
+        self.assertIn("repo_graph 为 opt-in", profile)
+
+        ledger = read_repo_file("assets/references/eval-baseline.md")
+        self.assertIn("scripts/repo_graph.py", ledger)
+        self.assertIn("repo_graph.py check", ledger)
+        self.assertIn("不默认生成 .agents/repo-graph/", ledger)
+
+        readme = read_repo_file("README.md")
+        self.assertIn("scripts/repo_graph.py", readme)
+        for term in ("Python AST", "opt-in", "`build`", "`check`", "`show`", "`impacted`", "AOCI"):
+            self.assertIn(term, readme)
+
     def test_current_eval_method_covers_all_small_deliverables(self):
         ledger = read_repo_file("assets/references/eval-baseline.md")
         method = ledger.split("## 测试项目矩阵", 1)[1].split("## L2：", 1)[0]
-        for path in ("README.md", "docs/audit-checklist.md", "docs/initialization.md", "scripts/changelog.py", "scripts/audit.py", "scripts/check_all.py"):
+        for path in ("README.md", "docs/audit-checklist.md", "docs/initialization.md", "scripts/changelog.py", "scripts/audit.py", "scripts/check_all.py", "scripts/repo_graph.py"):
             self.assertIn(path, method)
         self.assertIn("### Small 额外项", method)
         self.assertIn("所有 profile 的出生档案", method)
