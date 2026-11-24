@@ -84,3 +84,14 @@ pre-commit 只在提交时触发；「编辑后不提交就走人」会完全绕
 安装：复制 assets/scripts/worktree_task.py 到 scripts/；另获授权时安装 assets/hooks/reference-transaction.sh。若使用 pre-commit 框架，不能声称其会自动执行 reference-transaction；按实际 hook 接线验证，避免替换已有 hooksPath。canonical 非默认分支时用 git config worktree-task.canonicalRef 明确指定。
 
 安装后按 workflow-patterns.md「工具支持」读取唯一详细 CLI 契约，验证 create → intent → review → coordinate（相关任务）→ admit → check --write → integrate → close → cleanup。实际参数以 helper --help 为准；先核实主工作树 claim。未知范围不冒充协调，失败对象保留，不能凭时间抢锁或删 creating 半状态。
+
+## Python 静态结构图谱（默认跳过）
+
+**触发条件**：Python 项目需要离线或无稳定语言服务（LSP）时的可复验静态结构证据（不依赖 Git），且用户明确授权安装。默认初始化不复制该脚本，避免为不需要的项目预付维护成本（Occam）。
+
+- **安装**：复制 `assets/scripts/repo_graph.py` 到目标 `scripts/`（KB 按入口路径契约投影到 `.meta/scripts/`）。复制脚本本身不创建 `.agents/repo-graph/`。
+- **使用与验证**（KB 按入口路径契约替换为 `.meta/scripts/` 与 `docs_maintain.py`）：
+  - 未建图时运行 `python scripts/repo_graph.py check` 验证安装副本（返回 `not_initialized`，不创建图）。
+  - 需要结构证据时显式运行 `python scripts/repo_graph.py build` 生成 `.agents/repo-graph/`；用 `python scripts/repo_graph.py show --path <项目相对路径或对象ID>` 与 `python scripts/repo_graph.py impacted --paths <路径或对象ID> [...]` 做有界渐进查询。
+  - `.agents/repo-graph/manifest.json` 存在后，`audit.py check` 自动做只读校验（过期报 warn、损坏报 invalid），`maintain.py` 自动刷新已有图，`maintain.py --check` 只读校验已有图；`.agents/repo-graph/manifest.json` 不存在时两者静默跳过；若保留 manifest 但缺失脚本，两者均 fail-closed 报 `invalid`（恢复脚本或移除 `.agents/repo-graph/`）。
+- **边界**：仅提供 Python AST 静态结构证据（`direct` / `inferred` / `external` / `unknown`），不是运行时调用图，也不生成 AOCI Baseline 或 F/R/A/S 语义。

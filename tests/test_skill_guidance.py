@@ -105,43 +105,62 @@ class SkillGuidanceTestCase(unittest.TestCase):
         self.assertIn("一次独立视角复查", template)
         self.assertNotIn("须补派盲评", template)
 
-    def test_readme_directory_trees_include_repo_graph(self):
+    def test_readme_directory_trees_keep_repo_graph_optional(self):
         readme = read_repo_file("README.md")
         trees = re.findall(r"```[^\n]*\n(.*?)```", readme, flags=re.DOTALL)
         script_trees = [
             tree for tree in trees
             if "changelog.py" in tree and "audit.py" in tree and "check_all.py" in tree
         ]
-        self.assertGreaterEqual(len(script_trees), 2)
-        for tree in script_trees:
-            self.assertIn("repo_graph.py", tree)
+        self.assertEqual(len(script_trees), 2)
+        source_trees = [tree for tree in script_trees if "init-agent-docs/" in tree]
+        target_trees = [tree for tree in script_trees if "目标项目/" in tree]
+        self.assertEqual(len(source_trees), 1)
+        self.assertEqual(len(target_trees), 1)
+        self.assertIn("repo_graph.py", source_trees[0])
+        self.assertNotIn("repo_graph.py", target_trees[0])
 
     def test_repo_graph_install_and_opt_in_contract_is_documented(self):
         initialization = read_repo_file("assets/references/initialization.md")
-        self.assertIn("scripts/{changelog,audit,check_all,repo_graph}.py", initialization)
-        self.assertIn("repo_graph.py 是 opt-in", initialization)
-        self.assertIn("不创建 .agents/repo-graph/", initialization)
-        self.assertIn("python scripts/repo_graph.py build", initialization)
+        self.assertIn("scripts/{changelog,audit,check_all}.py", initialization)
+        self.assertNotIn("scripts/{changelog,audit,check_all,repo_graph}.py", initialization)
+        self.assertIn("显式安装可选的 repo_graph.py", initialization)
+
+        optional = read_repo_file("assets/references/optional-integrations.md")
+        self.assertIn("## Python 静态结构图谱（默认跳过）", optional)
+        self.assertIn("明确授权安装", optional)
+        self.assertIn("assets/scripts/repo_graph.py", optional)
+        self.assertIn("不创建 `.agents/repo-graph/`", optional)
+        self.assertIn("python scripts/repo_graph.py build", optional)
+        self.assertIn("show --path", optional)
+        self.assertIn("impacted --paths", optional)
+        self.assertIn("manifest.json` 不存在时两者静默跳过", optional)
+        self.assertIn("保留 manifest 但缺失脚本，两者均 fail-closed 报 `invalid`", optional)
 
         skill = read_repo_file("SKILL.md")
         profile = skill.split("## Profile 摘要", 1)[1].split("## 分阶段读取", 1)[0]
-        self.assertIn("scripts/{changelog,audit,check_all,repo_graph}.py", profile)
-        self.assertIn("repo_graph 为 opt-in", profile)
+        self.assertIn("scripts/{changelog,audit,check_all}.py", profile)
+        self.assertNotIn("scripts/{changelog,audit,check_all,repo_graph}.py", profile)
+        self.assertIn("repo_graph 等可选集成默认不装", profile)
 
         ledger = read_repo_file("assets/references/eval-baseline.md")
-        self.assertIn("scripts/repo_graph.py", ledger)
+        self.assertIn("默认不安装", ledger)
         self.assertIn("repo_graph.py check", ledger)
         self.assertIn("不默认生成 .agents/repo-graph/", ledger)
+        small_line = next(line for line in ledger.splitlines() if line.startswith("- Small："))
+        self.assertNotIn("scripts/repo_graph.py", small_line)
+        l1_install_line = next(line for line in ledger.splitlines() if line.startswith("- [ ] scripts/changelog.py"))
+        self.assertIn("未授权时不默认安装 scripts/repo_graph.py", l1_install_line)
 
         readme = read_repo_file("README.md")
         self.assertIn("scripts/repo_graph.py", readme)
-        for term in ("Python AST", "opt-in", "`build`", "`check`", "`show`", "`impacted`", "AOCI"):
+        for term in ("Python AST", "opt-in", "默认不复制", "`build`", "`check`", "`show`", "`impacted`", "AOCI"):
             self.assertIn(term, readme)
 
     def test_current_eval_method_covers_all_small_deliverables(self):
         ledger = read_repo_file("assets/references/eval-baseline.md")
         method = ledger.split("## 测试项目矩阵", 1)[1].split("## L2：", 1)[0]
-        for path in ("README.md", "docs/audit-checklist.md", "docs/initialization.md", "scripts/changelog.py", "scripts/audit.py", "scripts/check_all.py", "scripts/repo_graph.py"):
+        for path in ("README.md", "docs/audit-checklist.md", "docs/initialization.md", "scripts/changelog.py", "scripts/audit.py", "scripts/check_all.py"):
             self.assertIn(path, method)
         self.assertIn("### Small 额外项", method)
         self.assertIn("所有 profile 的出生档案", method)

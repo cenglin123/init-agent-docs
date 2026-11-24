@@ -15,9 +15,9 @@
 - `scripts/audit.py`：文档一致性深度审计（死链 / 结构完整性 / 依赖漂移 / 记忆结构，定期跑 ~15 项）
 - `scripts/check_all.py`：高频完工检查器——无输出=通过，FAIL 自带修复指引（每次任务后跑 ~4 项）
 - `scripts/maintain.py`：文档体系自动化维护管线（中型+项目）——重建 MEMORY.md 索引标记段（覆盖记忆条目 + bugfix 文档）+ 调用 audit 机械检查 + 记忆活性统计 + 近期脉络摘要；`--check` 为只读校验
-- `scripts/repo_graph.py`：Python AST 静态结构证据（opt-in）——`build` 生成 `.agents/repo-graph/`，`check` 只读校验，`show`/`impacted` 做有界渐进披露与一跳影响；不是运行时调用图，也不生成 AOCI/FRAS 语义
+- `scripts/repo_graph.py`：Python AST 静态结构证据（可选安装，默认不复制；opt-in）——`build` 生成 `.agents/repo-graph/`，`check` 只读校验，`show`/`impacted` 做有界渐进披露与一跳影响；不是运行时调用图，也不生成 AOCI/FRAS 语义
 - `assets/plugins/governance-watch.js`：治理可发现性插件（opencode，可选）——会话边界检测治理目录脏区，在入口 AGENTS.md 写入显眼提醒行（见可选集成的会话级治理提醒）
-- `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist,frontmatter-schemas}.md`：专题文档（中型 / 大型项目；Small 文档为 `CURRENT.md`、`CHANGELOG.md`、`audit-checklist.md`、`initialization.md`，另有根 AGENTS/README 和四个文档脚本）
+- `docs/{overview,api,deployment,pitfalls,CURRENT,audit-checklist,frontmatter-schemas}.md`：专题文档（中型 / 大型项目；Small 文档为 `CURRENT.md`、`CHANGELOG.md`、`audit-checklist.md`、`initialization.md`，另有根 AGENTS/README 和三个文档脚本）
 - `docs/plans/{active,completed}/`：执行计划目录（中型及以上才创建；小型项目用 `docs/initialization.md` 作为出生档案）
 - `.agents/memory/`：跨会话记忆系统（中型+项目），含 MEMORY.md 索引 + user/ 子目录
 - `.githooks/`：可选 lint 质量门控（内置记忆结构兜底与治理文档修改提醒）
@@ -42,7 +42,7 @@ init-agent-docs/
     │   ├── worktree_task.py              # 任务 worktree 与协作入场工具（可选）
     │   ├── audit.py                      # 深度审计（定期）
     │   ├── check_all.py                  # 高频完工检查（每次任务后）
-    │   └── repo_graph.py                 # Python AST 静态结构证据（opt-in）
+    │   └── repo_graph.py                 # Python AST 静态结构证据（可选安装，默认不复制）
     ├── hooks/
     │   ├── pre-commit-python.sh          # ruff / flake8
     │   ├── pre-commit-node.sh            # eslint / prettier
@@ -72,8 +72,7 @@ init-agent-docs/
     ├── changelog.py
     ├── maintain.py
     ├── audit.py
-    ├── check_all.py
-    └── repo_graph.py
+    └── check_all.py
 ```
 
 ## 模板占位符约定

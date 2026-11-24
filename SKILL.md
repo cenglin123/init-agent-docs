@@ -31,9 +31,9 @@ description: >
 
 | Profile | 必备交付 | 裁剪 |
 |---|---|---|
-| Small + Git | AGENTS、README、docs/{CURRENT,CHANGELOG,audit-checklist,initialization}.md；scripts/{changelog,audit,check_all,repo_graph}.py（repo_graph 为 opt-in） | 不建 STRUCTURE、overview、plans、memory、maintain、governance 专题；hooks 默认不装 |
+| Small + Git | AGENTS、README、docs/{CURRENT,CHANGELOG,audit-checklist,initialization}.md；scripts/{changelog,audit,check_all}.py | 不建 STRUCTURE、overview、plans、memory、maintain、governance 专题；hooks、会话提醒、worktree 与 repo_graph 等可选集成默认不装 |
 | Small + no-Git | 同 Small + Git 的文件 | 另删全部 Git 命令、history/commit/hook/branch/remote/worktree 指引与资产 |
-| Medium/Large + Git | Small 通用件（含 repo_graph.py opt-in）+ STRUCTURE、overview、deployment、governance、plans、记忆与维护器 | API/pitfalls/schema 按需；Git 集成另按授权选择 |
+| Medium/Large + Git | Small 通用件 + STRUCTURE、overview、deployment、governance、plans、记忆与维护器 | API/pitfalls/schema 按需；hooks、worktree、repo_graph 等可选集成另按授权选择 |
 | Medium/Large + no-Git | 同中大型文件 | 无 Git-only 内容与资产；以 CURRENT/CHANGELOG/文件状态交接 |
 
 Small 的初始化进度唯一源是 docs/initialization.md，完成后原路径 status: done 保留；后续任务只写 CURRENT，改进候选只写审计清单。中大型进度在 docs/plans/active/initialization.md，独立验收后才移 completed/initialization.md。
@@ -49,7 +49,7 @@ Small 的初始化进度唯一源是 docs/initialization.md，完成后原路径
 | 补充已选资产 | 同文件「扩展资产」+ 当前 profile 对应模板 + [治理合同](assets/references/governance-contract.md) | Small 提取最小合同；中大型复制专题，按生成内容更新导航 |
 | 验收与交付 | 同文件「验收与交付」+ 目标审计清单 | 脚本检查、独立入口测试、出生档案完成证据 |
 | 中断恢复 | 本入口 + 目标 CURRENT 指向的初始化状态 + 当前阶段分区 | 核对现场差异，续办下一步，不重读全库或全部参考 |
-| 安装可选机制 | [optional-integrations.md](assets/references/optional-integrations.md) 对应节 | hooks、会话提醒或 worktree，默认不加载 |
+| 安装可选机制 | [optional-integrations.md](assets/references/optional-integrations.md) 对应节 | hooks、会话提醒、worktree 或 Python 静态结构图谱，默认不加载 |
 | 复杂任务协作 | [workflow-patterns.md](assets/references/workflow-patterns.md) 对应节 | 所有权、交接、隔离与协作工具契约 |
 | 设计取舍/规则维护 | [design-principles.md](assets/references/design-principles.md) 对应节；治理合同 | 适用评审等级、边界与最小候选 |
 | 维护/评测本 Skill | 根 AGENTS、[评测方法](assets/references/eval-baseline.md) | L1/L1.5 分开；未跑 L2/L3 如实记录 |
