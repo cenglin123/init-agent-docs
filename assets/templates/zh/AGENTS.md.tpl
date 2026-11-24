@@ -83,19 +83,14 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）须检索相关经验，检�
 ### 默认偏好（有充分理由可偏离）
 
 <!-- 候选项：只有目标仓库已有约束或用户确认时保留。 -->
-- **先读后改**：修改任何文件前先读取，理解现有逻辑再动手。
-- **Occam**：如无必要，勿增实体。
-- **Bitter Lesson**：通用方法优于硬编码先验。
-- **模式匹配**：单会话小任务用直接执行；跨模块/跨会话任务走当前选定的控制器下的「复杂任务闭环」：
-  记录范围与验收 → 独立视角审查 → 在已有授权内执行 → 验收；已有授权不重复确认。
+- **任务模式**：小任务直接执行；跨模块/跨会话任务走当前选定控制器下的闭环（范围与验收 → 独立复查 → 在既有授权内执行 → 验收）。
 <!-- Medium/Large profile only -->
   跨会话详细计划写入 `docs/plans/active/`。
 <!-- /Medium/Large profile only -->
 <!-- Small profile only -->
   任务和交接写 CURRENT，规则改进候选写审计清单。
 <!-- /Small profile only -->
-- **任务启动先读 CURRENT.md**。
-- **验证尽量换视角**：高风险改动必须由新上下文或 reviewer 视角独立复查。
+- **任务启动先读 CURRENT.md**；高风险改动必须由新上下文或独立视角复查。
 <!-- 补充项目特异偏好（代码风格、语言约定等） -->
 
 <!-- Medium/Large profile only -->
@@ -103,12 +98,10 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）须检索相关经验，检�
 ### 多 Agent worktree 路由（可选）
 
 <!-- 仅 Git profile 的协作倾向项目按初始化可选集成流程安装后保留；否则整节删除 -->
-- **主工作树归持有 main-claim 的 agent**（通常是主对话/primary）：开工前 `python scripts/worktree_task.py claim-main --owner primary`，收工 `release-main --owner primary`；忘记释放由 TTL（默认 180 分钟）自动过期兜底。
-- **fork / 子代理一律开 worktree，无例外**：入场即 `create` 并按下方流程登记。不要以「主工作树干净」作为可直接工作的依据——两次写文件之间它总是干净的，时点快照防不了撞车（两个守规 agent 仍会碰撞）。
-- 普通写任务用 `python scripts/worktree_task.py create --name <显示名> --owner <标识>` 获得独立 worktree；显示名只输入一次，续办凭 ID、owner、generation 执行 `resume`，不按时间抢占。
-- 写前登记 `intent` 的目标、非目标、自由范围并 `review` 全部未关闭任务；路径重叠仅作提示。相关双方确认同一协议、重新 review 后 `admit`，再主动 `check <id> --write`。范围变化重新入场；未登记旧任务视为 unknown。
-- **`integrate` 在存在他人活动 main-claim 时机械拒绝**（对方可能正在写主工作树）——被拒就协调或等待过期，不要强夺。
-- worktree 仅隔离未提交内容与 index，不消除合入、语义或外部系统冲突。此入口是协作软约束，不能拦截直接文件写入或手动 Git；owner/override 声明不是身份认证或外部授权。`integrate`、`close`、`cleanup` 的清理与审计边界见 `python scripts/worktree_task.py --help` 和本项目协作说明。
+- **主工作树归持有 main-claim 的 agent**（通常是主对话）：开工前 `python scripts/worktree_task.py claim-main --owner primary`，收工或整合前 `release-main --owner primary`（TTL 默认 180 分钟兜底）；存在任何活动 claim 时 `integrate` 机械拒绝。
+- **fork / 子代理一律开 worktree**：用 `python scripts/worktree_task.py create --name <显示名> --owner <标识>` 获得独立分支与目录，不以「主工作树干净」为由直接写主树。
+- **外包施工验收节奏**：委派子代理施工时优先不自动 `git commit`，将改动留在 worktree 工作区供主控用 `git status` + `git diff`（覆盖未跟踪新文件）验收与跑测试；通过后再统一 `commit`、`release-main`（若持有主树占用）、`integrate`（快进合入）与 `cleanup`。临时任务文件路径经 `git rev-parse --git-common-dir` 登记到 `info/exclude`，但在 `cleanup` 前须移出或清理（否则会被 `--ignored` 保护拦截）。
+- worktree 仅隔离未提交内容与 index，不消除合入、语义或外部系统冲突；完整动作与清理边界见 `python scripts/worktree_task.py --help`。
 <!-- /Git profile only -->
 
 <!-- /Medium/Large profile only -->
@@ -124,9 +117,8 @@ Bugfix 任务（修复 / bug / 报错 / 异常等）须检索相关经验，检�
 <!-- Git profile only -->
 ## 提交规范
 
-<!-- 候选项：按项目实际风格填写 -->
-<!-- 按项目实际风格选择；提交/发布依用户授权，不因阶段完成自动执行。 -->
-Conventional Commit（`feat:` / `fix:` / `chore:`）。治理文档修改须含 `[governance]` 标记。提交、推送与发布按既有授权处理。
+<!-- 候选项：按项目实际风格填写；提交、推送与发布依既有授权处理，不因阶段完成自动执行。 -->
+按项目既有提交风格执行；治理文档修改建议标注 `[governance]`。
 <!-- /Git profile only -->
 
 ## 文档维护原则

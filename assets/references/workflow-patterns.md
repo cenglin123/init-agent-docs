@@ -43,26 +43,28 @@ Agent 根据目标、风险、依赖和上下文选择直接执行、分阶段�
 
 Git worktree 允许你在同一个仓库的不同目录下检出不同的分支，这些工作目录共享同一个 `.git` 仓库，但各自有独立的工作区和 index。
 
-**隔离边界**：worktree 仅隔离未提交文件和 index；合入冲突、跨文件语义冲突与外部系统状态仍需 Agent 协调。`worktree_task.py` 是跨 Agent 宿主共享 Git common-dir 登记的自愿协作入口，不会拦截直接写文件、手动 Git 操作、未调用它的旧工具或另一份 clone。owner 是协作声明，不是身份认证；review digest 证明快照一致，不证明语义判断正确。canonical 快进保护 hook 可单独选装，不是入场协调的必要条件。
+**隔离边界**：worktree 仅隔离未提交文件和 index；合入冲突、跨文件语义冲突与外部系统状态仍由主控 Agent / 人类协调。`worktree_task.py` 是轻量本地 Git 隔离与占用声明工具，不会拦截直接写文件、手动 Git 操作或另一份 clone。canonical 快进保护 hook 可单独选装，不是隔离的必要条件。
 
-**主工作树占用声明（main-claim）**：主工作树（canonical）只属于持有 main-claim 的 agent。primary 开工前 `claim-main --owner primary`（TTL 默认 180 分钟，同 owner 续期重置到期、过期可接管），收工 `release-main --owner primary`；`main-claim` 只读查询、`list` 显示占用；`integrate` 在存在他人活动 claim 时机械拒绝。**不要以「git status 干净」判定主工作树可用**——两次写入之间的快照必然干净，时点检查防不了撞车。fork / 子代理一律 worktree，无例外。
+**主工作树占用声明（main-claim）**：主工作树（canonical）只属于持有 main-claim 的 agent。primary 开工前 `claim-main --owner primary`（TTL 默认 180 分钟，同 owner 续期重置到期、过期可接管，他人活动 claim 不允许 `--force` 强夺），收工或整合前 `release-main --owner primary`；`main-claim` 只读查询、`list` 显示当前活跃 worktrees 与占用状态；`integrate` 在存在任何活动 claim 时机械拒绝（整合前须先释放）。**不要以「git status 干净」判定主工作树可用**——两次写入之间的快照必然干净，时点检查防不了撞车。fork / 子代理一律开 worktree。
 
-#### 工作树与任务入场
+#### 工作树四动作与外包施工节奏
 
-本 skill 附带 `assets/scripts/worktree_task.py`（安装步骤见 optional-integrations.md「多 Agent worktree」）。`create --name <显示名> --owner <标识>` 只输入一次显示名，派生稳定的 ID、`task/<id>-<slug>` 分支和 `wt-<id>-<slug>` 目录；同名新建仍是不同任务，续办用 `resume <id> --owner ... --generation ...`，不按时间抢占。`register` 可将已存在的 linked worktree 显式登记。未登记的 `task/*` 工作树和无 intent 的旧记录在 review 中是 unknown，不视为已协调。
-
-`intent` 登记目标、非目标、自由文本范围；字面仓库相对 `--path` 只提示机械重叠，`--depends-on <peer-id>@<完整提交 SHA>` 只承认已提交代码依赖。`review` 展示所有未关闭任务及范围版本，并返回 digest。明确路径重叠、依赖、未知范围或 Agent 主动声明的语义关联需协调；相关双方在各自当前 revision 上 `coordinate` 同一份协议文本，再各自重新 `review`、`admit`。失联时可记录限定 pair、边界、理由和负责人声明的 override；CLI 无法核验该声明的真实授权。自己的范围或相关 peer 范围/结论变化会使 admission 失效，无关 peer 变化只提示刷新。范围由 Agent 判断，不用 path 命中机械否决并行。
-
-`check <id> --write --owner ... --generation ...` 是动笔前主动调用的软门禁；普通 `check`、`list`、`review`、`resume` 不写登记或创建锁。所有状态变更和整合共用 Git common-dir 原子锁，锁无超时自动接管；残留锁须核对任务和 Git 状态后由项目负责人按本地流程人工恢复，不能仅凭时间或 PID 删除。登记保留在 common-dir，不进入提交。Git worktree registration、branch、commit 仍是文件与历史事实源；登记只承载协作状态。
-
-原有四动作及其调用方式继续可用：
+本 skill 附带 `assets/scripts/worktree_task.py`（安装步骤见 optional-integrations.md「多 Agent worktree」）。所有写状态变更（含 `claim-main` / `release-main`）和整合共用 Git common-dir 原子锁，锁无超时自动接管；残留锁须核对任务和 Git 状态后由项目负责人人工恢复，不能仅凭时间或 PID 删除。Git worktree registration、branch、commit 是唯一文件与历史事实源。
 
 | 动作 | 行为 |
 |------|------|
-| `create` | 无 `--name/--owner` 时创建旧式 opaque ID 工作树，需显式登记/处置才可视为已协调 |
-| `check <id>` | 只读报告 branch / registration / clean / ahead-behind / 是否已是 canonical 祖先；`--write` 另检查入场状态 |
-| `integrate <id>` | 取得 Git common-dir 共享锁，校验 canonical 与 task 身份、复核 ref 未漂移后 `merge --ff-only` |
-| `cleanup <id>` | 拒绝未合入、不干净、含未跟踪或 ignored 数据的工作树；旧式任务成功后删除分支，已登记任务须先 clean+integrated `close`，清理后保留分支与登记作审计 |
+| `create [--name <显示名> --owner <标识>] [--base <commit-sha>]` | 在 common-dir 锁内创建独立分支（`task/<id>` 或 `task/<id>-<slug>`）与独立工作目录（`<仓库名>.worktrees/wt-...`）；`--name` 与 `--owner` 需成对传入或同时省略，`--base` 仅接受完整 commit SHA |
+| `check <id>` | 只读报告 branch / registration / clean / ahead-behind / 是否已是 canonical 祖先及当前 `main-claim` 状态 |
+| `integrate <id>` | 取得 common-dir 原子锁，锁内复核无活动 `main-claim`、校验 canonical 与 task 身份及路径边界、复核 ref 未漂移后按精确提交 SHA 执行 `merge --ff-only` |
+| `cleanup <id>` | 取得 common-dir 原子锁，校验路径边界并拒绝未合入、不干净、含未跟踪或 ignored 用户数据及孤立残留目录（fail-closed）；通过后移除 worktree 并删除对应 `task/*` 分支 |
+| `list` | 只读列出当前活跃的 linked `task/*` worktrees 与 `main-claim` 状态 |
+| `claim-main` / `release-main` / `main-claim` | 主工作树占用声明、释放与只读查询 |
+
+**外包施工验收节奏（委派子代理 / OCSR / Codex executor 时）**：
+- 施工方在 `create` 分配的独立 worktree 内修改代码，**优先不自动 `git commit`**，将改动留在工作区；
+- 主控方或独立 reviewer 同时检查 `git status`（覆盖未跟踪新文件）与 `git diff` 并运行测试；打回返工时零半成品 commit 污染历史；
+- 验收通过后再由主控方在 task worktree 内 `git add <具体路径> && git commit`，若当前持有主树占用先执行 `release-main`，再依次执行 `integrate <id>` 与 `cleanup <id>`；
+- 若需在 worktree 内放置临时任务单或交接文件，通过 `git rev-parse --git-common-dir` 定位共享 Git 目录写入 `info/exclude`（兼容 `.git` 为 gitfile 的工作树），不污染 `.gitignore`；**注意 `cleanup` 会检查 `--ignored` 数据，清理前须将临时交接文件移出或删除**。
 
 **失败语义**（失败后 task 对象一律保留，不覆盖不清理不确定状态）：
 
@@ -72,27 +74,16 @@ Git worktree 允许你在同一个仓库的不同目录下检出不同的分支�
 | `head-drift` | 校验后 canonical/task 漂移 | 未合并未清理；复核后重试 |
 | `already-integrated` | tip 已是 canonical 祖先 | 响应丢失后的安全重试结果；不重复提交 |
 | `lock-busy` | common-dir 锁被持有 | 核实持有者与状态，不按超时夺锁 |
-| `partial-state` / `refused` | cleanup 身份不符 | fail closed，人工核对 |
+| `partial-state` / `refused` | 身份不符、存在他人活动 `main-claim` 或含未清理数据 | fail closed，人工核对 |
 
-**响应丢失恢复**：新建已返回 ID 时用 `resume` 验证 owner/generation；不知道 ID 时先 `list` 和 `git worktree list --porcelain`，不重试创建冒充恢复。`creating` 半状态不能 `resume`，也没有自动修复命令：停止写入，记录 ID/路径，核对 common-dir 登记、分支、Git worktree registration、实际文件和提交；由项目负责人确认归属与无唯一数据后，按项目恢复流程显式修复或回滚，不能凭时间删除登记或夺锁。重试 `integrate` 经 ancestry 判 `already-integrated`。
+**响应丢失恢复**：先运行 `list` 与 `git worktree list --porcelain` 核对实际已创建的分支与工作目录，不盲目重试创建冒充恢复；重试 `integrate` 经 ancestry 判定返回 `already-integrated`。
 
 **canonical 分支快进保护 hook**（`assets/hooks/reference-transaction.sh`）：安装后，canonical 分支（默认解析 `main` → `master`，可用 `git config worktree-task.canonicalRef` 显式指定）的每次更新必须能证明快进——amend、向非后代的 reset、rebase rewrite、直接 non-FF update-ref 被机械拒绝；`task/*` 分支不受门控，owner 在 task worktree 内可自由 amend/rebase。
 
-**git worktree 的优势：**
-
-| 优势 | 说明 |
-|------|------|
-| **隔离性** | 每个 owner 有独立的未提交文件和 index |
-| **共享 Git 历史** | 所有 worktree 共享同一个 `.git`，节省空间 |
-| **独立分支** | 每个任务在不同分支上，便于代码审查和回滚 |
-| **协调范围** | 入场快照和同文协议记录重叠与依赖；仍需 Agent 判断语义 |
-| **可审计清理** | 任务完成后清理 worktree；已登记任务保留分支与记录 |
-
-**注意事项：**
-
-- worktree 根目录默认在仓库父目录的 `<仓库名>.worktrees/`（可用 `git config worktree-task.worktreeRoot` 覆盖），避免混入项目本身的文件结构
-- 协调人用 `git worktree list` 或 `worktree_task.py check <id>` 定期检查活跃 task，避免遗留孤儿；孤儿只清理可证明 clean 的对象
-- 工作树内脚本若按"脚本位置向上找仓库根"定位，会自动指向 worktree 自身——派生数据类脚本（embedding 重建、全量 lint 等）应只在主工作树运行，集成后统一执行
+**注意事项**：
+- worktree 根目录默认在仓库父目录的 `<仓库名>.worktrees/`（可用 `git config worktree-task.worktreeRoot` 或 `--wt-root` 覆盖），避免混入项目本身的文件结构；
+- 定期用 `list` 或 `git worktree list` 排查孤儿 worktree，只清理可证明 clean 且已合入的对象；
+- 工作树内脚本若按「脚本位置向上找仓库根」定位，会自动指向 worktree 自身——派生数据类脚本（embedding 重建、全量 lint 等）应在主工作树集成后统一执行。
 
 **不使用隔离机制的风险：**
 

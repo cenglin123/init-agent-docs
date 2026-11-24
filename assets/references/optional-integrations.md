@@ -19,49 +19,23 @@
 
    **二选一，不要叠加**——两条路径都设置 hook 入口，叠加会跑两次、输出混乱。
 
-   **路径 A：项目需要 lint / format 检查 → 直接复制对应技术栈 hook**
+   **路径 A：直接复制通用或按栈参考 hook 示例到 `.githooks/pre-commit`**（优先复用项目已有 task runner / lint 命令，不强套默认模板）
 
-   - Python 项目 → `assets/hooks/pre-commit-python.sh`
-   - Node/TS 项目 → `assets/hooks/pre-commit-node.sh`
-   - Go 项目 → `assets/hooks/pre-commit-go.sh`
-   - 混合 / 特殊栈 → `assets/hooks/pre-commit-generic.sh`（自行补 lint 命令）
+   - 通用骨架（推荐首选，自行接入项目已有 lint/test 命令）→ `assets/hooks/pre-commit-generic.sh`
+   - 按栈参考示例：Python → `assets/hooks/pre-commit-python.sh`、Node/TS → `assets/hooks/pre-commit-node.sh`、Go → `assets/hooks/pre-commit-go.sh`
 
    ```bash
    mkdir -p .githooks
-   cp assets/hooks/pre-commit-python.sh .githooks/pre-commit   # 按栈替换文件名
+   cp assets/hooks/pre-commit-generic.sh .githooks/pre-commit   # 或选用按栈参考示例
    chmod +x .githooks/pre-commit
    git config core.hooksPath .githooks
    ```
 
-   PowerShell 等价：
+   **Windows 注意**：Bash hook 需 Git Bash 解释；纯 PowerShell 或跨平台多语言项目优先改用路径 B 的 `pre-commit` 框架。
 
-   ```powershell
-   New-Item -ItemType Directory -Force .githooks
-   Copy-Item assets\hooks\pre-commit-python.sh .githooks\pre-commit
-   git config core.hooksPath .githooks
-   ```
+   **路径 B：使用 `pre-commit` 框架（跨平台 / 多语言项目推荐）**
 
-   **Windows 注意**：hook 是 bash 脚本，需要 git bash 解释（绝大多数 Windows 安装 Git for Windows 时已自带）。如果项目要求纯 PowerShell 路径，改用路径 B 的 `pre-commit` 框架方案（跨平台）。
-
-   **路径 B：使用 `pre-commit` 框架（推荐给跨平台 / 多语言混合项目）**
-
-   `pre-commit` 是一个跨平台的 hook 管理工具，能在 Windows / Linux / macOS 上一致地执行 Python 写的 hook，且自动处理 git hook 安装、版本固定、虚拟环境隔离。安装即用：
-
-   ```bash
-   pip install pre-commit
-   cp assets/hooks/pre-commit-config.yaml .pre-commit-config.yaml
-   pre-commit install
-   ```
-
-   PowerShell 等价：
-
-   ```powershell
-   pip install pre-commit
-   Copy-Item assets\hooks\pre-commit-config.yaml .pre-commit-config.yaml
-   pre-commit install
-   ```
-
-   `assets/hooks/pre-commit-config.yaml` 内置通用检查（trailing-whitespace 等），语言 lint 段落以注释形式给出，按项目实际栈解开注释即可；记忆结构兜底与治理提醒在框架路径下需按需自行补写 local hook。这条路径与路径 A 互斥——选了它就不要再用 `git config core.hooksPath .githooks`，`pre-commit install` 会接管 `.git/hooks/pre-commit`。
+   复制 `assets/hooks/pre-commit-config.yaml` 到 `.pre-commit-config.yaml`，按项目实际栈解开注释后运行 `pre-commit install`（与路径 A 互斥，不叠加 `core.hooksPath`）；记忆结构兜底与治理提醒按需以 local hook 补充。
 
 
 ## 会话级治理提醒（默认跳过）
@@ -83,7 +57,7 @@ pre-commit 只在提交时触发；「编辑后不提交就走人」会完全绕
 
 安装：复制 assets/scripts/worktree_task.py 到 scripts/；另获授权时安装 assets/hooks/reference-transaction.sh。若使用 pre-commit 框架，不能声称其会自动执行 reference-transaction；按实际 hook 接线验证，避免替换已有 hooksPath。canonical 非默认分支时用 git config worktree-task.canonicalRef 明确指定。
 
-安装后按 workflow-patterns.md「工具支持」读取唯一详细 CLI 契约，验证 create → intent → review → coordinate（相关任务）→ admit → check --write → integrate → close → cleanup。实际参数以 helper --help 为准；先核实主工作树 claim。未知范围不冒充协调，失败对象保留，不能凭时间抢锁或删 creating 半状态。
+安装后按 workflow-patterns.md「工具支持」核对 CLI 契约，验证 `claim-main` / `create` / `check` / `integrate` / `cleanup` / `list` / `release-main`。实际参数以 `python scripts/worktree_task.py --help` 为准；外包施工优先留 diff 验收后再统一 commit 与 integrate，失败对象保留，不凭时间抢锁。
 
 ## Python 静态结构图谱（默认跳过）
 

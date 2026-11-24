@@ -1,8 +1,8 @@
 """Fixture-based tests for assets/scripts/worktree_task.py + reference-transaction.sh.
 
 Uses throwaway git repos in temp dirs; never touches the skill repo itself.
-Covers: create/check/integrate/cleanup identity & failure semantics, the
-common-dir no-takeover lock, and the optional fast-forward gate hook.
+Covers: create/check/integrate/cleanup identity & failure semantics, task
+listing, the common-dir no-takeover lock, and the optional fast-forward hook.
 """
 from __future__ import annotations
 
@@ -116,6 +116,12 @@ class RepoFixture(unittest.TestCase):
         self.assertEqual(payload["result"], "created")
         return payload
 
+    def named_task(self, name="Alpha Site", owner="agent-a"):
+        payload, rc = wtask.create(self.repo, self.wt_root, name=name, owner=owner)
+        self.assertEqual(rc, 0, payload)
+        self.assertEqual(payload["result"], "created")
+        return payload
+
     def integrated_task(self):
         task = self.create_task()
         commit_file(Path(task["path"]), f"w-{task['id']}.md", "x\n", "task commit")
@@ -131,7 +137,8 @@ class CreateTests(RepoFixture):
         self.assertNotEqual(a["id"], b["id"])
         self.assertNotEqual(a["branch"], b["branch"])
         self.assertNotEqual(a["path"], b["path"])
-        self.assertTrue(a["branch"].startswith("task/"))
+        self.assertEqual(a["branch"], "task/" + a["id"])
+        self.assertEqual(Path(a["path"]).name, "wt-" + a["id"])
         self.assertEqual(a["canonical"], "refs/heads/main")
         self.assertTrue((Path(a["path"]) / self.long_rel).exists())
         (Path(a["path"]) / "note.md").write_text("edit in A\n", encoding="utf-8")
@@ -163,6 +170,22 @@ class CreateTests(RepoFixture):
         self.assertEqual(rc, 0, payload)
         self.assertEqual(payload["canonical"], "refs/heads/side")
 
+    def test_named_create_derives_slugged_branch_and_directory(self):
+        task = self.named_task()
+        self.assertEqual(task["branch"], f"task/{task['id']}-alpha-site")
+        self.assertEqual(Path(task["path"]).name, f"wt-{task['id']}-alpha-site")
+        self.assertEqual(task["owner"], "agent-a")
+        self.assertEqual(task["name"], "Alpha Site")
+        self.assertTrue((Path(task["path"]) / "note.md").exists())
+        self.assertEqual(
+            git(self.repo, "symbolic-ref", "HEAD").stdout_text, "refs/heads/main"
+        )
+
+    def test_named_create_requires_owner_with_name(self):
+        payload, rc = wtask.create(self.repo, self.wt_root, name="Only Name")
+        self.assertEqual(rc, 1)
+        self.assertEqual(payload["result"], "refused")
+
 
 class CheckTests(RepoFixture):
     def test_ahead_behind_and_integrated(self):
@@ -173,11 +196,59 @@ class CheckTests(RepoFixture):
         self.assertEqual(payload["ahead"], 1)
         self.assertEqual(payload["behind"], 0)
         self.assertFalse(payload["integrated"])
+        self.assertFalse(payload["is_ancestor"])
+        self.assertTrue(payload["clean"])
+        self.assertEqual(payload["main_claim"], {"claimed": False})
+        self.assertIsNone(payload["reg_error"])
+
+    def test_named_task_resolves_from_short_id(self):
+        task = self.named_task()
+        payload, rc = wtask.check(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 0, payload)
+        self.assertEqual(payload["branch"], task["branch"])
+        self.assertTrue(payload["registered"])
 
     def test_unknown_id(self):
         payload, rc = wtask.check(self.repo, self.wt_root, "nope")
         self.assertEqual(rc, 1)
         self.assertEqual(payload["result"], "not-found")
+
+    def test_read_only_creates_no_state(self):
+        task = self.create_task()
+        state = self.repo / ".git" / "worktree-task"
+        before = {p.name for p in state.iterdir()} if state.exists() else set()
+        first, rc = wtask.check(self.repo, self.wt_root, task["id"])
+        second, rc2 = wtask.check(self.repo, self.wt_root, task["id"])
+        self.assertEqual((rc, rc2), (0, 0))
+        self.assertEqual(first, second)
+        after = {p.name for p in state.iterdir()} if state.exists() else set()
+        self.assertEqual(before, after)
+        self.assertFalse((state / "mutation.lock").exists())
+        self.assertFalse((state / "tasks").exists())
+        self.assertFalse((state / "main-claim.json").exists())
+
+
+class ListTests(RepoFixture):
+    def test_lists_linked_tasks_and_claim_state(self):
+        plain = self.create_task()
+        named = self.named_task()
+        payload, rc = wtask.list_tasks(self.repo)
+        self.assertEqual(rc, 0, payload)
+        self.assertEqual(payload["main_claim"], {"claimed": False})
+        by_branch = {item["branch"]: item for item in payload["tasks"]}
+        self.assertEqual(set(by_branch), {plain["branch"], named["branch"]})
+        self.assertEqual(by_branch[plain["branch"]]["id"], plain["id"])
+        self.assertEqual(by_branch[named["branch"]]["id"],
+                         named["branch"][len("task/"):])
+        self.assertTrue(by_branch[named["branch"]]["clean"])
+
+    def test_claim_status_and_cleanup_disappear_from_list(self):
+        task = self.integrated_task()
+        wtask.claim_main(self.repo, "agent-a", ttl_minutes=30)
+        self.assertEqual(wtask.list_tasks(self.repo)[0]["main_claim"]["owner"], "agent-a")
+        wtask.release_main(self.repo, "agent-a")
+        self.assertEqual(wtask.cleanup(self.repo, self.wt_root, task["id"])[1], 0)
+        self.assertEqual(wtask.list_tasks(self.repo)[0]["tasks"], [])
 
 
 class IntegrateTests(RepoFixture):
@@ -187,6 +258,26 @@ class IntegrateTests(RepoFixture):
         payload, rc = wtask.integrate(self.repo, self.wt_root, task["id"])
         self.assertEqual(rc, 0, payload)
         self.assertEqual(payload["result"], "integrated")
+        self.assertEqual(payload["canonical_tip"], tip)
+        self.assertEqual(
+            git(self.repo, "rev-parse", "refs/heads/main").stdout_text, tip
+        )
+
+    def test_merge_uses_exact_sha_and_reports_actual_tip(self):
+        task = self.create_task()
+        tip = commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
+        calls = []
+        original = wtask._git
+
+        def spy(repo, *args):
+            calls.append(args)
+            return original(repo, *args)
+
+        with patch.object(wtask, "_git", spy):
+            payload, rc = wtask.integrate(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 0, payload)
+        self.assertIn(("merge", "--ff-only", tip), calls)
+        self.assertEqual(payload["canonical_tip"], tip)
         self.assertEqual(
             git(self.repo, "rev-parse", "refs/heads/main").stdout_text, tip
         )
@@ -245,6 +336,15 @@ class IntegrateTests(RepoFixture):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_foreign_main_claim_refused(self):
+        task = self.create_task()
+        commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
+        wtask.claim_main(self.repo, "primary", ttl_minutes=30)
+        payload, rc = wtask.integrate(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(payload["result"], "refused")
+        self.assertEqual(payload["holder"], "primary")
+
     def test_dirty_task_refused(self):
         task = self.create_task()
         commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
@@ -261,9 +361,19 @@ class CleanupTests(RepoFixture):
         self.assertEqual(rc, 0, payload)
         self.assertEqual(payload["result"], "cleaned")
         self.assertFalse(Path(task["path"]).exists())
+        self.assertIsNone(wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
         payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
         self.assertEqual(rc, 0)
         self.assertEqual(payload["result"], "already-cleaned")
+
+    def test_named_task_cleanup_removes_branch(self):
+        task = self.named_task()
+        commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
+        self.assertEqual(wtask.integrate(self.repo, self.wt_root, task["id"])[1], 0)
+        payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 0, payload)
+        self.assertEqual(payload["result"], "cleaned")
+        self.assertIsNone(wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
 
     def test_refuses_dirty_and_not_integrated(self):
         task = self.integrated_task()
@@ -283,6 +393,129 @@ class CleanupTests(RepoFixture):
         payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
         self.assertEqual(rc, 1)
         self.assertEqual(payload["result"], "partial-state")
+
+    def test_cleanup_lock_busy(self):
+        task = self.integrated_task()
+        d = wtask._lock_dir(self.repo)
+        d.mkdir()
+        (d / "owner").write_text("other", encoding="utf-8")
+        try:
+            payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+            self.assertEqual(rc, 1)
+            self.assertEqual(payload["result"], "lock-busy")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_orphan_directory_reports_partial_state(self):
+        task = self.integrated_task()
+        git(self.repo, "worktree", "remove", "--force", task["path"])
+        git(self.repo, "branch", "-D", task["branch"])
+        Path(task["path"]).mkdir(parents=True)
+        payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(Path(task["path"]).exists())
+
+    def test_slugged_orphan_directory_reports_partial_state(self):
+        task = self.named_task()
+        commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
+        self.assertEqual(wtask.integrate(self.repo, self.wt_root, task["id"])[1], 0)
+        git(self.repo, "worktree", "remove", "--force", task["path"])
+        git(self.repo, "branch", "-D", task["branch"])
+        Path(task["path"]).mkdir(parents=True)
+        payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(Path(task["path"]).exists())
+
+
+class PathBoundaryTests(RepoFixture):
+    def test_wrong_wt_root_integrate_refused_and_preserved(self):
+        task = self.named_task()
+        commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
+        tip = git(self.repo, "rev-parse", "refs/heads/main").stdout_text
+        wrong = self.root / "wrong-root"
+        wrong.mkdir()
+        payload, rc = wtask.integrate(self.repo, wrong, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(Path(task["path"]).exists())
+        self.assertIsNotNone(
+            wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
+        self.assertEqual(
+            git(self.repo, "rev-parse", "refs/heads/main").stdout_text, tip)
+
+    def test_wrong_wt_root_cleanup_refused_and_preserved(self):
+        task = self.named_task()
+        commit_file(Path(task["path"]), "work.md", "w\n", "task commit")
+        self.assertEqual(wtask.integrate(self.repo, self.wt_root, task["id"])[1], 0)
+        wrong = self.root / "wrong-root"
+        wrong.mkdir()
+        payload, rc = wtask.cleanup(self.repo, wrong, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(Path(task["path"]).exists())
+        self.assertIsNotNone(
+            wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
+
+    def test_foreign_manual_worktree_refused(self):
+        outside = self.root / "outside-task"
+        git(self.repo, "worktree", "add", "-b", "task/manual01",
+            str(outside), self.base)
+        commit_file(outside, "w.md", "w\n", "manual commit")
+        payload, rc = wtask.integrate(self.repo, self.wt_root, "manual01")
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        payload, rc = wtask.cleanup(self.repo, self.wt_root, "manual01")
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(outside.exists())
+        self.assertIsNotNone(
+            wtask._rev_parse(self.repo, "refs/heads/task/manual01"))
+
+    def test_symlinked_worktree_path_refused(self):
+        task = self.named_task()
+        outside = self.root / "link-target"
+        outside.mkdir()
+        shutil.rmtree(task["path"])
+        try:
+            os.symlink(str(outside), task["path"], target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation unavailable")
+        payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(os.path.islink(task["path"]))
+        self.assertIsNotNone(
+            wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
+
+    def test_worktree_branch_drift_refused(self):
+        task = self.named_task()
+        git(task["path"], "checkout", "-b", "feature/drift")
+        payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertTrue(Path(task["path"]).exists())
+        self.assertIsNotNone(
+            wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
+
+    def test_foreign_common_dir_refused(self):
+        task = self.named_task()
+        original = wtask._git_dir_pair
+
+        def fake(repo):
+            if wtask._norm(repo) == wtask._norm(task["path"]):
+                return ("C:/elsewhere/.git", "C:/elsewhere/.git")
+            return original(repo)
+
+        with patch.object(wtask, "_git_dir_pair", fake):
+            payload, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "partial-state")
+        self.assertIn("common directory", payload["detail"])
+        self.assertTrue(Path(task["path"]).exists())
+        self.assertIsNotNone(
+            wtask._rev_parse(self.repo, "refs/heads/" + task["branch"]))
 
 
 class LockMatrixTests(RepoFixture):
@@ -344,60 +577,6 @@ class LockMatrixTests(RepoFixture):
         self.assertTrue(wtask._lock_dir(other).exists())
         wtask.lock_release(other)
         self.assertFalse(wtask._lock_dir(other).exists())
-
-
-class RegistryReadCostTests(RepoFixture):
-    def write_records(self, count=10):
-        expected_common = wtask._norm(wtask._registry_dir(self.repo).parent.parent)
-        ids = []
-        for index in range(count):
-            task_id = f"task-{index:02d}"
-            wtask._write_task(self.repo, {
-                "id": task_id,
-                "common": expected_common,
-                "status": "active",
-                "generation": 1,
-            })
-            ids.append(task_id)
-        return ids
-
-    def test_records_resolves_git_common_dir_once_for_many_rows(self):
-        ids = self.write_records(10)
-        calls = []
-        original = wtask._git_dir_pair
-
-        def counting(*args, **kwargs):
-            calls.append(args)
-            return original(*args, **kwargs)
-
-        with patch.object(wtask, "_git_dir_pair", counting):
-            rows = wtask._records(self.repo)
-
-        self.assertEqual([row["id"] for row in rows], ids)
-        self.assertEqual(len(calls), 1)
-
-    def test_records_still_rejects_identity_mismatch(self):
-        self.write_records(1)
-        path = wtask._registry_dir(self.repo) / "task-00.json"
-        row = json.loads(path.read_text(encoding="utf-8"))
-        row["common"] = "elsewhere"
-        path.write_text(json.dumps(row), encoding="utf-8")
-
-        with self.assertRaisesRegex(ValueError, "identity mismatch"):
-            wtask._records(self.repo)
-
-    def test_records_still_rejects_linked_task_record(self):
-        self.write_records(1)
-        path = wtask._registry_dir(self.repo) / "task-00.json"
-        target = self.root / "linked.json"
-        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
-        path.unlink()
-        try:
-            path.symlink_to(target)
-        except (OSError, NotImplementedError):
-            self.skipTest("symlink creation unavailable on this platform")
-        with self.assertRaisesRegex(ValueError, "linked or not a file"):
-            wtask._records(self.repo)
 
 
 class SeparateGitDirTests(RepoFixture):

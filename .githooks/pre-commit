@@ -11,11 +11,11 @@ set -e
 
 STAGED_FILES=$(git diff --cached --name-only)
 
-# --- 1. 跑测试（hard block） ---
-echo "[pre-commit] 运行测试…"
-if ! python -X utf8 -m pytest tests/ -q --tb=short 2>&1; then
+# --- 1. 本地快检（hard block；完整 worktree 套件由 CI 与合入前全量测试兜底） ---
+echo "[pre-commit] 运行本地快检…"
+if ! python -X utf8 -m pytest tests/ -q --tb=short --ignore=tests/test_worktree_task_asset.py --ignore=tests/test_worktree_coordination.py 2>&1; then
     echo ""
-    echo "❌ 测试未通过。请先修复测试，再重新 stage/commit。"
+    echo "❌ 本地快检未通过。请先修复测试，再重新 stage/commit。"
     exit 1
 fi
 

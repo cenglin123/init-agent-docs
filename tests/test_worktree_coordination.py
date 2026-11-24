@@ -1,4 +1,9 @@
-"""Cooperative admission tests against throwaway Git repositories."""
+"""Worktree task CLI tests against throwaway Git repositories.
+
+Covers the 8 remaining subcommands (create/check/integrate/cleanup/list,
+claim-main/release-main/main-claim) and the mechanical refusal of the removed
+handshake subcommands.
+"""
 from __future__ import annotations
 
 import json
@@ -6,212 +11,172 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests.test_worktree_task_asset import RepoFixture, SCRIPT, commit_file, git, wtask
+from tests.test_worktree_task_asset import (
+    RepoFixture, SCRIPT, commit_file, git, wtask,
+)
 
 
 class CoordinationTests(RepoFixture):
-    def task(self, name, owner):
+    def named(self, name="Alpha Site", owner="agent-a"):
         payload, rc = wtask.create(self.repo, self.wt_root, name=name, owner=owner)
         self.assertEqual(rc, 0, payload)
-        self.assertIn(name.lower().replace(' ', '-'), payload['branch'])
         return payload
 
-    def scope(self, task, owner, path, goal='Work'):
-        payload, rc = wtask.intent(self.repo, task['id'], owner, 1, goal,
-                                   'Do not edit unrelated files', ['module scope'], [path])
+    def test_create_name_owner_derives_branch_and_directory(self):
+        task = self.named()
+        self.assertEqual(task["branch"], f"task/{task['id']}-alpha-site")
+        self.assertEqual(task["path"].replace("\\", "/").rsplit("/", 1)[-1],
+                         f"wt-{task['id']}-alpha-site")
+        self.assertEqual(task["owner"], "agent-a")
+        other = self.named(name="Alpha Site", owner="agent-b")
+        self.assertNotEqual(task["id"], other["id"])
+        self.assertNotEqual(task["branch"], other["branch"])
+        self.assertNotEqual(task["path"], other["path"])
+
+    def test_list_reports_linked_tasks_and_claim_state(self):
+        a = self.named()
+        b, rc = wtask.create(self.repo, self.wt_root)
+        self.assertEqual(rc, 0, b)
+        payload, rc = wtask.list_tasks(self.repo)
         self.assertEqual(rc, 0, payload)
-        return payload['intent']['revision']
+        self.assertFalse(payload["main_claim"]["claimed"])
+        branches = {item["branch"] for item in payload["tasks"]}
+        self.assertEqual(branches, {a["branch"], b["branch"]})
+        self.assertNotIn(str(self.repo), {item["path"] for item in payload["tasks"]})
+        for item in payload["tasks"]:
+            self.assertTrue(item["clean"])
 
-    def digest(self, task, owner, repo=None):
-        payload, rc = wtask.review(repo or self.repo, task['id'], owner, 1)
+    def test_list_handles_space_path_and_filters_non_task_branches(self):
+        space_root = self.root / "wt root with space"
+        space_root.mkdir()
+        task, rc = wtask.create(self.repo, space_root, name="Space Task",
+                                owner="agent-a")
+        self.assertEqual(rc, 0, task)
+        self.assertIn(" ", task["path"])
+        other = self.root / "other-worktree"
+        git(self.repo, "worktree", "add", "-b", "feature/not-a-task",
+            str(other), self.base)
+        payload, rc = wtask.list_tasks(self.repo)
         self.assertEqual(rc, 0, payload)
-        return payload
+        branches = {item["branch"] for item in payload["tasks"]}
+        self.assertIn(task["branch"], branches)
+        self.assertNotIn("feature/not-a-task", branches)
+        recorded = next(item for item in payload["tasks"]
+                        if item["branch"] == task["branch"])
+        self.assertEqual(wtask._norm(recorded["path"]), wtask._norm(task["path"]))
+        self.assertTrue(recorded["path"].endswith("wt-" + task["id"] + "-space-task"))
 
-    def test_display_name_once_and_read_only_across_entries(self):
-        a = self.task('Alpha Site', 'agent-a')
-        b = self.task('Beta Docs', 'agent-b')
-        self.assertEqual(wtask.resume(self.repo, a['id'], 'agent-a', 1)[1], 0)
-        self.assertRaises(ValueError, wtask.resume, self.repo, a['id'], 'agent-b', 1)
-        self.scope(a, 'agent-a', 'site/index.html')
-        self.scope(b, 'agent-b', 'docs/guide.md')
-        registry = wtask._registry_dir(self.repo)
-        before = {p.name: p.read_bytes() for p in registry.glob('*.json')}
-        self.assertFalse(wtask._lock_dir(self.repo).exists())
-        from_main = wtask.list_tasks(self.repo)[0]['tasks']
-        from_a = wtask.list_tasks(Path(a['path']))[0]['tasks']
-        from_b = wtask.list_tasks(Path(b['path']))[0]['tasks']
-        self.assertEqual(from_main, from_a)
-        self.assertEqual(from_main, from_b)
-        review_a = self.digest(a, 'agent-a', Path(a['path']))
-        self.assertEqual(review_a['peers'][0]['id'], b['id'])
-        self.assertEqual(before, {p.name: p.read_bytes() for p in registry.glob('*.json')})
-        self.assertFalse(wtask._lock_dir(self.repo).exists())
-        self.assertEqual(wtask.admit(self.repo, a['id'], 'agent-a', 1, review_a['digest'])[1], 0)
-        self.assertEqual(wtask.check(Path(a['path']), self.wt_root, a['id'],
-                                     owner='agent-a', generation=1, write=True)[1], 0)
-        self.scope(b, 'agent-b', 'docs/new-guide.md')
-        result, rc = wtask.check(Path(a['path']), self.wt_root, a['id'],
-                                 owner='agent-a', generation=1, write=True)
-        self.assertEqual(rc, 0, result)
-        self.assertEqual(result['review_refresh'], [b['id']])
-
-    def test_overlap_requires_same_current_protocol(self):
-        a = self.task('Alpha Site', 'agent-a')
-        b = self.task('Beta Docs', 'agent-b')
-        self.scope(a, 'agent-a', 'site/index.html')
-        self.scope(b, 'agent-b', 'site')
-        first = self.digest(a, 'agent-a')
-        self.assertEqual(first['peers'][0]['path_overlap'], [['site/index.html', 'site']])
-        with self.assertRaises(ValueError):
-            wtask.admit(self.repo, a['id'], 'agent-a', 1, first['digest'])
-        wtask.coordinate(self.repo, a['id'], 'agent-a', 1, b['id'], 1, 'A owns markup; B owns copy')
-        wtask.coordinate(self.repo, b['id'], 'agent-b', 1, a['id'], 1, 'Conflicting protocol')
-        with self.assertRaises(ValueError):
-            wtask.admit(self.repo, a['id'], 'agent-a', 1, self.digest(a, 'agent-a')['digest'])
-        wtask.coordinate(self.repo, b['id'], 'agent-b', 1, a['id'], 1, 'A owns markup; B owns copy')
-        self.assertEqual(wtask.admit(self.repo, a['id'], 'agent-a', 1,
-                                     self.digest(a, 'agent-a')['digest'])[1], 0)
-        self.assertEqual(wtask.check(Path(a['path']), self.wt_root, a['id'],
-                                     owner='agent-a', generation=1, write=True)[1], 0)
-        wtask.coordinate(self.repo, b['id'], 'agent-b', 1, a['id'], 1, 'Changed protocol')
-        with self.assertRaises(ValueError):
-            wtask.check(Path(a['path']), self.wt_root, a['id'],
-                        owner='agent-a', generation=1, write=True)
-
-    def test_related_revision_and_legacy_unknown_override(self):
-        a = self.task('Alpha Site', 'agent-a')
-        self.scope(a, 'agent-a', 'site/index.html')
-        legacy, rc = wtask.create(self.repo, self.wt_root)
-        self.assertEqual(rc, 0, legacy)
-        view = self.digest(a, 'agent-a')
-        self.assertEqual(view['peers'][0]['status'], 'unknown')
-        peer_id = view['peers'][0]['id']
-        with self.assertRaises(ValueError):
-            wtask.admit(self.repo, a['id'], 'agent-a', 1, view['digest'])
-        wtask.coordinate(self.repo, a['id'], 'agent-a', 1, peer_id, 0,
-                         authorized_by='project-lead', reason='Legacy owner unavailable',
-                         boundary='Only site/index.html; no legacy changes copied')
-        current = self.digest(a, 'agent-a')
-        self.assertEqual(wtask.admit(self.repo, a['id'], 'agent-a', 1, current['digest'])[1], 0)
-        self.scope(a, 'agent-a', 'site/new.html')
-        with self.assertRaises(ValueError):
-            wtask.check(Path(a['path']), self.wt_root, a['id'],
-                        owner='agent-a', generation=1, write=True)
-
-    def test_dependency_needs_committed_sha(self):
-        a = self.task('Alpha Site', 'agent-a')
-        b = self.task('Beta Docs', 'agent-b')
-        with self.assertRaises(ValueError):
-            wtask.intent(self.repo, a['id'], 'agent-a', 1, 'A', 'Not B', [], [], [b['id']])
-        with self.assertRaises(ValueError):
-            wtask.intent(self.repo, a['id'], 'agent-a', 1, 'A', 'Not B', [], [],
-                         ['missing1@' + self.base])
-        payload, rc = wtask.intent(self.repo, a['id'], 'agent-a', 1, 'A', 'Not B', [], [],
-                                   [b['id'] + '@' + self.base])
+    def test_check_reports_main_claim(self):
+        task = self.named()
+        wtask.claim_main(self.repo, "primary", ttl_minutes=30)
+        payload, rc = wtask.check(self.repo, self.wt_root, task["id"])
         self.assertEqual(rc, 0, payload)
-        self.assertEqual(payload['intent']['depends_on'][0]['sha'], self.base)
-        self.assertEqual(self.digest(a, 'agent-a')['own_dependencies'][0]['id'], b['id'])
+        self.assertTrue(payload["main_claim"]["claimed"])
+        self.assertEqual(payload["main_claim"]["owner"], "primary")
+        wtask.release_main(self.repo, "primary")
 
-    def test_literal_path_hints_are_conservative(self):
-        self.assertEqual(wtask._path_hint('Site\\Index.HTML'), 'site/index.html')
-        self.assertEqual(wtask._path_hint('.agents/memory/MEMORY.md'),
-                         '.agents/memory/memory.md')
-        for bad in ('/outside', '../outside', 'a/../b', 'C:/outside', 'a/*'):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                wtask._path_hint(bad)
+    def test_cli_resolves_relative_wt_root_against_cwd(self):
+        proc = subprocess.run(
+            [sys.executable, "-B", str(SCRIPT), "create", "--repo", str(self.repo),
+             "--wt-root", "relative-root", "--name", "Relative Task",
+             "--owner", "agent-rel"],
+            capture_output=True, text=True, encoding="utf-8", cwd=str(self.root),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        task = json.loads(proc.stdout)
+        expected_root = (self.root / "relative-root").resolve()
+        self.assertEqual(Path(task["path"]).parent, expected_root)
+        self.assertTrue(Path(task["path"]).is_absolute())
+        self.assertTrue(Path(task["path"]).is_dir())
 
-    def test_related_revision_invalidates_admission(self):
-        a = self.task('Alpha Site', 'agent-a')
-        b = self.task('Beta Docs', 'agent-b')
-        self.scope(a, 'agent-a', 'site/index.html')
-        self.scope(b, 'agent-b', 'site')
-        protocol = 'A edits markup; B edits prose'
-        wtask.coordinate(self.repo, a['id'], 'agent-a', 1, b['id'], 1, protocol)
-        wtask.coordinate(self.repo, b['id'], 'agent-b', 1, a['id'], 1, protocol)
-        self.assertEqual(wtask.admit(self.repo, a['id'], 'agent-a', 1,
-                                     self.digest(a, 'agent-a')['digest'])[1], 0)
-        self.scope(b, 'agent-b', 'site/new.html')
-        with self.assertRaises(ValueError):
-            wtask.check(Path(a['path']), self.wt_root, a['id'],
-                        owner='agent-a', generation=1, write=True)
+    def test_claim_release_and_status(self):
+        claimed, rc = wtask.claim_main(self.repo, "primary", ttl_minutes=30)
+        self.assertEqual(rc, 0, claimed)
+        self.assertTrue(claimed["owner"] == "primary")
+        self.assertEqual(wtask.main_claim_status(self.repo)["owner"], "primary")
+        refused, rc = wtask.claim_main(self.repo, "fork-agent", ttl_minutes=30)
+        self.assertEqual(rc, 1, refused)
+        self.assertEqual(refused["result"], "refused")
+        self.assertEqual(refused["holder"], "primary")
+        self.assertEqual(wtask.release_main(self.repo, "fork-agent")[1], 1)
+        self.assertEqual(wtask.main_claim_status(self.repo)["owner"], "primary")
+        released, rc = wtask.release_main(self.repo, "primary")
+        self.assertEqual(rc, 0, released)
+        self.assertFalse(wtask.main_claim_status(self.repo)["claimed"])
 
-    def test_closed_committed_dependency_remains_visible_to_owner(self):
-        a = self.task('Alpha Site', 'agent-a')
-        b = self.task('Beta Docs', 'agent-b')
-        self.assertEqual(wtask.close(self.repo, b['id'], 'agent-b', 1)[1], 0)
-        self.assertEqual(wtask.intent(self.repo, a['id'], 'agent-a', 1, 'A', 'Not B',
-                                      [], ['site/index.html'], [b['id'] + '@' + self.base])[1], 0)
-        view = self.digest(a, 'agent-a')
-        self.assertEqual(view['peers'], [])
-        self.assertEqual(view['own_dependencies'][0]['id'], b['id'])
-        self.assertEqual(wtask.admit(self.repo, a['id'], 'agent-a', 1, view['digest'])[1], 0)
-
-    def test_close_requires_integrated_clean_and_keeps_audit_branch(self):
-        a = self.task('Alpha Site', 'agent-a')
-        commit_file(Path(a['path']), 'alpha.md', 'alpha\n', 'alpha')
-        with self.assertRaises(ValueError):
-            wtask.close(self.repo, a['id'], 'agent-a', 1)
-        self.assertEqual(wtask.integrate(self.repo, self.wt_root, a['id'])[1], 0)
-        self.assertEqual(wtask.close(self.repo, a['id'], 'agent-a', 1)[1], 0)
-        self.assertRaises(ValueError, wtask.resume, self.repo, a['id'], 'agent-a', 1)
-        cleaned, rc = wtask.cleanup(self.repo, self.wt_root, a['id'])
-        self.assertEqual(rc, 0, cleaned)
-        self.assertTrue(cleaned['branch_retained'])
-        self.assertIsNotNone(wtask._rev_parse(self.repo, 'refs/heads/' + a['branch']))
-        self.assertEqual(wtask.cleanup(self.repo, self.wt_root, a['id'])[0]['result'],
-                         'already-cleaned')
-
-    def test_register_existing_managed_worktree_without_renaming_branch(self):
-        managed = self.root / 'managed-worktree'
-        git(self.repo, 'worktree', 'add', '-b', 'feature/owned-by-other-host',
-            str(managed), self.base)
-        row, rc = wtask.register(self.repo, 'managed1', 'Managed Task', 'agent-managed',
-                                 managed, self.base)
-        self.assertEqual(rc, 0, row)
-        self.assertEqual(row['branch'], 'feature/owned-by-other-host')
-        self.assertEqual(wtask.resume(managed, 'managed1', 'agent-managed', 1)[1], 0)
-        with self.assertRaises(ValueError):
-            wtask.register(self.repo, 'managed2', 'Another Task', 'agent-other',
-                           managed, self.base)
+    def test_integrate_refused_by_foreign_main_claim(self):
+        task = self.named()
+        commit_file(task["path"], "work.md", "w\n", "task commit")
+        wtask.claim_main(self.repo, "primary", ttl_minutes=30)
+        payload, rc = wtask.integrate(self.repo, self.wt_root, task["id"])
+        self.assertEqual(rc, 1, payload)
+        self.assertEqual(payload["result"], "refused")
+        self.assertEqual(payload["holder"], "primary")
+        self.assertNotEqual(
+            git(self.repo, "rev-parse", "refs/heads/main").stdout_text,
+            git(self.repo, "rev-parse", task["branch"]).stdout_text,
+        )
+        wtask.release_main(self.repo, "primary")
+        self.assertEqual(wtask.integrate(self.repo, self.wt_root, task["id"])[1], 0)
 
     def test_cleanup_refuses_ignored_user_data(self):
-        a = self.task('Alpha Site', 'agent-a')
-        commit_file(Path(a['path']), '.gitignore', 'private.tmp\n', 'ignore rule')
-        self.assertEqual(wtask.integrate(self.repo, self.wt_root, a['id'])[1], 0)
-        self.assertEqual(wtask.close(self.repo, a['id'], 'agent-a', 1)[1], 0)
-        private = Path(a['path']) / 'private.tmp'
-        private.write_text('fixture only', encoding='utf-8')
-        result, rc = wtask.cleanup(self.repo, self.wt_root, a['id'])
-        self.assertEqual(rc, 1, result)
-        self.assertTrue(private.exists())
-        self.assertIn('ignored', result['detail'])
+        task = self.named()
+        commit_file(task["path"], ".gitignore", "private.tmp\n", "ignore rule")
+        self.assertEqual(wtask.integrate(self.repo, self.wt_root, task["id"])[1], 0)
+        private = Path(task["path"]) / "private.tmp"
+        private.write_text("fixture only", encoding="utf-8")
+        try:
+            result, rc = wtask.cleanup(self.repo, self.wt_root, task["id"])
+            self.assertEqual(rc, 1, result)
+            self.assertIn("ignored", result["detail"])
+            self.assertTrue(private.exists())
+        finally:
+            private.unlink(missing_ok=True)
+
+    def test_removed_handshake_subcommands_rejected(self):
+        for action in ("register", "resume", "intent", "review", "coordinate",
+                       "admit", "close"):
+            with self.subTest(action=action):
+                proc = subprocess.run(
+                    [sys.executable, "-B", str(SCRIPT), action, "abcd",
+                     "--repo", str(self.repo)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                )
+                self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
 
     def test_public_cli_forward_flow(self):
         def cli(*args):
-            proc = subprocess.run([sys.executable, '-B', str(SCRIPT), *args],
-                                  capture_output=True, text=True)
+            proc = subprocess.run([sys.executable, "-B", str(SCRIPT), *args],
+                                  capture_output=True, text=True, encoding="utf-8")
             return json.loads(proc.stdout), proc.returncode
-        task, rc = cli('create', '--repo', str(self.repo), '--wt-root', str(self.wt_root),
-                       '--name', 'Forward Flow', '--owner', 'agent-forward')
+
+        task, rc = cli("create", "--repo", str(self.repo), "--wt-root", str(self.wt_root),
+                       "--name", "Forward Flow", "--owner", "agent-forward")
         self.assertEqual(rc, 0, task)
-        self.assertEqual(cli('resume', task['id'], '--repo', str(self.repo),
-                             '--owner', 'agent-forward', '--generation', '1')[1], 0)
-        self.assertEqual(cli('intent', task['id'], '--repo', str(self.repo),
-                             '--owner', 'agent-forward', '--generation', '1',
-                             '--goal', 'Edit a file', '--non-goal', 'Other files',
-                             '--path', 'note.md')[1], 0)
-        review, rc = cli('review', task['id'], '--repo', str(task['path']),
-                         '--owner', 'agent-forward', '--generation', '1')
-        self.assertEqual(rc, 0, review)
-        self.assertEqual(cli('admit', task['id'], '--repo', str(task['path']),
-                             '--owner', 'agent-forward', '--generation', '1',
-                             '--review-digest', review['digest'])[1], 0)
-        self.assertEqual(cli('check', task['id'], '--repo', str(task['path']),
-                             '--wt-root', str(self.wt_root), '--owner', 'agent-forward',
-                             '--generation', '1', '--write')[1], 0)
+        listed, rc = cli("list", "--repo", str(self.repo))
+        self.assertEqual(rc, 0, listed)
+        self.assertIn(task["branch"], {item["branch"] for item in listed["tasks"]})
+        checked, rc = cli("check", task["id"], "--repo", str(self.repo),
+                          "--wt-root", str(self.wt_root))
+        self.assertEqual(rc, 0, checked)
+        self.assertEqual(checked["branch"], task["branch"])
+        self.assertEqual(cli("claim-main", "--repo", str(self.repo),
+                             "--owner", "agent-forward")[1], 0)
+        self.assertEqual(cli("main-claim", "--repo", str(self.repo))[0]["owner"],
+                         "agent-forward")
+        self.assertEqual(cli("release-main", "--repo", str(self.repo),
+                             "--owner", "agent-forward")[1], 0)
+        commit_file(task["path"], "note.md", "changed\n", "task commit")
+        self.assertEqual(cli("integrate", task["id"], "--repo", str(self.repo),
+                             "--wt-root", str(self.wt_root))[1], 0)
+        self.assertEqual(cli("cleanup", task["id"], "--repo", str(self.repo),
+                             "--wt-root", str(self.wt_root))[1], 0)
 
     def test_help_is_console_encoding_safe(self):
-        proc = subprocess.run([sys.executable, '-B', str(SCRIPT), '--help'],
+        proc = subprocess.run([sys.executable, "-B", str(SCRIPT), "--help"],
                               capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertTrue(proc.stdout.isascii())
+        for removed in ("register", "resume", "intent", "review", "coordinate",
+                        "admit", "close"):
+            self.assertNotIn(removed, proc.stdout)

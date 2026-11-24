@@ -285,8 +285,11 @@ class SkillGuidanceTestCase(unittest.TestCase):
         optional = read_repo_file("assets/references/optional-integrations.md")
         self.assert_contains_all(optional, ["governance-watch.js", "ENTRY_FILE", "监视路径之外", "默认跳过", "worktree-task.canonicalRef"])
         patterns = read_repo_file("assets/references/workflow-patterns.md")
-        self.assert_contains_all(patterns, ["Git common-dir", "同一份协议文本", "head-drift", "partial-state", "unknown"])
+        self.assert_contains_all(patterns, ["Git common-dir", "claim-main", "head-drift", "partial-state", "info/exclude"])
+        self.assertNotIn("同一份协议文本", patterns)
         self.assertNotIn("5-10 个文件", patterns)
+        ci = read_repo_file(".github/workflows/ci.yml")
+        self.assert_contains_all(ci, ["pytest tests/", "scripts/check_source.py", "git diff --check"])
 
     def test_single_entry_no_legacy_sync_machinery(self) -> None:
         """单一入口合同：交付面不得再引用已移除的三文件同步机制。"""

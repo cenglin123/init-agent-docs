@@ -122,3 +122,33 @@ def test_corrupted_json_tolerated(repo):
     assert ok['result'] == 'ok'
     st = _run(repo, 'main-claim')
     assert st['claimed'] is True
+
+
+@pytest.mark.parametrize('bad', ['null', '[]', '123', '"text"'])
+def test_non_dict_json_tolerated_for_status_and_release(repo, bad):
+    """P3-1：非 dict 的合法 JSON 一律视作无占用，release 不抛 AttributeError。"""
+    claim_file = repo / '.git' / 'worktree-task' / 'main-claim.json'
+    claim_file.parent.mkdir(parents=True, exist_ok=True)
+    claim_file.write_text(bad, encoding='utf-8')
+    assert _run(repo, 'main-claim')['claimed'] is False
+    released = _run(repo, 'release-main', '--owner', 'primary')
+    assert released['result'] == 'not-found'
+    claim_file.write_text(bad, encoding='utf-8')
+    assert _run(repo, 'claim-main', '--owner', 'primary')['result'] == 'ok'
+
+
+def test_claim_and_release_report_lock_busy(repo):
+    """P2-1：claim-main / release-main 与 integrate 共用 mutation_lock。"""
+    lock = repo / '.git' / 'worktree-task' / 'mutation.lock'
+    lock.mkdir(parents=True)
+    (lock / 'owner').write_text('other', encoding='utf-8')
+    assert _run(repo, 'claim-main', '--owner', 'primary')['result'] == 'lock-busy'
+    assert _run(repo, 'release-main', '--owner', 'primary')['result'] == 'lock-busy'
+
+
+def test_claim_write_leaves_no_temp_file(repo):
+    """P2-1：同目录临时文件 + os.replace 原子写入，不残留 .tmp。"""
+    _run(repo, 'claim-main', '--owner', 'primary')
+    state = repo / '.git' / 'worktree-task'
+    assert not [p for p in state.iterdir() if p.name.endswith('.tmp')]
+    assert json.loads((state / 'main-claim.json').read_text(encoding='utf-8'))['owner'] == 'primary'
