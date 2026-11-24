@@ -39,6 +39,15 @@ class AuditTest(unittest.TestCase):
             cwd=self.root, capture_output=True, text=True, encoding="utf-8",
             env={**os.environ, "PYTHONUTF8": "1"})
 
+    def test_cli_rejects_prefetched_repo_graph_bypass(self):
+        result = self.run_audit(
+            "check", "--repo-graph-result-json",
+            '{"returncode": 0, "stdout": "{\\"status\\": \\"ok\\"}"}',
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unrecognized arguments", result.stderr)
+        self.assertIn("--repo-graph-result-json", result.stderr)
+
     def write_common(self):
         (self.root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
         docs = self.root / "docs"
@@ -660,6 +669,99 @@ class CheckCommandContractTest(unittest.TestCase):
         self.assertIn("fill created_at", out)
         self.assertIn("1 unscored commit", out)
         self.assertIn("gate closed", out)
+
+    def test_evaluate_repo_graph_output_uses_one_verdict(self):
+        cases = (
+            (0, '{"status": "ok"}', "ok"),
+            (0, '{"status": "stale"}', "warn"),
+            (1, '{"status": "stale"}', "warn"),
+            (0, '{"status": "built"}', "invalid"),
+            (1, '{"status": "ok"}', "invalid"),
+            (0, "not json", "invalid"),
+        )
+        for returncode, stdout, expected in cases:
+            with self.subTest(returncode=returncode, stdout=stdout):
+                rows = self.audit._evaluate_repo_graph_output(returncode, stdout)
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]["status"], expected)
+
+    def test_evaluate_repo_graph_output_treats_deep_json_as_invalid(self):
+        deep = "[" * 5000 + "]" * 5000
+        rows = self.audit._evaluate_repo_graph_output(0, deep)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "invalid")
+        self.assertIn("unreadable output", rows[0]["detail"])
+
+    def test_check_repo_graph_prefetched_fails_closed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".agents" / "repo-graph").mkdir(parents=True)
+            (root / ".agents" / "repo-graph" / "manifest.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            original_root = self.audit.ROOT
+            self.audit.ROOT = root
+            try:
+                good = self.audit._check_repo_graph(
+                    prefetched=(0, '{"status": "ok"}')
+                )
+                self.assertEqual(good[0]["status"], "ok")
+
+                built = self.audit._check_repo_graph(
+                    prefetched=(0, '{"status": "built"}')
+                )
+                self.assertEqual(built[0]["status"], "invalid")
+
+                deep = self.audit._check_repo_graph(
+                    prefetched=(0, "[" * 5000 + "]" * 5000)
+                )
+                self.assertEqual(deep[0]["status"], "invalid")
+
+                for malformed in (
+                    "not a tuple",
+                    {"returncode": 0, "stdout": "{}"},
+                    ("0", "{}"),
+                    (0,),
+                ):
+                    with self.subTest(malformed=malformed):
+                        rows = self.audit._check_repo_graph(prefetched=malformed)
+                        self.assertEqual(rows[0]["status"], "invalid")
+                        self.assertIn("malformed", rows[0]["detail"])
+            finally:
+                self.audit.ROOT = original_root
+
+    def test_prefetched_still_requires_manifest(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            original_root = self.audit.ROOT
+            self.audit.ROOT = Path(tmp)
+            try:
+                rows = self.audit._check_repo_graph(
+                    prefetched=(0, '{"status": "ok"}')
+                )
+            finally:
+                self.audit.ROOT = original_root
+        self.assertEqual(rows, [])
+
+    def test_run_check_in_process_reuses_prefetched(self):
+        seen = []
+        original_run_all = self.audit._run_all
+        original_format = self.audit._format_text
+        self.audit._run_all = lambda repo_graph_prefetched=None: (
+            seen.append(repo_graph_prefetched)
+            or [{"kind": "repo_graph", "status": "ok", "detail": "x"}]
+        )
+        self.audit._format_text = lambda results, verbose=False: "TEXT"
+        try:
+            code, text = self.audit.run_check_in_process(
+                repo_graph_prefetched=(0, '{"status": "ok"}')
+            )
+        finally:
+            self.audit._run_all = original_run_all
+            self.audit._format_text = original_format
+        self.assertEqual((code, text), (0, "TEXT"))
+        self.assertEqual(seen, [(0, '{"status": "ok"}')])
 
 
 if __name__ == "__main__":

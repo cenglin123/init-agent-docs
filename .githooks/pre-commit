@@ -29,12 +29,19 @@ GOV_PATTERNS="^AGENTS\.md$|^SKILL\.md$|^README\.md$|^assets/templates/zh/|^asset
 GOV_CHANGED=0
 GOV_FILES=""
 
+_HAD_NOCASEMATCH=0
+if shopt -q nocasematch; then _HAD_NOCASEMATCH=1; fi
+shopt -u nocasematch
+
 while IFS= read -r path; do
-    if echo "$path" | grep -qE "$GOV_PATTERNS"; then
+    [ -n "$path" ] || continue
+    if [[ "$path" =~ $GOV_PATTERNS ]]; then
         GOV_CHANGED=1
         GOV_FILES="$GOV_FILES  - $path"$'\n'
     fi
 done <<< "$STAGED_FILES"
+
+if [ "$_HAD_NOCASEMATCH" -eq 1 ]; then shopt -s nocasematch; fi
 
 if [ "$GOV_CHANGED" -eq 1 ]; then
     # Detect whether converge is available on this device

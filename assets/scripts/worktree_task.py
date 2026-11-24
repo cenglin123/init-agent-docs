@@ -234,20 +234,31 @@ def _registry_dir(repo) -> Path:
     return Path(common) / STATE_DIRECTORY / 'tasks'
 
 
-def _task_file(repo, task_id) -> Path:
+def _task_file(repo, task_id, registry_dir: Path | None = None) -> Path:
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]{3,63}', task_id or ''):
         raise ValueError('invalid task ID')
-    return _registry_dir(repo) / f'{task_id}.json'
+    directory = registry_dir if registry_dir is not None else _registry_dir(repo)
+    return directory / f'{task_id}.json'
 
 
-def _read_task(repo, task_id):
-    path = _task_file(repo, task_id)
+def _read_task(repo, task_id, *, registry_dir: Path | None = None,
+               expected_common: str | None = None):
+    """Read one registry row.
+
+    ``registry_dir`` / ``expected_common`` let callers that already resolved
+    the Git common-dir reuse it instead of spawning four more Git processes
+    per record. All identity and symlink checks still run on every read.
+    """
+    path = _task_file(repo, task_id, registry_dir)
     if not path.exists():
         return None
     if path.is_symlink() or not path.is_file():
         raise ValueError('task record is linked or not a file')
     row = json.loads(path.read_text(encoding='utf-8'))
-    if row.get('id') != task_id or row.get('common') != _norm(_registry_dir(repo).parent.parent):
+    if expected_common is None:
+        directory = registry_dir if registry_dir is not None else _registry_dir(repo)
+        expected_common = _norm(Path(directory).parent.parent)
+    if row.get('id') != task_id or row.get('common') != expected_common:
         raise ValueError('task record identity mismatch')
     return row
 
@@ -273,7 +284,12 @@ def _records(repo):
         return []
     if directory.is_symlink():
         raise ValueError('linked registry directory')
-    return [_read_task(repo, path.stem) for path in sorted(directory.glob('*.json'))]
+    expected_common = _norm(directory.parent.parent)
+    return [
+        _read_task(repo, path.stem, registry_dir=directory,
+                   expected_common=expected_common)
+        for path in sorted(directory.glob('*.json'))
+    ]
 
 
 def _snapshot(repo):

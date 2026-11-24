@@ -1,11 +1,13 @@
 """Regression tests for completion checks in project and knowledge-base layouts."""
-from pathlib import Path
+import io
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from assets.scripts import check_all
@@ -174,6 +176,180 @@ class CheckAllTests(unittest.TestCase):
                     index.write_bytes(content)
                 _, result = self.check_with_layout(scripts)
                 self.assertFalse(result[0])
+
+    def install_scripts(self, *names):
+        for name in names:
+            shutil.copyfile(
+                Path(__file__).resolve().parents[1] / "assets" / "scripts" / name,
+                self.scripts / name,
+            )
+
+    def patch_completion_root(self):
+        patchers = [
+            patch.object(check_all, "ROOT", self.root),
+            patch.object(check_all, "SCRIPTS_DIR", self.scripts),
+        ]
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_changelog_and_dead_links_run_without_subprocess(self):
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "CHANGELOG.md").write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n\n### 条目\n\n- 变更\n", encoding="utf-8"
+        )
+        self.install_scripts("changelog.py", "audit.py")
+        self.patch_completion_root()
+
+        with patch.object(check_all.subprocess, "run", side_effect=AssertionError("subprocess")):
+            changelog_ok, changelog_detail = check_all._check_changelog()
+            links_ok, links_detail = check_all._check_dead_links()
+
+        self.assertTrue(changelog_ok, changelog_detail)
+        self.assertIn("2026-01-01", changelog_detail)
+        self.assertIn("  - 条目", changelog_detail)
+        self.assertTrue(links_ok, links_detail)
+
+    def test_changelog_boundaries_still_fail_cleanly(self):
+        docs = self.root / "docs"
+        docs.mkdir()
+        self.install_scripts("changelog.py")
+        self.patch_completion_root()
+        changelog = docs / "CHANGELOG.md"
+
+        cases = (
+            ("missing", None, "不存在"),
+            ("empty", "", "无条目"),
+            ("no-date", "# CHANGELOG\n", "无条目"),
+            ("invalid-utf8", b"\xff", "UTF-8"),
+        )
+        with patch.object(check_all.subprocess, "run", side_effect=AssertionError("subprocess")):
+            for label, content, expected in cases:
+                with self.subTest(label=label):
+                    changelog.unlink(missing_ok=True)
+                    if content is not None:
+                        if isinstance(content, bytes):
+                            changelog.write_bytes(content)
+                        else:
+                            changelog.write_text(content, encoding="utf-8")
+                    ok, detail = check_all._check_changelog()
+                    self.assertFalse(ok)
+                    self.assertIn(expected, detail)
+
+    def test_missing_audit_keeps_existing_diagnostic(self):
+        self.patch_completion_root()
+
+        with patch.object(check_all.subprocess, "run", side_effect=AssertionError("subprocess")):
+            ok, detail = check_all._check_dead_links()
+
+        self.assertFalse(ok)
+        self.assertEqual(detail, "scripts/audit.py 不存在——无法执行死链审计")
+
+    def test_syntax_error_sibling_fails_one_check_and_keeps_going(self):
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "CHANGELOG.md").write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n\n### 条目\n", encoding="utf-8"
+        )
+        self.install_scripts("audit.py")
+        (self.scripts / "changelog.py").write_text("def broken(:\n", encoding="utf-8")
+        self.patch_completion_root()
+
+        ok, detail = check_all._check_changelog()
+
+        self.assertFalse(ok)
+        self.assertIn("CHANGELOG 检查失败", detail)
+        self.assertTrue(check_all._check_line_budget()[0])
+        self.assertTrue(check_all._check_dead_links()[0])
+
+    def test_legacy_changelog_interface_is_supported(self):
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "CHANGELOG.md").write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n\n### 旧条目\n", encoding="utf-8"
+        )
+        (self.scripts / "changelog.py").write_text(
+            "import re\n"
+            "DATE_HEADING_RE = re.compile(r'^## (\\d{4}-\\d{2}-\\d{2})(?:[：:](.*))?\\s*$')\n"
+            "SECTION_HEADING_RE = re.compile(r'^###\\s+(.+?)\\s*$')\n"
+            "def read_lines(path):\n"
+            "    return path.read_text(encoding='utf-8').splitlines()\n"
+            "def iter_date_blocks(lines):\n"
+            "    starts = [i for i, line in enumerate(lines) if DATE_HEADING_RE.match(line)]\n"
+            "    blocks = []\n"
+            "    for pos, start in enumerate(starts):\n"
+            "        m = DATE_HEADING_RE.match(lines[start])\n"
+            "        end = starts[pos + 1] if pos + 1 < len(starts) else len(lines)\n"
+            "        blocks.append((start, end, m.group(1), (m.group(2) or '').strip()))\n"
+            "    return blocks\n"
+            "def iter_sections(block_lines):\n"
+            "    starts = [i for i, line in enumerate(block_lines) if SECTION_HEADING_RE.match(line)]\n"
+            "    sections = []\n"
+            "    for pos, start in enumerate(starts):\n"
+            "        m = SECTION_HEADING_RE.match(block_lines[start])\n"
+            "        end = starts[pos + 1] if pos + 1 < len(starts) else len(block_lines)\n"
+            "        sections.append((start, end, m.group(1)))\n"
+            "    return sections\n",
+            encoding="utf-8",
+        )
+        self.patch_completion_root()
+
+        ok, detail = check_all._check_changelog()
+
+        self.assertTrue(ok, detail)
+        self.assertIn("2026-01-01", detail)
+        self.assertIn("  - 旧条目", detail)
+
+    def test_sibling_loads_leave_no_modules_or_bytecode(self):
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "CHANGELOG.md").write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n\n### 条目\n", encoding="utf-8"
+        )
+        self.install_scripts("changelog.py", "audit.py")
+        self.patch_completion_root()
+
+        self.assertTrue(check_all._check_changelog()[0])
+        self.assertTrue(check_all._check_dead_links()[0])
+
+        self.assertFalse([
+            name for name in sys.modules if name.startswith("_iad_check_all_")
+        ])
+        self.assertFalse((self.scripts / "__pycache__").exists())
+
+    def run_main_with_systemexit(self, broken_name: str):
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "CHANGELOG.md").write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n\n### 条目\n", encoding="utf-8"
+        )
+        other = "audit.py" if broken_name == "changelog.py" else "changelog.py"
+        self.install_scripts(other)
+        (self.scripts / broken_name).write_text("raise SystemExit(2)\n", encoding="utf-8")
+        self.patch_completion_root()
+        out = io.StringIO()
+        with patch.object(sys, "argv", ["check_all.py"]), redirect_stdout(out):
+            rc = check_all.main()
+        return rc, out.getvalue()
+
+    def test_systemexit_in_changelog_is_one_failed_check(self):
+        rc, output = self.run_main_with_systemexit("changelog.py")
+
+        self.assertEqual(rc, 1, output)
+        self.assertIn("CHANGELOG", output)
+        self.assertIn("死链", output)
+        self.assertIn("[OK] 死链", output)
+        self.assertIn("共 1 项未通过", output)
+
+    def test_systemexit_in_audit_is_one_failed_check(self):
+        rc, output = self.run_main_with_systemexit("audit.py")
+
+        self.assertEqual(rc, 1, output)
+        self.assertIn("死链", output)
+        self.assertIn("[FAIL] 死链", output)
+        self.assertIn("[OK] CHANGELOG", output)
+        self.assertIn("共 1 项未通过", output)
 
 
 if __name__ == "__main__":

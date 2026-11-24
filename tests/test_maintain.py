@@ -1,12 +1,17 @@
 """Functional tests for assets/scripts/maintain.py on a synthetic project."""
 from __future__ import annotations
 
+import io
+import json
 import os
 import shutil
 import subprocess
 import sys
 import unittest
+from collections import Counter
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_SCRIPT = REPO_ROOT / "assets" / "scripts" / "maintain.py"
@@ -411,6 +416,396 @@ class MaintainPipelineTestCase(unittest.TestCase):
         self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
         self.assertIn("WARN", check.stdout)
         self.assertIn("ongoing.md", check.stdout)
+
+
+    def install_real_audit_project(
+        self, *, check_status: str = "ok", check_rc: int = 0,
+        build_status: str = "built",
+    ) -> Path:
+        """Install the real audit.py and a controllable repo_graph.py stand-in."""
+        shutil.copy(AUDIT_SCRIPT, self.root / "scripts" / "audit.py")
+        graph_dir = self.root / ".agents" / "repo-graph"
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        (graph_dir / "manifest.json").write_text("{}", encoding="utf-8")
+        (self.root / "scripts" / "repo_graph_config.json").write_text(
+            json.dumps({
+                "check_status": check_status,
+                "check_rc": check_rc,
+                "build_status": build_status,
+            }),
+            encoding="utf-8",
+        )
+        calls = self.root / "scripts" / "repo_graph_calls.txt"
+        calls.unlink(missing_ok=True)
+        (self.root / "scripts" / "repo_graph.py").write_text(
+            "import json, pathlib, sys\n"
+            "here = pathlib.Path(__file__).resolve().parent\n"
+            "with (here / 'repo_graph_calls.txt').open('a', encoding='utf-8') as stream:\n"
+            "    stream.write(' '.join(sys.argv[1:]) + '\\n')\n"
+            "config = json.loads((here / 'repo_graph_config.json').read_text(encoding='utf-8'))\n"
+            "if sys.argv[1:2] == ['check']:\n"
+            "    status = config['check_status']; rc = config['check_rc']\n"
+            "else:\n"
+            "    status = config['build_status']; rc = 0\n"
+            "print(json.dumps({'status': status, 'detail': 'repo graph ' + status}))\n"
+            "raise SystemExit(rc)\n",
+            encoding="utf-8",
+        )
+        docs = self.root / "docs"
+        docs.mkdir(exist_ok=True)
+        (docs / "STRUCTURE.md").write_text(
+            "# Index\n\n| Document | Description |\n|---|---|\n"
+            "| [Initialization](initialization.md) | Birth record |\n",
+            encoding="utf-8",
+        )
+        (docs / "initialization.md").write_text(
+            "---\nsize: small\nstatus: done\nrepository_mode: no-git\n---\n",
+            encoding="utf-8",
+        )
+        (self.root / "AGENTS.md").write_text(
+            "# Rules\n.agents/memory/MEMORY.md\n## 项目记忆\n", encoding="utf-8"
+        )
+        return calls
+
+    def run_audit_check(self) -> subprocess.CompletedProcess[str]:
+        env = dict(os.environ, PYTHONUTF8="1")
+        return subprocess.run(
+            [sys.executable, str(self.root / "scripts" / "audit.py"), "check"],
+            cwd=self.root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env, timeout=60,
+        )
+
+    def test_check_validates_repo_graph_once_with_real_audit(self) -> None:
+        self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
+        calls = self.install_real_audit_project(check_status="ok", check_rc=0)
+
+        result = self.run_maintain("--check")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["check --json"])
+        self.assertIn("repo graph", result.stdout)
+
+    def test_built_is_invalid_for_both_maintain_and_audit(self) -> None:
+        self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
+        calls = self.install_real_audit_project(check_status="built", check_rc=0)
+
+        result = self.run_maintain("--check")
+        maintain_calls = calls.read_text(encoding="utf-8").splitlines()
+        audit = self.run_audit_check()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("INVALID", result.stdout)
+        self.assertEqual(audit.returncode, 1, audit.stdout + audit.stderr)
+        self.assertIn("not usable", audit.stdout)
+        self.assertEqual(maintain_calls, ["check --json"])
+
+    def test_check_propagates_stale_and_invalid_repo_graph_statuses(self) -> None:
+        for status, rc, expected in (("stale", 1, "STALE"), ("invalid", 1, "INVALID")):
+            with self.subTest(status=status):
+                self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
+                calls = self.install_real_audit_project(check_status=status, check_rc=rc)
+
+                result = self.run_maintain("--check")
+                maintain_calls = calls.read_text(encoding="utf-8").splitlines()
+                audit = self.run_audit_check()
+
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(expected, result.stdout)
+                self.assertEqual(
+                    audit.returncode, 0 if status == "stale" else 1,
+                    audit.stdout + audit.stderr,
+                )
+                self.assertEqual(maintain_calls, ["check --json"])
+
+    def test_deep_json_repo_graph_output_is_invalid_without_traceback(self) -> None:
+        self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
+        self.install_real_audit_project(check_status="ok")
+        (self.root / "scripts" / "repo_graph.py").write_text(
+            "print('[' * 5000 + ']' * 5000)\nraise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_maintain("--check")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("INVALID", result.stdout)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+
+    def test_check_uses_in_process_audit_when_graph_result_exists(self) -> None:
+        self.assertEqual(self.run_maintain("--memory-index").returncode, 0)
+        calls = self.install_real_audit_project(check_status="ok")
+        (self.root / "scripts" / "audit.py").write_text(
+            "import pathlib\n"
+            "def run_check_in_process(*, repo_graph_prefetched=None):\n"
+            "    here = pathlib.Path(__file__).resolve().parent\n"
+            "    (here / 'audit_inproc.txt').write_text(\n"
+            "        repr(repo_graph_prefetched), encoding='utf-8')\n"
+            "    return 0, 'in-process audit'\n"
+            "if __name__ == '__main__':\n"
+            "    here = pathlib.Path(__file__).resolve().parent\n"
+            "    (here / 'audit_cli.txt').write_text('cli', encoding='utf-8')\n"
+            "    raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_maintain("--check")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("in-process audit", result.stdout)
+        self.assertTrue((self.root / "scripts" / "audit_inproc.txt").is_file())
+        self.assertFalse((self.root / "scripts" / "audit_cli.txt").exists())
+        self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["check --json"])
+
+    def test_write_maintenance_keeps_post_write_repo_graph_verification(self) -> None:
+        calls = self.install_real_audit_project(check_status="ok", build_status="built")
+
+        result = self.run_maintain()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            calls.read_text(encoding="utf-8").splitlines(),
+            ["build --json", "check --json"],
+        )
+        self.assertIn("repo graph", result.stdout)
+
+
+class MaintainSingleReadTestCase(unittest.TestCase):
+    """Index rebuild and search read each source file exactly once."""
+
+    def setUp(self) -> None:
+        import importlib.util
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        scripts = self.root / "scripts"
+        scripts.mkdir()
+        self.memory = self.root / ".agents" / "memory"
+        (self.memory / "user").mkdir(parents=True)
+        (self.memory / "feedback").mkdir()
+        self.bugfix = self.root / "docs" / "problems" / "bugfix"
+        self.bugfix.mkdir(parents=True)
+        self.index = self.memory / "MEMORY.md"
+        self.index.write_text(MEMORY_MD, encoding="utf-8")
+        (self.memory / "user" / "role.md").write_text(
+            "# 用户画像\n\n称呼：测试\n", encoding="utf-8"
+        )
+        (self.memory / "feedback" / "prefer-lf.md").write_text(
+            "---\nliveness: active\n---\n\n# 偏好 LF 行尾\n\nWindows 下注意。\n",
+            encoding="utf-8",
+        )
+        (self.bugfix / "login.md").write_text(
+            "---\ntitle: 登录超时\nstatus: fixed\nseverity: high\n"
+            "updated_at: 2026-07-20\n---\n\n# 登录超时\n",
+            encoding="utf-8",
+        )
+        (self.bugfix / "plain.md").write_text(
+            "# 裸标题文档\n\nWindows 相关。\n", encoding="utf-8"
+        )
+        self.entries = [
+            self.memory / "user" / "role.md",
+            self.memory / "feedback" / "prefer-lf.md",
+            self.bugfix / "login.md",
+            self.bugfix / "plain.md",
+        ]
+
+        spec = importlib.util.spec_from_file_location(
+            "maintain_single_read", ASSET_SCRIPT
+        )
+        self.maintain = importlib.util.module_from_spec(spec)
+        sys.modules["maintain_single_read"] = self.maintain
+        spec.loader.exec_module(self.maintain)
+        self.addCleanup(sys.modules.pop, "maintain_single_read", None)
+        patcher = patch.multiple(
+            self.maintain,
+            ROOT=self.root,
+            MEMORY_DIR=self.memory,
+            MEMORY_INDEX=self.index,
+            MEMORY_REL=".agents/memory",
+            BUGFIX_DIR=self.bugfix,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def counting_read(self):
+        calls: list[Path] = []
+        original = self.maintain._read
+
+        def read(path: Path) -> str:
+            calls.append(Path(path))
+            return original(path)
+
+        return calls, read
+
+    def test_rebuild_reads_each_source_once_and_renders_same_index(self) -> None:
+        calls, read = self.counting_read()
+        with patch.object(self.maintain, "_read", side_effect=read):
+            status, detail = self.maintain.rebuild_memory_index(check_only=True)
+
+        self.assertEqual(status, "stale", detail)
+        counts = Counter(calls)
+        self.assertEqual(counts[self.index], 1)
+        for path in self.entries:
+            self.assertEqual(counts[path], 1, path)
+
+        memory_entries, bugfix_entries, invalid = self.maintain._load_index_entries(
+            self.maintain._memory_files(), self.maintain._bugfix_files()
+        )
+        self.assertIsNone(invalid)
+        section = self.maintain._render_index_section(memory_entries, bugfix_entries)
+        self.assertIn("### user", section)
+        self.assertIn("[role.md](user/role.md) — 用户画像", section)
+        self.assertIn("· active", section)
+        self.assertIn("[登录超时](../../docs/problems/bugfix/login.md)", section)
+        self.assertIn("[裸标题文档](../../docs/problems/bugfix/plain.md)", section)
+        self.assertLess(section.index("### feedback"), section.index("### user"))
+
+    def test_search_reads_each_source_once_and_preserves_bounded_output(self) -> None:
+        calls, read = self.counting_read()
+        out = io.StringIO()
+        with patch.object(self.maintain, "_read", side_effect=read), redirect_stdout(out):
+            rc = self.maintain.search_memory("Windows", 1)
+
+        self.assertEqual(rc, 0)
+        counts = Counter(calls)
+        for path in self.entries:
+            self.assertEqual(counts[path], 1, path)
+        self.assertNotIn(self.index, counts)
+        text = out.getvalue()
+        self.assertIn("命中 2 条；显示 1 条；截断：是", text)
+        self.assertEqual(text.count("- ["), 1)
+
+    def test_search_missing_title_falls_back_without_rereading(self) -> None:
+        calls, read = self.counting_read()
+        out = io.StringIO()
+        with patch.object(self.maintain, "_read", side_effect=read), redirect_stdout(out):
+            rc = self.maintain.search_memory("裸标题", 5)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(Counter(calls)[self.bugfix / "plain.md"], 1)
+        self.assertIn("裸标题文档", out.getvalue())
+
+    def test_bounded_push_never_exceeds_limit_and_keeps_smallest(self) -> None:
+        heap = []
+        for index in range(100):
+            self.maintain._bounded_push(heap, (index, f"rel{index}"), 3)
+            self.assertLessEqual(len(heap), 3)
+        self.assertEqual([key[0] for key in sorted(w.key for w in heap)], [0, 1, 2])
+
+    def test_search_ties_follow_relative_path_order(self) -> None:
+        (self.memory / "user" / "alpha.md").write_text(
+            "# Alpha\n\nneedle\n", encoding="utf-8"
+        )
+        (self.memory / "user" / "beta.md").write_text(
+            "# Beta\n\nneedle\n", encoding="utf-8"
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = self.maintain.search_memory("needle", 1)
+
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("命中 2 条；显示 1 条；截断：是", text)
+        self.assertIn("alpha.md", text)
+        self.assertNotIn("beta.md", text)
+
+    def test_search_excerpt_maps_casefold_expansion_back_to_original(self) -> None:
+        body = "ABCD" + "x" * 38 + "ß" + "signal"
+        (self.memory / "user" / "sharp.md").write_text(
+            "# 展开\n\n" + body + "\n", encoding="utf-8"
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = self.maintain.search_memory("signal", 1)
+
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("命中 1 条", text)
+        excerpt = text.split(" — ", 1)[1].splitlines()[0]
+        # Correct origin is original index 3 ('D'); a raw casefold index would
+        # start at 4 ('x') because 'ß' expanded to 'ss'.
+        self.assertTrue(excerpt.startswith("D"), excerpt)
+        self.assertIn("signal", excerpt)
+
+    def test_search_reports_total_and_only_five_error_samples(self) -> None:
+        for index in range(7):
+            (self.memory / "user" / f"broken-{index}.md").write_bytes(b"\xff")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rc = self.maintain.search_memory("Windows", 5)
+
+        self.assertEqual(rc, 1)
+        text = out.getvalue()
+        self.assertIn("7 个文件无法读取 UTF-8", text)
+        self.assertEqual(text.count("broken-"), 5)
+
+    def test_run_full_small_project_does_not_enumerate_memory(self) -> None:
+        absent = self.root / "absent-memory"
+        out = io.StringIO()
+        with patch.multiple(
+            self.maintain, MEMORY_DIR=absent, MEMORY_REL=".agents/memory"
+        ), patch.object(
+            self.maintain, "_memory_files", side_effect=AssertionError("scanned memory")
+        ), patch.object(
+            self.maintain, "_bugfix_files", side_effect=AssertionError("scanned bugfix")
+        ), redirect_stdout(out):
+            rc = self.maintain.run_full(check_only=True)
+
+        self.assertEqual(rc, 0, out.getvalue())
+
+    def test_search_skips_casefold_mapping_for_zero_hit_and_ascii(self) -> None:
+        (self.memory / "user" / "big.md").write_text(
+            "# Big\n\n" + ("A" * 200000) + " markerword\n", encoding="utf-8"
+        )
+        out = io.StringIO()
+        with patch.object(
+            self.maintain, "_casefold_index_to_original",
+            side_effect=AssertionError("built a casefold mapping"),
+        ), redirect_stdout(out):
+            self.assertEqual(self.maintain.search_memory("nonexistentterm", 5), 0)
+            self.assertEqual(self.maintain.search_memory("markerword", 5), 0)
+
+        self.assertIn("markerword", out.getvalue())
+
+    def test_kb_run_full_reuses_one_memory_enumeration(self) -> None:
+        kb_dir = self.root / ".meta" / "memory"
+        (kb_dir / "user").mkdir(parents=True)
+        (kb_dir / "user" / "entry.md").write_text("# Entry\n", encoding="utf-8")
+        index = kb_dir / "MEMORY.md"
+        index.write_text("# KB\n", encoding="utf-8")
+        scripts = self.root / "scripts"
+        (scripts / "memory_index.py").write_text("", encoding="utf-8")
+        counts = {"memory": 0, "bugfix": 0}
+        original_memory = self.maintain._memory_files
+        original_bugfix = self.maintain._bugfix_files
+
+        def memory_files():
+            counts["memory"] += 1
+            return original_memory()
+
+        def bugfix_files():
+            counts["bugfix"] += 1
+            return original_bugfix()
+
+        out = io.StringIO()
+        with patch.multiple(
+            self.maintain,
+            MEMORY_DIR=kb_dir,
+            MEMORY_INDEX=index,
+            MEMORY_REL=".meta/memory",
+            SCRIPTS_DIR=scripts,
+        ), patch.object(
+            self.maintain, "_memory_files", side_effect=memory_files
+        ), patch.object(
+            self.maintain, "_bugfix_files", side_effect=bugfix_files
+        ), patch.object(
+            self.maintain, "_run_script", return_value=(0, "kb ok")
+        ), redirect_stdout(out):
+            rc = self.maintain.run_full(check_only=True)
+
+        self.assertEqual(rc, 0, out.getvalue())
+        self.assertEqual(counts, {"memory": 1, "bugfix": 1})
 
 
 if __name__ == "__main__":

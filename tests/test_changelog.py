@@ -158,6 +158,193 @@ class ChangelogTestCase(unittest.TestCase):
         text = self.changelog.read_text(encoding="utf-8")
         self.assertIn("## 2026-04-17", text)
 
+    def test_titles_stream_preserves_splitlines_unicode_separators(self) -> None:
+        import importlib.util
+
+        self.changelog.write_text(
+            "# CHANGELOG\n\n## 2026-04-17\n### 第一块\u2028### 第二块\n正文\n",
+            encoding="utf-8",
+        )
+        spec = importlib.util.spec_from_file_location("changelog_split_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        streamed = mod.iter_title_blocks_from_file(self.changelog)
+        lines = mod.read_lines(self.changelog)
+        legacy = []
+        for start, end, day, title in mod.iter_date_blocks(lines):
+            sections = [
+                section_title
+                for section_start, _section_end, section_title
+                in mod.iter_sections(lines[start:end])
+                if section_start != 0
+            ]
+            legacy.append((day, title, sections))
+
+        self.assertEqual(streamed, legacy)
+        self.assertEqual(streamed[0][2], ["第一块", "第二块"])
+
+    def test_titles_stream_does_not_cache_large_block_body(self) -> None:
+        import importlib.util
+
+        self.changelog.write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n### 第一块\n"
+            + ("正文行\n" * 5000)
+            + "## 2026-01-02\n### 第二块\n",
+            encoding="utf-8",
+        )
+        spec = importlib.util.spec_from_file_location("changelog_large_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        first = mod.iter_title_blocks_from_file(self.changelog, limit=1)
+        second = mod.iter_title_blocks_from_file(self.changelog, limit=2)
+
+        self.assertEqual(first, [("2026-01-01", "", ["第一块"])])
+        self.assertEqual(
+            second,
+            [("2026-01-01", "", ["第一块"]), ("2026-01-02", "", ["第二块"])],
+        )
+        self.assertNotIn("正文行", repr(first))
+
+    def test_titles_limit_really_stops_before_invalid_tail(self) -> None:
+        import importlib.util
+
+        prefix = (
+            "# CHANGELOG\n\n## 2026-01-01\n### 第一块\n\n"
+            "## 2026-01-02\n### 第二块\n\n"
+        )
+        self.changelog.write_bytes(
+            prefix.encode("utf-8")
+            + (("正文\n" * 50000).encode("utf-8"))
+            + b"\xff\xff"
+        )
+        spec = importlib.util.spec_from_file_location("changelog_tail_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        blocks = mod.iter_title_blocks_from_file(self.changelog, limit=1)
+
+        self.assertEqual(blocks, [("2026-01-01", "", ["第一块"])])
+        # The unread tail is deliberately outside the bounded contract.
+        with self.assertRaises(UnicodeDecodeError):
+            mod.iter_title_blocks_from_file(self.changelog, limit=0)
+
+    def test_titles_limit_stops_before_invalid_next_physical_line(self) -> None:
+        import importlib.util
+
+        self.changelog.write_bytes(
+            b"# CHANGELOG\n\n## 2026-01-01\n### First\n\n"
+            b"## 2026-01-02\n\xff\xfe\n"
+        )
+        spec = importlib.util.spec_from_file_location("changelog_binary_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        blocks = mod.iter_title_blocks_from_file(self.changelog, limit=1)
+
+        self.assertEqual(blocks, [("2026-01-01", "", ["First"])])
+        with self.assertRaises(UnicodeDecodeError):
+            mod.iter_title_blocks_from_file(self.changelog, limit=0)
+
+    def test_titles_limit_stops_before_invalid_after_bare_cr(self) -> None:
+        import importlib.util
+
+        self.changelog.write_bytes(
+            b"# CHANGELOG\r\r## 2026-01-01\r### First\r\r"
+            b"## 2026-01-02\r\xff"
+            + (b"tail\r" * 100000)
+        )
+        spec = importlib.util.spec_from_file_location("changelog_cr_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        blocks = mod.iter_title_blocks_from_file(self.changelog, limit=1)
+
+        self.assertEqual(blocks, [("2026-01-01", "", ["First"])])
+        with self.assertRaises(UnicodeDecodeError):
+            mod.iter_title_blocks_from_file(self.changelog, limit=0)
+
+    def test_titles_limit_stops_before_invalid_after_u2028(self) -> None:
+        import importlib.util
+
+        self.changelog.write_bytes(
+            b"# CHANGELOG\n\n## 2026-01-01\n### First\n\n## 2026-01-02"
+            b"\xe2\x80\xa8\xff" + (b"tail\n" * 100000)
+        )
+        spec = importlib.util.spec_from_file_location("changelog_u2028_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        blocks = mod.iter_title_blocks_from_file(self.changelog, limit=1)
+
+        self.assertEqual(blocks, [("2026-01-01", "", ["First"])])
+        with self.assertRaises(UnicodeDecodeError):
+            mod.iter_title_blocks_from_file(self.changelog, limit=0)
+
+    def test_titles_streams_many_unicode_separators_in_one_physical_line(self) -> None:
+        import importlib.util
+
+        sections = "\u2028".join(f"### S{index}" for index in range(2000))
+        self.changelog.write_text(
+            "# CHANGELOG\n\n## 2026-01-01\n" + sections + "\n",
+            encoding="utf-8",
+        )
+        spec = importlib.util.spec_from_file_location("changelog_sep_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        blocks = mod.iter_title_blocks_from_file(self.changelog)
+
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0][2], [f"S{index}" for index in range(2000)])
+
+    def test_titles_single_long_line_scans_linearly(self) -> None:
+        import importlib.util
+
+        payload = (
+            b"# CHANGELOG\n\n## 2026-01-01\n### Long\n"
+            + (b"x" * (1024 * 1024))
+            + b"\n## 2026-01-02\n### Next\n"
+        )
+        self.changelog.write_bytes(payload)
+        spec = importlib.util.spec_from_file_location("changelog_linear_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        real_re = mod._UTF8_LINE_BREAK_BYTES_RE
+        scanned_bytes = 0
+
+        class CountingPattern:
+            def search(self, buf, pos=0):
+                nonlocal scanned_bytes
+                scanned_bytes += max(0, len(buf) - pos)
+                return real_re.search(buf, pos)
+
+        mod._UTF8_LINE_BREAK_BYTES_RE = CountingPattern()
+        blocks = mod.iter_title_blocks_from_file(self.changelog, limit=1)
+
+        self.assertEqual(blocks, [("2026-01-01", "", ["Long"])])
+        self.assertLess(scanned_bytes, len(payload) * 2)
+
+    def test_titles_limit_output_matches_first_block_only(self) -> None:
+        self.changelog.write_text(
+            INITIAL_CHANGELOG
+            + """
+## 2026-04-16
+
+### 后续条目
+""",
+            encoding="utf-8",
+        )
+        result = self.run_script("titles", "--limit", "1")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("2026-04-17", result.stdout)
+        self.assertIn("初始化文档体系", result.stdout)
+        self.assertNotIn("2026-04-16", result.stdout)
+        self.assertNotIn("后续条目", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

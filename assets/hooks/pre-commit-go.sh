@@ -48,11 +48,18 @@ check_governance_changes() {
     GOV_PATTERNS="^AGENTS\.md$|^docs/STRUCTURE\.md$|^scripts/|^.githooks/|^.agents/memory/|^docs/audit-checklist\.md$"
 
     GOV_FILES=""
+    _HAD_NOCASEMATCH=0
+    if shopt -q nocasematch; then _HAD_NOCASEMATCH=1; fi
+    shopt -u nocasematch
+
     while IFS= read -r path; do
-        if echo "$path" | grep -qE "$GOV_PATTERNS"; then
+        [ -n "$path" ] || continue
+        if [[ "$path" =~ $GOV_PATTERNS ]]; then
             GOV_FILES="$GOV_FILES  - $path"$'\n'
         fi
     done <<< "$STAGED_FILES"
+
+    if [ "$_HAD_NOCASEMATCH" -eq 1 ]; then shopt -s nocasematch; fi
 
     if [ -n "$GOV_FILES" ]; then
         # Detect whether converge is available on this device

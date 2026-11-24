@@ -17,12 +17,62 @@ CHANGELOG = ROOT / "docs" / "CHANGELOG.md"
 
 DATE_HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})(?:[：:](.*))?\s*$")
 SECTION_HEADING_RE = re.compile(r"^###\s+(.+?)\s*$")
+_UTF8_LINE_BREAK_BYTES_RE = re.compile(
+    rb"\r\n|[\n\r\x0b\x0c\x1c-\x1e]|\xc2\x85|\xe2\x80[\xa8\xa9]"
+)
+_READ_CHUNK = 4096
 
 
 def read_lines(path: Path = CHANGELOG) -> list[str]:
     if not path.is_file():
         raise SystemExit(f"CHANGELOG not found: {path}")
     return path.read_text(encoding="utf-8").splitlines()
+
+
+def _iter_logical_lines_from_file(path: Path):
+    """Yield decoded logical lines using byte-level UTF-8 break splitting.
+
+    Bytes are read in 4096-byte chunks and only complete separators are
+    consumed. A trailing lone ``\\r`` (which may become ``\\r\\n``) and 1–2
+    trailing bytes of an incomplete multi-byte separator stay buffered for the
+    next chunk. Each logical line is decoded individually and lazily, so a
+    caller that stops at ``limit + 1`` date headings never decodes bytes after
+    the stop point.
+    """
+    with path.open("rb") as handle:
+        buf = bytearray()
+        line_start = 0
+        search_pos = 0
+        eof = False
+        while True:
+            if not eof:
+                prev_len = len(buf)
+                chunk = handle.read(_READ_CHUNK)
+                if chunk:
+                    buf.extend(chunk)
+                    search_pos = max(line_start, prev_len - 2)
+                else:
+                    eof = True
+            while True:
+                match = _UTF8_LINE_BREAK_BYTES_RE.search(buf, search_pos)
+                if match is None:
+                    search_pos = max(line_start, len(buf) - 2)
+                    break
+                if not eof and match.group() == b"\r" and match.end() == len(buf):
+                    # Could be the first half of CRLF in the next chunk.
+                    search_pos = match.start()
+                    break
+                yield buf[line_start:match.start()].decode("utf-8")
+                line_start = match.end()
+                search_pos = line_start
+            if eof:
+                if line_start < len(buf):
+                    yield buf[line_start:].decode("utf-8")
+                return
+            if line_start:
+                del buf[:line_start]
+                search_pos = max(0, search_pos - line_start)
+                line_start = 0
 
 
 def write_lines(lines: list[str], path: Path = CHANGELOG) -> None:
@@ -62,6 +112,55 @@ def iter_date_blocks(lines: list[str]) -> list[tuple[int, int, str, str]]:
     return blocks
 
 
+def iter_title_blocks_from_file(
+    path: Path = CHANGELOG, *, limit: int = 0
+) -> list[tuple[str, str, list[str]]]:
+    """Return ``(day, title, section_titles)`` title-tree blocks, streaming.
+
+    Physical lines are read in binary mode and only then decoded; a bounded
+    scan never decodes look-ahead bytes, so invalid UTF-8 on the next physical
+    line cannot raise. Each physical line is split with the exact
+    ``str.splitlines()`` separator rules. Only date headings and ``### ``
+    section titles are retained; body lines are never stored, so one huge date
+    block costs O(number of section titles).
+
+    When ``limit > 0`` decoding stops immediately after the ``limit + 1``-th
+    date heading line: the unread tail is neither decoded nor UTF-8 validated.
+    Full-file UTF-8 validation belongs to a no-``--limit`` command or audit.py.
+    """
+    if not path.is_file():
+        raise SystemExit(f"CHANGELOG not found: {path}")
+
+    blocks: list[tuple[str, str, list[str]]] = []
+    day: str | None = None
+    title = ""
+    sections: list[str] = []
+    emitted = 0
+    lines = _iter_logical_lines_from_file(path)
+    try:
+        for line in lines:
+            match = DATE_HEADING_RE.match(line)
+            if match:
+                if day is not None:
+                    blocks.append((day, title, sections))
+                    emitted += 1
+                    if limit and emitted >= limit:
+                        return blocks
+                day = match.group(1)
+                title = (match.group(2) or "").strip()
+                sections = []
+                continue
+            if day is not None:
+                section = SECTION_HEADING_RE.match(line)
+                if section:
+                    sections.append(section.group(1))
+    finally:
+        lines.close()
+    if day is not None:
+        blocks.append((day, title, sections))
+    return blocks
+
+
 def iter_sections(block_lines: list[str]) -> list[tuple[int, int, str]]:
     starts = [
         index for index, line in enumerate(block_lines) if SECTION_HEADING_RE.match(line)
@@ -95,6 +194,16 @@ def print_block(lines: list[str], start: int, end: int) -> None:
 
 
 def command_titles(args: argparse.Namespace) -> None:
+    if args.limit and args.limit > 0:
+        for day, title, section_titles in iter_title_blocks_from_file(
+            args.changelog, limit=args.limit
+        ):
+            suffix = f"：{title}" if title else ""
+            print(f"{day}{suffix}")
+            for section_title in section_titles:
+                print(f"  - {section_title}")
+        return
+
     lines = read_lines(args.changelog)
 
     count = 0

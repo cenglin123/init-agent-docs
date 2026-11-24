@@ -7,7 +7,10 @@ common-dir no-takeover lock, and the optional fast-forward gate hook.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -17,6 +20,7 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -342,6 +346,60 @@ class LockMatrixTests(RepoFixture):
         self.assertFalse(wtask._lock_dir(other).exists())
 
 
+class RegistryReadCostTests(RepoFixture):
+    def write_records(self, count=10):
+        expected_common = wtask._norm(wtask._registry_dir(self.repo).parent.parent)
+        ids = []
+        for index in range(count):
+            task_id = f"task-{index:02d}"
+            wtask._write_task(self.repo, {
+                "id": task_id,
+                "common": expected_common,
+                "status": "active",
+                "generation": 1,
+            })
+            ids.append(task_id)
+        return ids
+
+    def test_records_resolves_git_common_dir_once_for_many_rows(self):
+        ids = self.write_records(10)
+        calls = []
+        original = wtask._git_dir_pair
+
+        def counting(*args, **kwargs):
+            calls.append(args)
+            return original(*args, **kwargs)
+
+        with patch.object(wtask, "_git_dir_pair", counting):
+            rows = wtask._records(self.repo)
+
+        self.assertEqual([row["id"] for row in rows], ids)
+        self.assertEqual(len(calls), 1)
+
+    def test_records_still_rejects_identity_mismatch(self):
+        self.write_records(1)
+        path = wtask._registry_dir(self.repo) / "task-00.json"
+        row = json.loads(path.read_text(encoding="utf-8"))
+        row["common"] = "elsewhere"
+        path.write_text(json.dumps(row), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "identity mismatch"):
+            wtask._records(self.repo)
+
+    def test_records_still_rejects_linked_task_record(self):
+        self.write_records(1)
+        path = wtask._registry_dir(self.repo) / "task-00.json"
+        target = self.root / "linked.json"
+        target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        path.unlink()
+        try:
+            path.symlink_to(target)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation unavailable on this platform")
+        with self.assertRaisesRegex(ValueError, "linked or not a file"):
+            wtask._records(self.repo)
+
+
 class SeparateGitDirTests(RepoFixture):
     def test_canonical_identification_gitfile_layout(self):
         gd = self.root / "separate.git"
@@ -357,6 +415,115 @@ class SeparateGitDirTests(RepoFixture):
         self.assertIsNone(wtask.canonical_error(wt))
         git(wt, "worktree", "add", str(self.root / "linked"), "-b", "task/x")
         self.assertIsNotNone(wtask.canonical_error(self.root / "linked"))
+
+
+class GovernanceHookPatternTests(unittest.TestCase):
+    """Bash hooks match governance paths without spawning `grep` per file."""
+
+    HOOKS = (
+        REPO_ROOT / ".githooks" / "pre-commit",
+        REPO_ROOT / "assets" / "hooks" / "pre-commit-python.sh",
+        REPO_ROOT / "assets" / "hooks" / "pre-commit-node.sh",
+        REPO_ROOT / "assets" / "hooks" / "pre-commit-go.sh",
+        REPO_ROOT / "assets" / "hooks" / "pre-commit-generic.sh",
+    )
+    PATHS = (
+        "AGENTS.md",
+        "agents.md",
+        "AGENTSxmd",
+        "SKILL.md",
+        "README.md",
+        "docs/STRUCTURE.md",
+        "scripts/audit.py",
+        "assets/scripts/audit.py",
+        "assets/scripts/my file.py",
+        "assets/scripts/a\\nb.py",
+        '"assets/scripts/a\\nb.py"',
+        "assets/templates/zh/AGENTS.md.tpl",
+        ".githooks/pre-commit",
+        "Xgithooks/pre-commit",
+        "assets/hooks/pre-commit-python.sh",
+        ".agents/memory/MEMORY.md",
+        "docs/audit-checklist.md",
+        "unrelated.txt",
+        "",
+    )
+
+    def setUp(self):
+        if not Path(GIT_BASH).exists() and shutil.which(GIT_BASH) is None:
+            self.skipTest("bash unavailable")
+
+    def pattern_of(self, text):
+        match = re.search(r'GOV_PATTERNS="([^"]+)"', text)
+        self.assertIsNotNone(match, "GOV_PATTERNS not found")
+        return match.group(1)
+
+    def bash_differential(self, pattern, *, start_nocasematch: int):
+        paths_literal = " ".join(shlex.quote(path) for path in self.PATHS)
+        script = (
+            "set -e\n"
+            f"PATHS=( {paths_literal} )\n"
+            f"start_nocase={1 if start_nocasematch else 0}\n"
+            f"pattern={shlex.quote(pattern)}\n"
+            'if [ "$start_nocase" -eq 1 ]; then shopt -s nocasematch; else shopt -u nocasematch; fi\n'
+            "_HAD_NOCASEMATCH=0\n"
+            "if shopt -q nocasematch; then _HAD_NOCASEMATCH=1; fi\n"
+            "shopt -u nocasematch\n"
+            'for p in "${PATHS[@]}"; do\n'
+            "    old=0\n"
+            '    if echo "$p" | grep -qE "$pattern"; then old=1; fi\n'
+            "    new=0\n"
+            '    if [[ "$p" =~ $pattern ]]; then new=1; fi\n'
+            "    printf '%s%s\\n' \"$old\" \"$new\"\n"
+            "done\n"
+            'if [ "$_HAD_NOCASEMATCH" -eq 1 ]; then shopt -s nocasematch; fi\n'
+            'if [ "$_HAD_NOCASEMATCH" -eq 1 ]; then\n'
+            "    shopt -q nocasematch || exit 8\n"
+            "else\n"
+            "    ! shopt -q nocasematch || exit 9\n"
+            "fi\n"
+        )
+        proc = subprocess.run(
+            [GIT_BASH, "-c", script],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=clean_env(), creationflags=_NO_WINDOW,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout.splitlines()
+
+    def test_hooks_use_bash_regex_and_parse_cleanly(self):
+        for hook in self.HOOKS:
+            with self.subTest(hook=hook.name):
+                text = hook.read_text(encoding="utf-8")
+                self.assertIn('[[ "$path" =~ $GOV_PATTERNS ]]', text)
+                self.assertIn("shopt -u nocasematch", text)
+                self.assertIn('if [ "$_HAD_NOCASEMATCH" -eq 1 ]; then shopt -s nocasematch; fi', text)
+                self.assertNotIn('echo "$path" | grep', text)
+                parsed = subprocess.run(
+                    [GIT_BASH, "-n", str(hook)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    env=clean_env(), creationflags=_NO_WINDOW,
+                )
+                self.assertEqual(parsed.returncode, 0, parsed.stderr)
+
+    def test_matching_results_match_legacy_grep_pipeline(self):
+        for hook in self.HOOKS:
+            with self.subTest(hook=hook.name):
+                pattern = self.pattern_of(hook.read_text(encoding="utf-8"))
+                for start_nocase in (0, 1):
+                    pairs = self.bash_differential(
+                        pattern, start_nocasematch=start_nocase
+                    )
+                    self.assertEqual(
+                        [line[0] for line in pairs],
+                        [line[1] for line in pairs],
+                        f"grep/new mismatch under nocasematch={start_nocase}",
+                    )
+                    expected = [
+                        "1" if re.search(pattern, path) else "0"
+                        for path in self.PATHS
+                    ]
+                    self.assertEqual([line[1] for line in pairs], expected)
 
 
 class HookFixture(unittest.TestCase):

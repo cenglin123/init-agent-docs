@@ -1046,19 +1046,84 @@ def _check_eval_baseline(*, staged: bool = False) -> list[dict[str, Any]]:
 # repo graph (opt-in static structure evidence)
 # ---------------------------------------------------------------------------
 
-def _check_repo_graph() -> list[dict[str, Any]]:
+def _evaluate_repo_graph_output(returncode: int, stdout: str) -> list[dict[str, Any]]:
+    """Apply the single repo-graph verdict used by fresh and prefetched checks.
+
+    ``rc == 0`` plus ``status == "ok"`` is the only success. Staleness is a
+    warning; every other state (``built`` included), unreadable JSON, and a
+    non-zero exit are invalid.
+    """
+    path = ".agents/repo-graph/manifest.json"
+    repair = f"python {SCRIPTS_REL}/repo_graph.py build"
+    try:
+        payload = json.loads(stdout)
+    except (json.JSONDecodeError, RecursionError):
+        return [{
+            "kind": "repo_graph",
+            "status": "invalid",
+            "path": path,
+            "detail": f"repo graph check returned unreadable output (exit {returncode}); "
+                      f"run: {repair}",
+        }]
+    status = payload.get("status") if isinstance(payload, dict) else None
+    detail = payload.get("detail", "") if isinstance(payload, dict) else ""
+    if returncode == 0 and status == "ok":
+        return [{"kind": "repo_graph", "status": "ok", "path": path,
+                 "detail": detail or "repo graph is fresh"}]
+    if status == "stale":
+        return [{
+            "kind": "repo_graph",
+            "status": "warn",
+            "path": path,
+            "detail": f"{detail or 'repo graph is stale'} — run: {repair}",
+        }]
+    return [{
+        "kind": "repo_graph",
+        "status": "invalid",
+        "path": path,
+        "detail": f"repo graph is not usable: {detail or f'exit {returncode}'}; run: {repair}",
+    }]
+
+
+def _check_repo_graph(
+    prefetched: tuple[int, str] | None = None,
+) -> list[dict[str, Any]]:
     """Check an initialized repo graph without ever rebuilding it.
 
     Absence of .agents/repo-graph/manifest.json means the feature is off: no
     row is emitted and existing audit behavior is unchanged. A present manifest
     makes staleness a warning and corruption/unreadability an invalid error,
     always with the explicit build entry point.
+
+    ``prefetched`` is an in-process hand-off from maintain.py --check: a
+    ``(returncode, stdout)`` tuple from the repo_graph check it just ran.
+    Malformed input fails closed as ``invalid``; it never silently skips the
+    check. This is Python-only; the CLI has no such bypass.
     """
+    path = ".agents/repo-graph/manifest.json"
+    repair = f"python {SCRIPTS_REL}/repo_graph.py build"
     manifest = ROOT / ".agents" / "repo-graph" / "manifest.json"
     if not manifest.is_file():
         return []
-    path = ".agents/repo-graph/manifest.json"
-    repair = f"python {SCRIPTS_REL}/repo_graph.py build"
+    if prefetched is not None:
+        if (not isinstance(prefetched, tuple) or len(prefetched) != 2):
+            return [{
+                "kind": "repo_graph",
+                "status": "invalid",
+                "path": path,
+                "detail": f"repo graph result passed by caller is malformed; run: {repair}",
+            }]
+        returncode, stdout = prefetched
+        if (not isinstance(returncode, int) or isinstance(returncode, bool)
+                or not isinstance(stdout, str)):
+            return [{
+                "kind": "repo_graph",
+                "status": "invalid",
+                "path": path,
+                "detail": f"repo graph result passed by caller is malformed; run: {repair}",
+            }]
+        return _evaluate_repo_graph_output(returncode, stdout)
+
     script = SCRIPTS_DIR / "repo_graph.py"
     if not script.is_file():
         return [{
@@ -1081,41 +1146,16 @@ def _check_repo_graph() -> list[dict[str, Any]]:
             "path": path,
             "detail": f"repo graph check could not run ({exc}); run: {repair}",
         }]
-    try:
-        payload = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return [{
-            "kind": "repo_graph",
-            "status": "invalid",
-            "path": path,
-            "detail": f"repo graph check returned unreadable output (exit {proc.returncode}); "
-                      f"run: {repair}",
-        }]
-    status = payload.get("status") if isinstance(payload, dict) else None
-    detail = payload.get("detail", "") if isinstance(payload, dict) else ""
-    if proc.returncode == 0 and status == "ok":
-        return [{"kind": "repo_graph", "status": "ok", "path": path,
-                 "detail": detail or "repo graph is fresh"}]
-    if status == "stale":
-        return [{
-            "kind": "repo_graph",
-            "status": "warn",
-            "path": path,
-            "detail": f"{detail or 'repo graph is stale'} — run: {repair}",
-        }]
-    return [{
-        "kind": "repo_graph",
-        "status": "invalid",
-        "path": path,
-        "detail": f"repo graph is not usable: {detail or f'exit {proc.returncode}'}; run: {repair}",
-    }]
+    return _evaluate_repo_graph_output(proc.returncode, proc.stdout)
 
 
 # ---------------------------------------------------------------------------
 # aggregate
 # ---------------------------------------------------------------------------
 
-def _run_all() -> list[dict[str, Any]]:
+def _run_all(
+    repo_graph_prefetched: tuple[int, str] | None = None,
+) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for checker in (
         _check_dead_links, _check_structure, _drift_check, _check_birth_record,
@@ -1123,7 +1163,10 @@ def _run_all() -> list[dict[str, Any]]:
         _check_bugfix_eval_record, _check_repo_graph,
     ):
         try:
-            results.extend(checker())
+            if checker is _check_repo_graph:
+                results.extend(_check_repo_graph(prefetched=repo_graph_prefetched))
+            else:
+                results.extend(checker())
         except DocumentReadError as exc:
             results.append(_read_error(exc.document_path, exc, checker.__name__))
     return results
@@ -1241,20 +1284,35 @@ def _format_text(results: list[dict[str, Any]], verbose: bool = False) -> str:
 # commands
 # ---------------------------------------------------------------------------
 
-def _cmd_check(args: argparse.Namespace) -> None:
-    results = _run_all()
-    if args.json:
-        print(json.dumps(results, ensure_ascii=False, indent=2))
-    else:
-        print(_format_text(results, verbose=args.verbose))
-
+def _check_exit_code(results: list[dict[str, Any]]) -> int:
     # warn is advisory (eval_baseline R2 with one unscored behavior-surface
     # commit, AGENTS.md line_budget over budget) and tolerated for exit-code
     # purposes; error still fails. This deliberately relaxes line_budget
     # from exit-1 to pass-with-hint — an accepted trade-off recorded in
     # README「评测义务」.
     has_issues = any(r["status"] not in ("ok", "found", "skip", "warn") for r in results)
-    if has_issues:
+    return 1 if has_issues else 0
+
+
+def run_check_in_process(
+    *, repo_graph_prefetched: tuple[int, str] | None = None
+) -> tuple[int, str]:
+    """Run ``check`` in-process with the same verdict and text as the CLI.
+
+    This is the only reuse entry point: maintain.py --check calls it after its
+    own repo_graph check. The CLI never accepts a prefetched result.
+    """
+    results = _run_all(repo_graph_prefetched=repo_graph_prefetched)
+    return _check_exit_code(results), _format_text(results, verbose=False)
+
+
+def _cmd_check(args: argparse.Namespace) -> None:
+    results = _run_all()
+    if args.json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        print(_format_text(results, verbose=args.verbose))
+    if _check_exit_code(results):
         raise SystemExit(1)
 
 

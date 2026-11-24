@@ -23,6 +23,8 @@
 from __future__ import annotations
 
 import argparse
+import heapq
+import importlib.util
 import json
 import re
 import subprocess
@@ -76,9 +78,14 @@ def _memory_files() -> list[Path]:
     )
 
 
-def _memory_utf8_problem() -> str | None:
+def _memory_utf8_problem(
+    memory_files: list[Path] | None = None,
+    bugfix_files: list[Path] | None = None,
+) -> str | None:
     """Return the first unreadable memory Markdown path, if any."""
-    paths = ([MEMORY_INDEX] if MEMORY_INDEX.is_file() else []) + _memory_files() + _bugfix_files()
+    paths = ([MEMORY_INDEX] if MEMORY_INDEX.is_file() else []) + (
+        _memory_files() if memory_files is None else memory_files
+    ) + (_bugfix_files() if bugfix_files is None else bugfix_files)
     for path in paths:
         try:
             path.read_text(encoding="utf-8")
@@ -87,73 +94,149 @@ def _memory_utf8_problem() -> str | None:
     return None
 
 
-def _entry_title(path: Path) -> str:
+def _entry_title_from_text(text: str, fallback_stem: str) -> str:
     """First ATX heading, else first non-empty line, else filename stem.
 
     跳过开头的 YAML frontmatter 块（--- ... ---），否则 frontmatter 文档
     的标题回退会取到 "---" 分隔线本身。
     """
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                lines = lines[i + 1:]
+                break
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m = re.match(r"^#+\s*(.+)$", stripped)
+        title = (m.group(1) if m else stripped).strip()
+        return title[:MAX_TITLE_LEN]
+    return fallback_stem
+
+
+def _entry_title(path: Path) -> str:
+    """Read-once wrapper retained for external callers/tests."""
     try:
-        lines = _read(path).splitlines()
-        if lines and lines[0].strip() == "---":
-            for i in range(1, len(lines)):
-                if lines[i].strip() == "---":
-                    lines = lines[i + 1:]
-                    break
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            m = re.match(r"^#+\s*(.+)$", stripped)
-            title = (m.group(1) if m else stripped).strip()
-            return title[:MAX_TITLE_LEN]
+        return _entry_title_from_text(_read(path), path.stem)
     except (OSError, UnicodeDecodeError):
-        pass
-    return path.stem
+        return path.stem
 
 
 def _fmt_date(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
 
+class _ReverseKey:
+    """Wrap a match key so a min-heap keeps the largest key at the root."""
+
+    __slots__ = ("key",)
+
+    def __init__(self, key):
+        self.key = key
+
+    def __lt__(self, other: "_ReverseKey") -> bool:
+        return self.key > other.key
+
+
+def _bounded_push(heap: list[_ReverseKey], key: tuple, limit: int) -> None:
+    """Keep at most ``limit`` smallest keys in ``heap`` (never grows past it)."""
+    if limit <= 0:
+        return
+    if len(heap) < limit:
+        heapq.heappush(heap, _ReverseKey(key))
+    elif key < heap[0].key:
+        heapq.heapreplace(heap, _ReverseKey(key))
+
+
+def _casefold_index_to_original(text: str, target: int) -> int:
+    """Map a folded index to its source index, stopping at ``target``.
+
+    Used only for already-matched bodies whose casefold length differs from the
+    original (``ß`` -> ``ss``, ``İ`` -> ``i\\u0307``). It scans forward until
+    the requested folded offset is reached and builds no mapping table.
+    """
+    if target <= 0:
+        return 0
+    folded_pos = 0
+    for index, char in enumerate(text):
+        if folded_pos >= target:
+            return index
+        next_pos = folded_pos + len(char.casefold())
+        if next_pos > target:
+            return index
+        folded_pos = next_pos
+    return len(text)
+
+
+_FRONTMATTER_BODY_RE = re.compile(
+    r"\A---\s*\n.*?\n---[^\S\n]*(?:\n|$)", re.DOTALL
+)
+
+
+def _split_frontmatter_body(text: str) -> tuple[str, str]:
+    match = _FRONTMATTER_BODY_RE.match(text)
+    if match is None:
+        return "", text
+    return text[:match.end()], text[match.end():]
+
+
 def search_memory(query: str, limit: int) -> int:
-    """Search all retained entries; bound output rather than archive coverage."""
+    """Search all retained entries; bound output and candidate memory."""
     terms = list(dict.fromkeys(query.casefold().split()))
     if not terms:
         print("请输入非空检索关键词。")
         return 1
-    matches = []
-    errors = []
+    heap: list[_ReverseKey] = []
+    total_matches = 0
+    error_count = 0
+    error_samples: list[str] = []
     for path in _memory_files() + _bugfix_files():
         try:
             text = _read(path)
         except (OSError, UnicodeDecodeError):
-            errors.append(path.relative_to(ROOT).as_posix())
+            error_count += 1
+            if len(error_samples) < 5:
+                error_samples.append(path.relative_to(ROOT).as_posix())
             continue
-        title = _frontmatter_value(text, "title") or _entry_title(path)
+        # Fold each component once; never re-read for a missing title.
+        title = _frontmatter_value(text, "title") or _entry_title_from_text(text, path.stem)
+        title_cf = title.casefold()
         rel = path.relative_to(ROOT).as_posix()
-        haystack = (rel + "\n" + text).casefold()
-        score = sum(term in haystack for term in terms)
+        rel_cf = rel.casefold()
+        head, body = _split_frontmatter_body(text)
+        head_cf = head.casefold()
+        body_cf = body.casefold()
+        score = sum(
+            term in rel_cf or term in head_cf or term in body_cf for term in terms
+        )
         if not score:
             continue
-        score += sum(term in title.casefold() for term in terms)
+        score += sum(term in title_cf for term in terms)
         # Match the retained full entry, but show experience prose rather than
         # YAML metadata. Title/tag-only matches fall back to the body's start.
-        body = re.sub(r"\A---\s*\n.*?\n---[^\S\n]*(?:\n|$)", "", text, count=1, flags=re.DOTALL)
-        positions = [body.casefold().find(term) for term in terms]
-        start = max(0, min((p for p in positions if p >= 0), default=0) - 40)
+        positions = [body_cf.find(term) for term in terms]
+        min_pos = min((p for p in positions if p >= 0), default=0)
+        if min_pos and len(body_cf) != len(body):
+            original_pos = _casefold_index_to_original(body, min_pos)
+        else:
+            original_pos = min_pos
+        start = max(0, original_pos - 40)
         excerpt = " ".join(body[start:start + 160].split())
-        matches.append((-score, rel, title[:MAX_TITLE_LEN], excerpt))
-    matches.sort()
-    shown = matches[:limit]
-    print(f"命中 {len(matches)} 条；显示 {len(shown)} 条；截断：{'是' if len(matches) > limit else '否'}。链接相对项目根。")
+        total_matches += 1
+        _bounded_push(
+            heap, (-score, rel, title[:MAX_TITLE_LEN], excerpt), limit
+        )
+    shown = sorted(wrapper.key for wrapper in heap)
+    print(f"命中 {total_matches} 条；显示 {len(shown)} 条；截断：{'是' if total_matches > limit else '否'}。链接相对项目根。")
     for _, rel, title, excerpt in shown:
         print(f"- [{title}]({rel}) — {excerpt}")
-    if not matches:
+    if not total_matches:
         print("未找到相关经验；可换关键词或按需读取完整索引。")
-    if errors:
-        print(f"检索不完整：{len(errors)} 个文件无法读取 UTF-8：" + ", ".join(errors[:5]))
-    return 1 if errors else 0
+    if error_count:
+        print(f"检索不完整：{error_count} 个文件无法读取 UTF-8：" + ", ".join(error_samples))
+    return 1 if error_count else 0
 
 
 # ---------------------------------------------------------------------------
@@ -184,25 +267,68 @@ def _frontmatter_value(text: str, key: str) -> str | None:
     return m.group(1).strip("\"'")
 
 
-def _bugfix_meta(path: Path) -> dict[str, str]:
+def _bugfix_meta_from_text(text: str, fallback_stem: str) -> dict[str, str]:
     """提取索引行所需字段；frontmatter 缺失时回退到标题启发式。"""
     meta: dict[str, str] = {}
-    try:
-        text = _read(path)
-    except OSError:
-        return {"title": path.stem}
     for key in ("title", "status", "severity", "liveness", "updated_at", "created_at"):
         value = _frontmatter_value(text, key)
         if value:
             meta[key] = value
-    meta.setdefault("title", _entry_title(path))
+    meta.setdefault("title", _entry_title_from_text(text, fallback_stem))
     return meta
 
 
-def build_index_section() -> str:
-    """Render the content that belongs between the index markers."""
-    files = _memory_files()
-    bugfix = _bugfix_files()
+def _bugfix_meta(path: Path) -> dict[str, str]:
+    """Read-once wrapper retained for external callers/tests."""
+    try:
+        text = _read(path)
+    except OSError:
+        return {"title": path.stem}
+    return _bugfix_meta_from_text(text, path.stem)
+
+
+def _load_index_entries(
+    memory_paths: list[Path], bugfix_paths: list[Path]
+) -> tuple[list[dict], list[dict], Path | None]:
+    """Read every index source exactly once (one stat + one read per file).
+
+    Returns lightweight metadata only; the entry text is released immediately.
+    The third item is the first file that cannot be read as UTF-8, preserving
+    the caller's `invalid` diagnostic path.
+    """
+    memory_entries: list[dict] = []
+    for path in memory_paths:
+        try:
+            mtime = path.stat().st_mtime
+            text = _read(path)
+        except (OSError, UnicodeDecodeError):
+            return [], [], path
+        memory_entries.append({
+            "path": path,
+            "mtime": mtime,
+            "title": _entry_title_from_text(text, path.stem),
+            "liveness": _frontmatter_value(text, "liveness"),
+        })
+
+    bugfix_entries: list[dict] = []
+    for path in bugfix_paths:
+        try:
+            mtime = path.stat().st_mtime
+            text = _read(path)
+        except (OSError, UnicodeDecodeError):
+            return memory_entries, [], path
+        bugfix_entries.append({
+            "path": path,
+            "mtime": mtime,
+            "meta": _bugfix_meta_from_text(text, path.stem),
+        })
+    return memory_entries, bugfix_entries, None
+
+
+def _render_index_section(
+    files: list[dict], bugfix: list[dict]
+) -> str:
+    """Render the marker content from already-loaded metadata."""
     lines = [
         f"> 本段由 `python {SCRIPTS_REL}/{Path(__file__).name}` 自动重建，禁止手工编辑。",
         f"> 最近重建：{datetime.now().strftime('%Y-%m-%d %H:%M')}",
@@ -212,46 +338,54 @@ def build_index_section() -> str:
         lines.append("（暂无记忆条目）")
         return "\n".join(lines).rstrip()
 
-    groups: dict[str, list[Path]] = {}
-    for p in files:
-        rel = p.relative_to(MEMORY_DIR)
+    groups: dict[str, list[dict]] = {}
+    for entry in files:
+        rel = entry["path"].relative_to(MEMORY_DIR)
         group = rel.parts[0] if len(rel.parts) > 1 else "未分类"
-        groups.setdefault(group, []).append(p)
+        groups.setdefault(group, []).append(entry)
 
     for group in sorted(groups):
         lines.append(f"### {group}")
-        entries = sorted(groups[group], key=lambda p: p.stat().st_mtime, reverse=True)
-        for p in entries:
-            rel = str(p.relative_to(MEMORY_DIR)).replace("\\", "/")
+        entries = sorted(groups[group], key=lambda entry: entry["mtime"], reverse=True)
+        for entry in entries:
+            path = entry["path"]
+            rel = str(path.relative_to(MEMORY_DIR)).replace("\\", "/")
             line = (
-                f"- [{p.name}]({rel}) — {_entry_title(p)} · 更新于 {_fmt_date(p.stat().st_mtime)}"
+                f"- [{path.name}]({rel}) — {entry['title']} · 更新于 {_fmt_date(entry['mtime'])}"
             )
             # 活性标记：有 frontmatter liveness 时追加；无 frontmatter 的旧记忆文件不追加（向后兼容）
-            try:
-                liveness = _frontmatter_value(_read(p), "liveness")
-            except OSError:
-                liveness = None
-            if liveness:
-                line += f" · {liveness}"
+            if entry["liveness"]:
+                line += f" · {entry['liveness']}"
             lines.append(line)
         lines.append("")
 
     if bugfix:
         lines.append("### bugfix（docs/problems/bugfix/）")
-        entries = sorted(bugfix, key=lambda p: p.stat().st_mtime, reverse=True)
-        for p in entries:
-            meta = _bugfix_meta(p)
+        entries = sorted(bugfix, key=lambda entry: entry["mtime"], reverse=True)
+        for entry in entries:
+            path = entry["path"]
+            meta = entry["meta"]
             flags = " · ".join(
                 meta[k] for k in ("status", "severity", "liveness") if meta.get(k)
             )
-            date = meta.get("updated_at") or meta.get("created_at") or _fmt_date(p.stat().st_mtime)
-            line = f"- [{meta['title'][:MAX_TITLE_LEN]}]({BUGFIX_LINK_PREFIX}/{p.name})"
+            date = meta.get("updated_at") or meta.get("created_at") or _fmt_date(entry["mtime"])
+            line = f"- [{meta['title'][:MAX_TITLE_LEN]}]({BUGFIX_LINK_PREFIX}/{path.name})"
             if flags:
                 line += f" — {flags}"
             line += f" · 更新于 {date}"
             lines.append(line)
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def build_index_section() -> str:
+    """Render the content that belongs between the index markers."""
+    files = _memory_files()
+    bugfix = _bugfix_files()
+    memory_entries, bugfix_entries, invalid = _load_index_entries(files, bugfix)
+    if invalid is not None:
+        raise OSError(f"unreadable memory source: {invalid}")
+    return _render_index_section(memory_entries, bugfix_entries)
 
 
 def _normalize(text: str) -> str:
@@ -269,20 +403,24 @@ def _splice_index(text: str, section: str) -> str | None:
     return text[:start] + INDEX_START + "\n" + section + "\n" + INDEX_END + text[end:]
 
 
-def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
+def rebuild_memory_index(
+    *, check_only: bool, memory_files: list[Path] | None = None,
+    bugfix_files: list[Path] | None = None,
+) -> tuple[str, str]:
     """Rebuild the MEMORY.md index marker section.
 
     Returns (status, detail); status ∈
     ok / rebuilt / stale / missing / no-markers / invalid / skip.
+    ``memory_files`` / ``bugfix_files`` let run_full reuse one enumeration.
     """
-    if MEMORY_DIR.is_dir():
-        invalid_path = _memory_utf8_problem()
-        if invalid_path:
-            return "invalid", f"{invalid_path} is not readable UTF-8; repair this file before rebuilding"
-
-    # A knowledge base has exactly one index writer: memory_index.py.
+    # A knowledge base has exactly one index writer: memory_index.py. Its
+    # UTF-8 preflight stays separate from the non-KB single-read pipeline.
     indexer = SCRIPTS_DIR / "memory_index.py"
     if MEMORY_REL == ".meta/memory":
+        if MEMORY_DIR.is_dir():
+            invalid_path = _memory_utf8_problem(memory_files, bugfix_files)
+            if invalid_path:
+                return "invalid", f"{invalid_path} is not readable UTF-8; repair this file before rebuilding"
         if not MEMORY_INDEX.is_file() or not indexer.is_file():
             return "missing", ".meta/memory/MEMORY.md or memory_index.py missing"
         result = _run_script(f"{SCRIPTS_REL}/memory_index.py", *(["--check"] if check_only else []))
@@ -292,10 +430,26 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
         return ("ok" if rc == 0 else ("stale" if check_only else "missing")), out or "knowledge-base memory index"
     if not MEMORY_DIR.is_dir():
         return "skip", "no .agents/memory/ directory (small project)"
-    if not MEMORY_INDEX.is_file():
+
+    files = _memory_files() if memory_files is None else memory_files
+    bugfix = _bugfix_files() if bugfix_files is None else bugfix_files
+
+    current: str | None = None
+    if MEMORY_INDEX.is_file():
+        try:
+            current = _read(MEMORY_INDEX)
+        except (OSError, UnicodeDecodeError):
+            invalid_path = MEMORY_INDEX.relative_to(ROOT).as_posix()
+            return "invalid", f"{invalid_path} is not readable UTF-8; repair this file before rebuilding"
+
+    memory_entries, bugfix_entries, invalid = _load_index_entries(files, bugfix)
+    if invalid is not None:
+        invalid_path = invalid.relative_to(ROOT).as_posix()
+        return "invalid", f"{invalid_path} is not readable UTF-8; repair this file before rebuilding"
+    if current is None:
         return "missing", f"{MEMORY_REL}/MEMORY.md not found"
-    current = _read(MEMORY_INDEX)
-    updated = _splice_index(current, build_index_section())
+
+    updated = _splice_index(current, _render_index_section(memory_entries, bugfix_entries))
     if updated is None:
         return "no-markers", f"MEMORY.md missing {INDEX_START} / {INDEX_END} markers"
     if _normalize(updated) == _normalize(current):
@@ -310,7 +464,9 @@ def rebuild_memory_index(*, check_only: bool) -> tuple[str, str]:
 # memory staleness
 # ---------------------------------------------------------------------------
 
-def _memory_last_update_ts(files: list[Path]) -> float:
+def _memory_last_update_ts(
+    files: list[Path], bugfix_files: list[Path] | None = None
+) -> float:
     """Last memory-update timestamp.
 
     git 不保留 mtime（fresh clone / checkout 会把 mtime 刷成当前时间），
@@ -332,21 +488,24 @@ def _memory_last_update_ts(files: list[Path]) -> float:
                 return float(proc.stdout.strip())
         except (OSError, subprocess.TimeoutExpired, ValueError):
             pass
-    pool = files + _bugfix_files()
+    pool = files + (bugfix_files if bugfix_files is not None else _bugfix_files())
     if not pool:
         return 0.0
     return max(p.stat().st_mtime for p in pool)
 
 
-def memory_staleness() -> tuple[str, str]:
+def memory_staleness(
+    memory_files: list[Path] | None = None,
+    bugfix_files: list[Path] | None = None,
+) -> tuple[str, str]:
     """Returns (status, detail); status ∈ ok / stale / empty / skip."""
     if not MEMORY_DIR.is_dir():
         return "skip", "no .agents/memory/ directory (small project)"
-    files = _memory_files()
-    bugfix = _bugfix_files()
+    files = _memory_files() if memory_files is None else memory_files
+    bugfix = _bugfix_files() if bugfix_files is None else bugfix_files
     if not files and not bugfix:
         return "empty", "no memory entries yet — 目录存在但从未沉淀记忆"
-    age = datetime.now() - datetime.fromtimestamp(_memory_last_update_ts(files))
+    age = datetime.now() - datetime.fromtimestamp(_memory_last_update_ts(files, bugfix))
     total = len(files) + len(bugfix)
     time_source = "文件时间" if not _is_git_repo() else "git"
     if age > timedelta(days=STALE_DAYS):
@@ -437,13 +596,66 @@ def _run_script_split(rel: str, *args: str) -> tuple[int, str, str] | None:
     return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
 
 
-def refresh_repo_graph(*, check_only: bool) -> tuple[str, str] | None:
+def _run_audit_in_process(
+    repo_graph_prefetched: tuple[int, str] | None = None,
+) -> tuple[int, str] | None:
+    """Load sibling audit.py and run its check in this process.
+
+    Returns None when audit.py is absent (same as the subprocess "skip" path),
+    ``(2, str(exc))`` on load/execution failure, and audit's own
+    ``(exit_code, text)`` on success. The synthesized module entry is removed
+    and bytecode writing is disabled so maintenance leaves no residue.
+    """
+    script = SCRIPTS_DIR / "audit.py"
+    if not script.is_file():
+        return None
+    module_name = "_iad_maintain_audit"
+    spec = importlib.util.spec_from_file_location(module_name, script)
+    if spec is None or spec.loader is None:
+        return 2, f"cannot load {SCRIPTS_REL}/audit.py"
+    module = importlib.util.module_from_spec(spec)
+    prior_dont_write = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+        runner = getattr(module, "run_check_in_process", None)
+        if runner is None:
+            return 2, f"{SCRIPTS_REL}/audit.py lacks run_check_in_process"
+        prior_root = getattr(module, "ROOT", None)
+        prior_scripts_dir = getattr(module, "SCRIPTS_DIR", None)
+        prior_scripts_rel = getattr(module, "SCRIPTS_REL", None)
+        try:
+            module.ROOT = ROOT
+            module.SCRIPTS_DIR = SCRIPTS_DIR
+            if prior_scripts_rel is not None:
+                module.SCRIPTS_REL = SCRIPTS_REL
+            return runner(repo_graph_prefetched=repo_graph_prefetched)
+        finally:
+            module.ROOT = prior_root
+            module.SCRIPTS_DIR = prior_scripts_dir
+            if prior_scripts_rel is not None:
+                module.SCRIPTS_REL = prior_scripts_rel
+    except (Exception, SystemExit) as exc:
+        return 2, str(exc)
+    finally:
+        sys.dont_write_bytecode = prior_dont_write
+        sys.modules.pop(module_name, None)
+
+
+def refresh_repo_graph(
+    *, check_only: bool, raw_out: dict | None = None
+) -> tuple[str, str] | None:
     """Refresh an already initialized repo graph; never create the opt-in.
 
     Returns None when .agents/repo-graph/manifest.json is absent, so default
     maintenance stays silent and side-effect free for projects that never ran
     ``repo_graph.py build``. JSON success is parsed from stdout only; stderr
     warnings do not change the success decision.
+
+    ``raw_out`` receives ``{"returncode": rc, "stdout": stdout}`` whenever the
+    repo graph script actually ran. run_full --check hands that raw result to
+    audit.py so both layers apply the identical verdict.
     """
     if not REPO_GRAPH_MANIFEST.is_file():
         return None
@@ -455,21 +667,31 @@ def refresh_repo_graph(*, check_only: bool) -> tuple[str, str] | None:
     if result is None:
         return "invalid", f"repo graph is initialized but {rel} is not available"
     rc, stdout, stderr = result
+    if raw_out is not None:
+        raw_out["returncode"] = rc
+        raw_out["stdout"] = stdout
     payload: dict = {}
     try:
         parsed = json.loads(stdout)
         payload = parsed if isinstance(parsed, dict) else {}
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, RecursionError):
         payload = {}
     status = payload.get("status")
     error = str(payload.get("error") or "")
     detail = str(payload.get("detail") or "")
     if error and error not in detail:
         detail = f"{error}: {detail}" if detail else error
-    if rc == 0 and status in ("ok", "built"):
-        return "ok", detail or ("repo graph is fresh" if check_only else "repo graph rebuilt")
+    if rc == 0 and status == "ok":
+        if check_only:
+            return "ok", f"repo graph: {detail or 'repo graph is fresh'}"
+        return "ok", detail or "repo graph rebuilt"
+    if not check_only and rc == 0 and status == "built":
+        return "ok", detail or "repo graph rebuilt"
     if status == "stale":
-        return "stale", f"{detail or 'repo graph is stale'} — run: python {rel} build"
+        message = f"{detail or 'repo graph is stale'} — run: python {rel} build"
+        if check_only:
+            message = f"repo graph: {message}"
+        return "stale", message
     reason = detail or stdout or f"exit {rc}"
     if stderr:
         reason = f"{reason} (stderr: {stderr[:300]})"
@@ -536,7 +758,18 @@ def run_full(*, check_only: bool) -> int:
     if check_only:
         print("（只读校验模式，不修改任何文件）")
 
-    idx_status, idx_detail = rebuild_memory_index(check_only=check_only)
+    # Enumerate once for any existing memory directory; index rebuild and
+    # activity stats share the lists. KB preflight reuses them as well, and a
+    # small project without the directory never scans bugfix files.
+    memory_files = None
+    bugfix_files = None
+    if MEMORY_DIR.is_dir():
+        memory_files = _memory_files()
+        bugfix_files = _bugfix_files()
+
+    idx_status, idx_detail = rebuild_memory_index(
+        check_only=check_only, memory_files=memory_files, bugfix_files=bugfix_files
+    )
     print(_line(idx_status, f"memory index: {idx_detail}"))
     if idx_status in ("missing", "no-markers", "invalid") or (check_only and idx_status == "stale"):
         failures += 1
@@ -545,14 +778,20 @@ def run_full(*, check_only: bool) -> int:
         print("维护完成：1 项需要处理")
         return 1
 
-    graph = refresh_repo_graph(check_only=check_only)
+    graph_raw: dict | None = {} if check_only else None
+    graph = refresh_repo_graph(check_only=check_only, raw_out=graph_raw)
     if graph is not None:
         graph_status, graph_detail = graph
         print(_line(graph_status, graph_detail))
         if graph_status in ("stale", "invalid"):
             failures += 1
 
-    audit = _run_script(f"{SCRIPTS_REL}/audit.py", "check")
+    if check_only and graph is not None and graph_raw:
+        audit = _run_audit_in_process((
+            graph_raw["returncode"], graph_raw["stdout"]
+        ))
+    else:
+        audit = _run_script(f"{SCRIPTS_REL}/audit.py", "check")
     if audit is None:
         print(_line("skip", "audit.py not found"))
     else:
@@ -564,7 +803,7 @@ def run_full(*, check_only: bool) -> int:
         if rc != 0:
             failures += 1
 
-    mem_status, mem_detail = memory_staleness()
+    mem_status, mem_detail = memory_staleness(memory_files, bugfix_files)
     glyph_status = {"stale": "warn"}.get(mem_status, mem_status)
     print(_line(glyph_status, f"memory activity: {mem_detail}"))
 

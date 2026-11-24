@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -53,17 +54,93 @@ def _run(name: str, cmd: list[str]) -> tuple[bool, str]:
     return proc.returncode == 0, (proc.stdout + proc.stderr).strip()
 
 
+def _load_sibling(name: str):
+    """Load ``<SCRIPTS_DIR>/<name>.py`` in-process, or None when it is absent.
+
+    The synthesized module entry is removed and bytecode writing is disabled
+    for the duration so importing a project check script never leaves
+    ``sys.modules`` residue or ``scripts/__pycache__`` behind.
+    """
+    path = SCRIPTS_DIR / f"{name}.py"
+    if not path.is_file():
+        return None
+    module_name = f"_iad_check_all_{name}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    prior_dont_write = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.dont_write_bytecode = prior_dont_write
+        sys.modules.pop(module_name, None)
+
+
 # 检查项：每个条目为 (名称, 判定函数, 修复指引)
 # 判定函数返回 (ok: bool, detail: str)
 CHECKS: list[tuple[str, callable, str]] = []
 
 
+def _format_title_blocks(blocks) -> str:
+    lines: list[str] = []
+    for day, title, section_titles in blocks:
+        suffix = f"：{title}" if title else ""
+        lines.append(f"{day}{suffix}")
+        for section_title in section_titles:
+            lines.append(f"  - {section_title}")
+    return "\n".join(lines).strip()
+
+
+def _title_blocks(changelog_module, path, limit: int):
+    """Use the streaming title interface, falling back to an older script."""
+    if hasattr(changelog_module, "iter_title_blocks_from_file"):
+        return changelog_module.iter_title_blocks_from_file(path, limit=limit)
+
+    if not all(
+        hasattr(changelog_module, attr)
+        for attr in ("read_lines", "iter_date_blocks", "iter_sections")
+    ):
+        raise AttributeError(
+            "changelog.py lacks iter_title_blocks_from_file and the legacy title interfaces"
+        )
+
+    lines = changelog_module.read_lines(path)
+    blocks = []
+    for start, end, day, title in changelog_module.iter_date_blocks(lines):
+        if limit and len(blocks) >= limit:
+            break
+        sections = [
+            section_title
+            for section_start, _section_end, section_title
+            in changelog_module.iter_sections(lines[start:end])
+            if section_start != 0
+        ]
+        blocks.append((day, title, sections))
+    return blocks
+
+
 def _check_changelog():
     if not _has_file("docs/CHANGELOG.md"):
         return False, "docs/CHANGELOG.md 不存在"
-    ok, detail = _run("CHANGELOG", [f"{SCRIPTS_REL}/changelog.py", "titles", "--limit", "1"])
-    if not ok or not detail.strip():
-        return False, detail or f"CHANGELOG 无条目——本次任务如有值得记录的内容，用 {SCRIPTS_REL}/changelog.py add 追加"
+    changelog_path = ROOT / "docs" / "CHANGELOG.md"
+    try:
+        changelog_module = _load_sibling("changelog")
+        if changelog_module is None:
+            return False, f"{SCRIPTS_REL}/changelog.py 不存在——无法读取 CHANGELOG"
+        blocks = _title_blocks(changelog_module, changelog_path, 1)
+        detail = _format_title_blocks(blocks)
+    except UnicodeDecodeError:
+        return False, "docs/CHANGELOG.md 无法按 UTF-8 解码"
+    except SystemExit as exc:
+        return False, str(exc)
+    except Exception as exc:
+        return False, f"CHANGELOG 检查失败: {exc}"
+    if not blocks or not detail:
+        return False, f"CHANGELOG 无条目——本次任务如有值得记录的内容，用 {SCRIPTS_REL}/changelog.py add 追加"
     return True, detail
 
 CHECKS.append(("CHANGELOG", _check_changelog,
@@ -154,10 +231,29 @@ CHECKS.append(("记忆", _check_memory_touch,
 
 
 def _check_dead_links():
-    if not _has_file(f"{SCRIPTS_REL}/audit.py"):
+    if not (SCRIPTS_DIR / "audit.py").is_file():
         return False, f"{SCRIPTS_REL}/audit.py 不存在——无法执行死链审计"
-    ok, detail = _run("死链", [f"{SCRIPTS_REL}/audit.py", "dead-links"])
-    return ok, detail
+    audit_module = None
+    prior_root = None
+    prior_scripts_dir = None
+    try:
+        audit_module = _load_sibling("audit")
+        if audit_module is None:
+            return False, f"{SCRIPTS_REL}/audit.py 不存在——无法执行死链审计"
+        prior_root = getattr(audit_module, "ROOT", None)
+        prior_scripts_dir = getattr(audit_module, "SCRIPTS_DIR", None)
+        audit_module.ROOT = ROOT
+        audit_module.SCRIPTS_DIR = SCRIPTS_DIR
+        rows = audit_module._check_dead_links()
+        detail = audit_module._format_text(rows, verbose=False).strip()
+        ok = all(row.get("status") == "ok" for row in rows)
+        return ok, detail
+    except (Exception, SystemExit) as exc:  # a failed/legacy sibling is one failed check
+        return False, f"死链审计无法完成: {exc}"
+    finally:
+        if audit_module is not None:
+            audit_module.ROOT = prior_root
+            audit_module.SCRIPTS_DIR = prior_scripts_dir
 
 CHECKS.append(("死链", _check_dead_links,
               "恢复 audit.py 并检查标记 dead 的链接目标是否确实不存在"))
