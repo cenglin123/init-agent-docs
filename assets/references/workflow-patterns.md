@@ -27,7 +27,7 @@ Agent 的上下文窗口是有限的。一个复杂任务（如"重构认证系�
 
 ### 工作方式与交接
 
-Agent 根据目标、风险、依赖和上下文选择直接执行、分阶段或并行；不固定模型、组织或拓扑。计划记录谁执行、谁独立验收、写集/依赖、当前状态和下一步。Coordinator / Owner / Reviewer 是可选职责称呼，不是永久角色或顶层控制器。
+Agent 根据目标、风险、依赖和上下文选择直接执行、分阶段或并行；不固定模型、组织或拓扑。除需要独立验收/审计的环节必须保持上下文隔离外，并行或协作阶段采用宿主原生实时协同（如共享消息板）还是文件异步交接，由协调方按耦合度与上下文状态自主决定，不强制固定模式。计划记录谁执行、谁独立验收、协作与隔离方式、写集/依赖、当前状态和下一步。Coordinator / Owner / Reviewer 是可选职责称呼，不是永久角色或顶层控制器。
 
 已选控制器继续掌握流程模式、预算与终端决策，不另建平行控制器；未选控制器时用项目本地合同与独立检查完成交付，不强制安装外部 Skill。已有授权直接适用，不逐阶段重复申请。
 
@@ -43,9 +43,9 @@ Agent 根据目标、风险、依赖和上下文选择直接执行、分阶段�
 
 Git worktree 允许你在同一个仓库的不同目录下检出不同的分支，这些工作目录共享同一个 `.git` 仓库，但各自有独立的工作区和 index。
 
-**隔离边界**：worktree 仅隔离未提交文件和 index；合入冲突、跨文件语义冲突与外部系统状态仍由主控 Agent / 人类协调。`worktree_task.py` 是轻量本地 Git 隔离与占用声明工具，不会拦截直接写文件、手动 Git 操作或另一份 clone。canonical 快进保护 hook 可单独选装，不是隔离的必要条件。
+**隔离边界**：worktree 仅隔离未提交文件和 index；合入冲突、跨文件语义冲突与外部系统状态仍由主控 Agent / 人类协调。`worktree_task.py` 是轻量本地 Git 隔离与占用声明工具，不会拦截直接写文件、手动 Git 操作或另一份 clone。canonical 快进保护 hook 可单独选装，不是隔离的必要条件。若改用宿主原生每 Agent 独立工作区，与 `worktree_task.py` 的隔离职责二选一、不对同一写集叠加使用，且每 owner 的写集仍须物理隔离未提交文件与 index（实时协同消息板仅作协调通道，不替代写集隔离）；仓库已装 `worktree_task.py` 或快进 hook 时合入 canonical 分支前遵守对应占用与快进约束，未装时由宿主机制或人工保证主工作树独占与快进。
 
-**主工作树占用声明（main-claim）**：主工作树（canonical）只属于持有 main-claim 的 agent。primary 开工前 `claim-main --owner primary`（TTL 默认 180 分钟，同 owner 续期重置到期、过期可接管，他人活动 claim 不允许 `--force` 强夺），收工或整合前 `release-main --owner primary`；`main-claim` 只读查询、`list` 显示当前活跃 worktrees 与占用状态；`integrate` 在存在任何活动 claim 时机械拒绝（整合前须先释放）。**不要以「git status 干净」判定主工作树可用**——两次写入之间的快照必然干净，时点检查防不了撞车。fork / 子代理一律开 worktree。
+**主工作树占用声明（main-claim）**：主工作树（canonical）只属于持有 main-claim 的 agent。primary 开工前 `claim-main --owner primary`（TTL 默认 180 分钟，同 owner 续期重置到期、过期可接管，他人活动 claim 不允许 `--force` 强夺），收工或整合前 `release-main --owner primary`；`main-claim` 只读查询、`list` 显示当前活跃 worktrees 与占用状态；`integrate` 在存在任何活动 claim 时机械拒绝（整合前须先释放）。**不要以「git status 干净」判定主工作树可用**——两次写入之间的快照必然干净，时点检查防不了撞车。使用 `worktree_task.py` 时，fork / 子代理一律开 worktree。
 
 #### 工作树四动作与外包施工节奏
 
