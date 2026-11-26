@@ -5,12 +5,12 @@ description: >
   Creates AGENTS.md as the single entry point, docs/STRUCTURE.md, docs/ hierarchy
   with progressive disclosure, plan-as-handoff, and scripted CHANGELOG.
   Triggers when: setting up agent docs, scaffolding AGENTS.md, building AI collaboration
-  guidelines, migrating README/ARCHITECTURE to agent-friendly format.
-  User phrases: "帮我初始化项目的 AI 协作文档", "给仓库搭一套 Agent 文档体系",
+  guidelines, migrating README/ARCHITECTURE to agent-friendly format, or invoking by alias `IAD` / `iad`.
+  User phrases: "IAD", "iad", "帮我初始化项目的 AI 协作文档", "给仓库搭一套 Agent 文档体系",
   "把现有文档整理成 AI 能协作的格式", "set up AGENTS.md", "initialize agent-first docs".
 ---
 
-# Init Agent Docs
+# Init Agent Docs（别名：IAD / iad）
 
 为代码项目初始化或迁移面向 Agent 的协作文档。先交付可安全接手的最小入口，再按阶段补齐资产；不要求为执行本 Skill 全文预读参考。
 
